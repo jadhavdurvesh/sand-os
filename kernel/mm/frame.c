@@ -59,7 +59,7 @@ int frame_free(uint32_t physical_address) {
     if ((physical_address & (SAND_PAGE_SIZE - 1u)) != 0u) return -1;
     uint32_t frame = physical_address / SAND_PAGE_SIZE;
     if (frame < 256u || frame >= FRAME_COUNT) return -1;
-    if ((frame_bitmap[frame >> 3] & (uint8_t)(1u << (frame & 7u))) != 0u) return -1;
+    if ((frame_bitmap[frame >> 3] & (uint8_t)(1u << (frame & 7u))) == 0u) return -1;
     frame_mark_free(frame);
     return 0;
 }
