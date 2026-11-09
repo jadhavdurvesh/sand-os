@@ -1,9 +1,13 @@
 # Third-party notices
 
-SAND OS is intended to implement its operating-system runtime independently.
+## External development and test tools
 
-The build and test environment may use third-party development tools such as GNU Make, GCC, GNU Binutils, GRUB tooling for the initial boot milestone, xorriso, QEMU, and GitHub-hosted Actions. These are not thereby bundled into or linked as the SAND OS runtime.
+GCC, GNU Binutils, GNU Make, QEMU, GitHub Actions, and its checkout/upload actions may be used on the developer or CI host. They are not included in the SAND OS disk image or runtime and retain their own licenses. QEMU is only an external machine emulator for testing.
 
-No third-party runtime source or binary is intentionally included in the initial scaffold. Add each dependency here before introducing it into the repository, including its version, origin, license, and the files or outputs it affects.
+## Platform firmware interface
 
-Do not copy code from another operating system without recording and complying with its license.
+The initial bootloader targets legacy BIOS. SAND's boot-sector and stage-two source are implemented in this repository, but the boot process calls firmware-provided BIOS interrupt services (INT 13h disk I/O and INT 10h text output) before entering protected mode. Firmware is part of the target machine platform, not code shipped by this repository.
+
+## Runtime implementation
+
+No GRUB bootloader, Multiboot implementation, Linux kernel, or third-party OS runtime is intended to be part of the SAND OS boot image. Record future third-party code or runtime components here before introducing them, including version, origin, license, and affected files.
