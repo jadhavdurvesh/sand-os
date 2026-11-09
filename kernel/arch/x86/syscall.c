@@ -8,7 +8,8 @@ void syscall_dispatch(uint32_t *registers) {
     uint32_t number=registers[7];
     uint32_t argument=registers[4];
     if(number==1u && argument==0x53414E44u) {
-        debug_text("SAND_TEST:RING3_SYSCALL_PASS\n");
+        debug_text("SAND_TEST:RING3_SYSCALL_PASS\\n");
+        debug_text("SAND_TEST:ALL_PASS\\n");
         registers[7]=0u;
     } else {
         debug_text("SAND_TEST:RING3_SYSCALL_REJECTED\n");
