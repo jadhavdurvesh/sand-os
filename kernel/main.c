@@ -1,5 +1,8 @@
 #include <stdint.h>
 #include "sand/arch/x86/idt.h"
+#include "sand/arch/x86/gdt.h"
+#include "sand/arch/x86/syscall.h"
+#include "sand/kernel/user.h"
 #include "sand/arch/x86/paging.h"
 #include "sand/arch/x86/timer.h"
 #include "sand/kernel/scheduler.h"
@@ -88,5 +91,14 @@ void kernel_main(void) {
     write_at("Producer events:",14,5,0x0F); write_hex(producer_count,14,24,0x0F);
     write_at("Consumer events:",16,5,0x0F); write_hex(consumer_count,16,24,0x0F);
     write_at("Boot context now provides scheduler idle fallback.",18,5,0x07);
-    scheduler_idle();
+    debug_text("SAND_TEST:RING3_SETUP\\n");
+    gdt_init();
+    syscall_init();
+    if(user_space_init()!=0) {
+        debug_text("SAND_TEST:RING3_SETUP_FAIL\\n");
+        for(;;) __asm__ volatile("cli; hlt");
+    }
+    debug_text("SAND_TEST:RING3_ENTER\\n");
+    user_mode_enter(0u,0u);
+    for(;;) __asm__ volatile("cli; hlt");
 }
