@@ -23,6 +23,16 @@ stage2_start:
     int $0x13
     jc loader_error
 
+    /* Load the second 64 KiB kernel window from LBA 145 to 0x20000. */
+    movw $0x2000, kernel_packet+6
+    movl $145, kernel_packet+8
+    movl $0, kernel_packet+12
+    movw $kernel_packet, %si
+    movb boot_drive, %dl
+    movb $0x42, %ah
+    int $0x13
+    jc loader_error
+
     inb $0x92, %al
     orb $0x02, %al
     andb $0xFE, %al
