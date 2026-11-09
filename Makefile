@@ -10,7 +10,7 @@ LD ?= ld
 OBJCOPY ?= objcopy
 CFLAGS := -m32 -std=gnu11 -ffreestanding -O2 -Wall -Wextra -Werror -fno-stack-protector -fno-pic -fno-pie -Iinclude
 LDFLAGS := -m elf_i386 -nostdlib -z max-page-size=0x1000 -T linker/kernel.ld
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o
 .PHONY: all clean kernel disk run check
 all: disk
 $(BUILD):
@@ -43,6 +43,10 @@ $(BUILD)/memory_map.o: kernel/mm/memory_map.c include/sand/mm/memory_map.h | $(B
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/frame.o: kernel/mm/frame.c include/sand/mm/frame.h include/sand/mm/memory_map.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/paging.o: kernel/arch/x86/paging.c include/sand/arch/x86/paging.h include/sand/mm/frame.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/heap.o: kernel/mm/heap.c include/sand/mm/heap.h include/sand/arch/x86/paging.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 $(KERNEL_BIN): $(KERNEL_ELF)
@@ -58,6 +62,6 @@ disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN)
 run: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M
 check: disk
-	@echo "SAND boot chain, M1 exception handling, E820 map and M2 frame allocator built."
+	@echo "SAND boot chain, E820, frame allocator, identity paging and kernel heap built."
 clean:
 	rm -rf $(BUILD)
