@@ -10,7 +10,7 @@ LD ?= ld
 OBJCOPY ?= objcopy
 CFLAGS := -m32 -std=gnu11 -ffreestanding -O2 -Wall -Wextra -Werror -fno-stack-protector -fno-pic -fno-pie -Iinclude
 LDFLAGS := -m elf_i386 -nostdlib -z max-page-size=0x1000 -T linker/kernel.ld
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o
 .PHONY: all clean kernel disk run check
 all: disk
 $(BUILD):
@@ -37,6 +37,8 @@ $(BUILD)/exceptions.o: kernel/arch/x86/exceptions.S | $(BUILD)
 	$(AS) --32 $< -o $@
 $(BUILD)/irq.o: kernel/arch/x86/irq.S | $(BUILD)
 	$(AS) --32 $< -o $@
+$(BUILD)/thread-bootstrap.o: kernel/arch/x86/thread_bootstrap.S | $(BUILD)
+	$(AS) --32 $< -o $@
 $(BUILD)/exception.o: kernel/arch/x86/exception.c include/sand/arch/x86/idt.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/pic.o: kernel/arch/x86/pic.c | $(BUILD)
@@ -49,7 +51,9 @@ $(BUILD)/paging.o: kernel/arch/x86/paging.c include/sand/arch/x86/paging.h inclu
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/heap.o: kernel/mm/heap.c include/sand/mm/heap.h include/sand/arch/x86/paging.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
-$(BUILD)/timer.o: kernel/arch/x86/timer.c include/sand/arch/x86/timer.h include/sand/arch/x86/idt.h | $(BUILD)
+$(BUILD)/timer.o: kernel/arch/x86/timer.c include/sand/arch/x86/timer.h include/sand/arch/x86/idt.h include/sand/kernel/scheduler.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/scheduler.o: kernel/sched/scheduler.c include/sand/kernel/scheduler.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
@@ -66,6 +70,6 @@ disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN)
 run: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M
 check: disk
-	@echo "SAND boot chain, memory management, paging, heap and PIT IRQ0 timer built."
+	@echo "SAND custom boot, memory, paging, heap, PIT and preemptive thread scheduler built."
 clean:
 	rm -rf $(BUILD)
