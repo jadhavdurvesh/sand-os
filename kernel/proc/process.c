@@ -10,6 +10,7 @@ struct process_slot { struct sand_process_info info; uint32_t code_frame; uint32
 static struct process_slot slots[SAND_PROCESS_LIMIT];
 static sand_pid_t active_pid;
 static sand_pid_t next_pid=1u;
+static uint8_t process_kernel_stack[8192] __attribute__((aligned(16)));
 extern uint8_t __user_text_start[];
 extern uint8_t __user_text_end[];
 extern void x86_enter_user(uint32_t entry,uint32_t stack_top);
@@ -66,6 +67,6 @@ int process_get_info(sand_pid_t pid,struct sand_process_info *out) { struct proc
 sand_pid_t process_current(void) { return active_pid; }
 void process_launch(sand_pid_t pid) {
     struct process_slot *slot=find_slot(pid); if(slot==0 || process_activate(pid)!=0) for(;;) __asm__ volatile("cli; hlt");
-    tss_set_kernel_stack(0x90000u); x86_enter_user(slot->info.entry,slot->info.user_stack);
+    tss_set_kernel_stack((uint32_t)(process_kernel_stack+sizeof(process_kernel_stack))); x86_enter_user(slot->info.entry,slot->info.user_stack);
     for(;;) __asm__ volatile("cli; hlt");
 }
