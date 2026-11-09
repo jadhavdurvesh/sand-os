@@ -42,3 +42,9 @@ The initial x86 implementation obtains a BIOS E820 memory map before entering pr
 The first paging milestone uses non-PAE 32-bit paging and identity-maps the first 16 MiB so the currently executing kernel, stack, VGA text buffer, and early data remain reachable when CR0.PG is enabled. A small kernel heap reserves virtual addresses beginning at 16 MiB and maps physical frames on demand.
 
 Current limitations: this is a bring-up allocator and bump heap, not a production virtual-memory subsystem. The heap has no free operation; page permissions are supervisor read/write; there is no address-space isolation, unmapping, swapping, demand paging, or memory hotplug. The 16 MiB frame ceiling and identity map will be replaced as the architecture grows.
+
+## Timer and interrupt clock
+
+The initial 32-bit x86 timer uses the programmable interval timer (PIT) channel 0 at a requested 100 Hz. Its IRQ0 entry is installed at IDT vector 32, the master 8259 PIC unmasks only IRQ0, and the handler increments a monotonic 32-bit tick counter before acknowledging the master PIC. The kernel enables interrupts and waits using `hlt` until ten timer ticks have arrived.
+
+This is an early hardware-clock source, not yet a scheduler. The handler does not perform context switches, and the counter will eventually need a wider monotonic time representation and a more capable clock abstraction. Local APIC timer and HPET support are future platform work.
