@@ -57,6 +57,18 @@ $(BUILD)/scheduler.o: kernel/sched/scheduler.c include/sand/kernel/scheduler.h |
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/sync.o: kernel/sched/sync.c include/sand/kernel/sync.h include/sand/kernel/scheduler.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/gdt.o: kernel/arch/x86/gdt.c include/sand/arch/x86/gdt.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/gdt-asm.o: kernel/arch/x86/gdt.S | $(BUILD)
+	$(AS) --32 $< -o $@
+$(BUILD)/syscall.o: kernel/arch/x86/syscall.c include/sand/arch/x86/syscall.h include/sand/arch/x86/idt.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/syscall-asm.o: kernel/arch/x86/syscall.S | $(BUILD)
+	$(AS) --32 $< -o $@
+$(BUILD)/user-asm.o: kernel/arch/x86/user.S | $(BUILD)
+	$(AS) --32 $< -o $@
+$(BUILD)/user-space.o: kernel/user/user_space.c include/sand/kernel/user.h include/sand/arch/x86/gdt.h include/sand/arch/x86/paging.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 $(KERNEL_BIN): $(KERNEL_ELF)
