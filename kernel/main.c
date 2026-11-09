@@ -91,6 +91,8 @@ void kernel_main(void) {
     write_at("Consumer events:",16,5,0x0F); write_hex(consumer_count,16,24,0x0F);
     write_at("Boot context now provides scheduler idle fallback.",18,5,0x07);
     debug_text("SAND_TEST:M5_PROCESS_INIT\n");
+    gdt_init();
+    syscall_init();
     if(process_system_init()!=0) { debug_text("SAND_TEST:M5_INIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     sand_pid_t first=0u,second=0u;
     if(process_create_test("init",&first)!=0 || process_create_test("worker",&second)!=0 || first==second) {
