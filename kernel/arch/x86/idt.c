@@ -15,6 +15,7 @@ static void idt_set_gate(uint8_t vector, void (*handler)(void)) {
     idt[vector].offset_high = (uint16_t)(address >> 16);
 }
 void idt_set_irq0(void (*handler)(void)) { idt_set_gate(32u, handler); }
+void idt_set_reschedule(void (*handler)(void)) { idt_set_gate(48u, handler); }
 void idt_load(void) {
     struct idt_pointer pointer = { (uint16_t)(sizeof(idt) - 1u), (uint32_t)&idt[0] };
     __asm__ volatile ("lidt %0" : : "m"(pointer));
