@@ -3,7 +3,7 @@
 | Milestone | Scope | Exit evidence |
 |---|---|---|
 | M0 | Custom BIOS boot sector, stage two, raw kernel loading | SAND loader reaches kernel entry in QEMU |
-| M1 | x86 architecture foundation: GDT, IDT, exceptions, PIC/APIC planning | Exception and interrupt tests |
+| M1 | x86 architecture foundation: GDT, IDT, exception stubs, masked PIC remap | Controlled INT3 test and exception panic path |
 | M2 | Firmware memory-map acquisition, physical frame allocator, paging, kernel heap | Allocator and mapping tests |
 | M3 | Kernel scheduler, threads, context switching, timers | Deterministic scheduler tests |
 | M4 | Kernel object model and system-call ABI | User/kernel boundary tests |
