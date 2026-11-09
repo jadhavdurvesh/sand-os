@@ -1,4 +1,4 @@
-name: SAND OS — Kernel CI
+name: SAND OS — Native Boot CI
 
 on:
   push:
@@ -11,53 +11,35 @@ permissions:
 
 jobs:
   build-and-boot:
-    name: Build, boot and capture evidence
+    name: Build custom boot chain and test in QEMU
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
-
-      - name: Install build and emulator tools
+      - name: Install host build tools and QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential gcc-multilib binutils \
-            grub-pc-bin grub-common xorriso mtools qemu-system-x86 imagemagick
-
-      - name: Compile freestanding kernel
+          sudo apt-get install -y build-essential binutils qemu-system-x86
+      - name: Build and validate SAND boot image
         run: |
-          mkdir -p build
-          gcc -m32 -std=gnu11 -ffreestanding -O2 -Wall -Wextra -Werror \
-            -fno-stack-protector -fno-pic -c kernel/main.c -o build/kernel.o
-          as --32 boot/entry.S -o build/boot.o
-          ld -m elf_i386 -nostdlib -z max-page-size=0x1000 \
-            -T linker/kernel.ld -o build/sand-kernel.elf \
-            build/boot.o build/kernel.o
-
-      - name: Validate Multiboot2 header
-        run: grub-file --is-x86-multiboot2 build/sand-kernel.elf
-
-      - name: Create bootable ISO
-        run: |
-          mkdir -p build/iso/boot/grub
-          cp build/sand-kernel.elf build/iso/boot/sand-kernel.elf
-          cp boot/grub.cfg build/iso/boot/grub/grub.cfg
-          grub-mkrescue -o build/sand-os.iso build/iso
-
-      - name: Boot QEMU and capture VGA screenshot
+          make clean
+          make check
+          test "$(stat -c%s build/sand-boot.bin)" -eq 512
+          test "$(od -An -tx1 -j510 -N2 build/sand-boot.bin | tr -d ' \n')" = "55aa"
+          test "$(stat -c%s build/sand-stage2.bin)" -eq 8192
+          test "$(stat -c%s build/sand-os.img)" -eq 41472
+      - name: Boot raw disk image in QEMU and capture evidence
         shell: bash
         run: |
           set -euo pipefail
-          qemu-system-i386 -machine pc -m 128M -cdrom build/sand-os.iso \
+          qemu-system-i386 -machine pc -m 128M \
+            -drive file=build/sand-os.img,format=raw,if=ide \
             -display none -no-reboot -no-shutdown \
             -monitor unix:build/qemu-monitor.sock,server,nowait \
             -serial file:build/serial.log >build/qemu.log 2>&1 &
           QEMU_PID=$!
-          cleanup() {
-            kill "$QEMU_PID" 2>/dev/null || true
-            wait "$QEMU_PID" 2>/dev/null || true
-          }
+          cleanup() { kill "$QEMU_PID" 2>/dev/null || true; wait "$QEMU_PID" 2>/dev/null || true; }
           trap cleanup EXIT
           for attempt in $(seq 1 40); do
             [[ -S build/qemu-monitor.sock ]] && break
@@ -86,18 +68,17 @@ jobs:
           PY
           sleep 1
           test -s build/sand-os-screenshot.ppm
-          convert build/sand-os-screenshot.ppm build/sand-os-screenshot.png
-          test -s build/sand-os-screenshot.png
-
-      - name: Upload build, boot log and screenshot
+      - name: Upload boot image and test evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sand-os-m0-${{ github.run_number }}
+          name: sand-os-native-boot-${{ github.run_number }}
           path: |
-            build/sand-os.iso
+            build/sand-os.img
+            build/sand-boot.bin
+            build/sand-stage2.bin
             build/sand-kernel.elf
-            build/sand-os-screenshot.png
+            build/sand-kernel.bin
             build/sand-os-screenshot.ppm
             build/serial.log
             build/qemu.log
