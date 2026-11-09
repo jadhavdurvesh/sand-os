@@ -14,7 +14,7 @@ static sand_semaphore_t available, consumed;
 static sand_mutex_t counter_lock;
 static uint16_t ve(char c,uint8_t color) { return (uint16_t)(uint8_t)c|((uint16_t)color<<8); }
 static void clear_screen(uint8_t color) { for(uint32_t i=0;i<2000u;++i) vga[i]=ve(' ',color); }
-static void write_at(const char *s,uint32_t row,uint32_t col,uint8_t color) { for(uint32_t i=0;s[i]!='\\0'&&col+i<80u;++i) vga[row*80u+col+i]=ve(s[i],color); }
+static void write_at(const char *s,uint32_t row,uint32_t col,uint8_t color) { for(uint32_t i=0;s[i]!='\0'&&col+i<80u;++i) vga[row*80u+col+i]=ve(s[i],color); }
 static void write_hex(uint32_t v,uint32_t row,uint32_t col,uint8_t color) { static const char d[]="0123456789ABCDEF"; for(uint32_t i=0;i<8u;++i) vga[row*80u+col+i]=ve(d[(v>>((7u-i)*4u))&15u],color); }
 static void producer(void *arg) {
     (void)arg;
