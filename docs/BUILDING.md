@@ -1,28 +1,26 @@
 # Building and running SAND OS
 
-## CI build
+## Host prerequisites
 
-Push to `main` or open a pull request. GitHub Actions installs host build tools, compiles the freestanding kernel, validates its Multiboot2 header, creates a bootable ISO, boots QEMU, captures a screenshot, and uploads the outputs as workflow artifacts.
+A Linux or WSL development host with GCC (32-bit freestanding support), GNU Binutils, GNU Make, and QEMU System i386. These are host-side development and testing tools. QEMU is not part of the SAND OS image or runtime. GRUB, Multiboot utilities, xorriso, and ISO creation tools are not required.
 
-## Local prerequisites
-
-A Linux or WSL development host with:
-- GCC with 32-bit freestanding support for this initial entry path
-- GNU Binutils
-- GNU Make
-- GRUB utilities (`grub-file` and `grub-mkrescue`)
-- xorriso
-- QEMU System i386
-
-These are host-side development tools. They are not the SAND OS runtime.
-
-## Commands
+## Build and validate
 
 ```sh
 make clean
 make check
-make iso
+```
+
+The build creates `build/sand-boot.bin` (512-byte BIOS sector), `build/sand-stage2.bin` (8 KiB second stage), `build/sand-kernel.elf`, `build/sand-kernel.bin` (bounded flat payload), and `build/sand-os.img` (raw disk image).
+
+## Run in QEMU
+
+```sh
 make run
 ```
 
-The first validation kernel enters in 32-bit protected mode. x86_64 is the intended platform, but the long-mode transition and 64-bit kernel ABI are future work and must not be considered implemented yet.
+QEMU emulates a legacy BIOS PC and boots the raw image as an IDE disk. Firmware BIOS interrupt services perform initial disk reads and text output; SAND's own code controls the boot stages, memory placement, GDT setup, protected-mode transition, and kernel handoff.
+
+## Current limitations
+
+This is an educational first boot path, not a production bootloader. It assumes legacy BIOS with INT 13h extensions, uses fixed disk LBAs and fixed payload limits, and enters 32-bit protected mode. It does not yet parse ELF program headers, obtain a firmware memory map, enter x86_64 long mode, or support UEFI. Do not write this image to a physical disk; use QEMU or a dedicated test device.
