@@ -58,7 +58,7 @@ int process_destroy(sand_pid_t pid) {
     struct process_slot *slot=find_slot(pid); if(slot==0 || slot->info.state==SAND_PROCESS_RUNNING || active_pid==pid) return -1;
     if(slot->info.state!=SAND_PROCESS_TERMINATED) slot->info.state=SAND_PROCESS_TERMINATED;
     if(paging_space_destroy(slot->info.page_directory)!=0) return -1;
-    frame_free(slot->code_frame); frame_free(slot->stack_frame);
+    /* paging_space_destroy reclaimed the user-mapped code and stack frames. */
     slot->code_frame=0u; slot->stack_frame=0u; slot->info.page_directory=0u;
     slot->info.state=SAND_PROCESS_UNUSED; slot->info.pid=0u; return 0;
 }
