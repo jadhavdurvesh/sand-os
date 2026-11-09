@@ -60,3 +60,11 @@ This is deliberately an early single-address-space kernel-thread prototype. All 
 The M3 extension adds a software reschedule interrupt at vector 48, a BLOCKED thread state, wait-object wakeups, reusable DEAD thread slots, and kernel semaphores and mutexes. The single-core scheduler protects state transitions by disabling maskable interrupts while manipulating its run-state table. A producer-consumer smoke workload exercises blocking and wakeups.
 
 These are experimental kernel-only primitives. The mutex is currently implemented as a binary semaphore without owner tracking, recursion detection, or priority inheritance. Wait queues use a linear scan of a four-slot thread table; thread IDs are not generation-stamped. No SMP support, dynamic stack allocation, robust teardown, deadlock detection, or user-process isolation exists. The boot thread is the always-runnable fallback. This implementation must not be considered production-safe.
+
+## Scheduler validation and idle fallback
+
+The boot context is now explicitly treated as the idle/fallback context: when no worker is runnable, timer or software rescheduling returns to the saved boot-context stack. Kernel thread stacks are drawn from a bounded, statically reserved pool and returned to that pool when a DEAD slot is reused; this is reusable bounded storage, not dynamically allocated per-thread stacks.
+
+The QEMU self-test runs a finite producer-consumer workload. The consumer starts first and blocks on a zero-count semaphore; the producer posts work items; both protect shared counters with the mutex primitive. The test checks exact producer/consumer totals, then waits for both workers to exit and starts a short-lived probe to exercise dead-slot and stack-slot reuse. The debug console emits explicit PASS markers, and CI now fails unless all expected markers appear.
+
+Known constraints remain: this is a uniprocessor, ring-0-only prototype with four thread descriptors, a bounded stack pool, linear wait-object scans, and no ownership-aware mutex, priority inheritance, timeout/cancellation, SMP safety, stack guard pages, or robust fault recovery. The mutex is a binary semaphore wrapper, not a fully featured ownership-tracking mutex.
