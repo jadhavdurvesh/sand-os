@@ -5,7 +5,7 @@
 | M0 | Custom BIOS boot sector, stage two, raw kernel loading | SAND loader reaches kernel entry in QEMU |
 | M1 | x86 architecture foundation: GDT, IDT, exception stubs, masked PIC remap | Controlled INT3 test and exception panic path |
 | M2 | BIOS E820 discovery, bounded physical-frame allocator, 32-bit identity paging, page-backed bump heap | QEMU memory-map, frame alloc/free, paging and heap read/write smoke tests |
-| M3 | Kernel scheduler, threads, context switching, timers | Deterministic scheduler tests |
+| M3 | PIT IRQ0 timer foundation, kernel threads, scheduler and context switching | Timer tick smoke test, then deterministic thread-switch tests |
 | M4 | Kernel object model and system-call ABI | User/kernel boundary tests |
 | M5 | Storage abstraction and native filesystem | Filesystem image tests |
 | M6 | Device model and drivers: serial, timer, keyboard, block, display | Driver-level QEMU tests |
