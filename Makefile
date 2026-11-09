@@ -10,7 +10,7 @@ LD ?= ld
 OBJCOPY ?= objcopy
 CFLAGS := -m32 -std=gnu11 -ffreestanding -O2 -Wall -Wextra -Werror -fno-stack-protector -fno-pic -fno-pie -Iinclude
 LDFLAGS := -m elf_i386 -nostdlib -z max-page-size=0x1000 -T linker/kernel.ld
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o
 .PHONY: all clean kernel disk run check
 all: disk
 $(BUILD):
@@ -55,6 +55,8 @@ $(BUILD)/timer.o: kernel/arch/x86/timer.c include/sand/arch/x86/timer.h include/
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/scheduler.o: kernel/sched/scheduler.c include/sand/kernel/scheduler.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/sync.o: kernel/sched/sync.c include/sand/kernel/sync.h include/sand/kernel/scheduler.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 $(KERNEL_BIN): $(KERNEL_ELF)
@@ -70,6 +72,6 @@ disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN)
 run: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M
 check: disk
-	@echo "SAND custom boot, memory, paging, heap, PIT and preemptive thread scheduler built."
+	@echo "SAND boot, memory, paging, heap, PIT, preemptive scheduler and synchronization built."
 clean:
 	rm -rf $(BUILD)
