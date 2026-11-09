@@ -72,12 +72,13 @@ void kernel_main(void) {
         debug_text("SAND_TEST:BLOCK_WAKE_PASS\n");
         debug_text("SAND_TEST:MUTEX_COUNTER_PASS\n");
     }
-    /* Both workers have exited; verify a dead thread slot and stack slot can be reused. */
+    /* Wait until both worker functions have returned and been reaped logically. */
+    while(scheduler_thread_count()!=0u) __asm__ volatile("sti; hlt");
+    /* Reuse a dead worker's thread slot and its reclaimed stack slot. */
     if(scheduler_create(reuse_probe,0)<0) {
-        ++test_failures; debug_text("SAND_TEST:REUSE_FAIL\n");
+        ++test_failures; debug_text("SAND_TEST:REUSE_FAIL\\n");
     } else {
-        __asm__ volatile("sti");
-        for(volatile uint32_t wait=0;wait<500000u;++wait) __asm__ volatile("pause");
+        while(reuse_done==0u) __asm__ volatile("sti; hlt");
         __asm__ volatile("cli");
     }
     if(test_failures==0u) { debug_text("SAND_TEST:ALL_PASS\n"); write_at("M3: scheduler synchronization tests passed.",8,5,0x0A); }
