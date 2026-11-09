@@ -6,7 +6,7 @@
 | M1 | x86 architecture foundation: GDT, IDT, exception stubs, masked PIC remap | Controlled INT3 test and exception panic path |
 | M2 | BIOS E820 discovery, bounded physical-frame allocator, 32-bit identity paging, page-backed bump heap | QEMU memory-map, frame alloc/free, paging and heap read/write smoke tests |
 | M3 | PIT IRQ0, round-robin kernel threads, blocking/wakeup, semaphore/mutex primitives, idle fallback and bounded stack-slot reuse | QEMU producer-consumer totals, mutex-protected counter, worker termination and stack-slot reuse PASS markers |
-| M4 | Kernel object model and system-call ABI | User/kernel boundary tests |
+| M4 | Ring-3 privilege transition, kernel TSS stack, DPL-3 syscall gate and first user syscall | QEMU enters ring 3 and the user stub completes syscall 1 |
 | M5 | Storage abstraction and native filesystem | Filesystem image tests |
 | M6 | Device model and drivers: serial, timer, keyboard, block, display | Driver-level QEMU tests |
 | M7 | Process model, user mode, executable loader | User-process smoke tests |
