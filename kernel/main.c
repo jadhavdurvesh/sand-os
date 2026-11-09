@@ -43,7 +43,7 @@ static void consumer(void *arg) {
         mutex_unlock(&counter_lock);
     }
 }
-static void reuse_probe(void *arg) { (void)arg; reuse_done=1u; debug_text("SAND_TEST:REUSE_PASS\\n"); }
+static void reuse_probe(void *arg) { (void)arg; reuse_done=1u; debug_text("SAND_TEST:REUSE_PASS\n"); }
 void kernel_main(void) {
     __asm__ volatile ("cli");
     clear_screen(0x07); write_at("SAND OS",2,5,0x0B);
@@ -84,21 +84,21 @@ void kernel_main(void) {
         while(reuse_done==0u) __asm__ volatile("sti; hlt");
         __asm__ volatile("cli");
     }
-    if(test_failures==0u) { debug_text("SAND_TEST:ALL_PASS\n"); write_at("M3: scheduler synchronization tests passed.",8,5,0x0A); }
+    if(test_failures==0u) { write_at("M3: scheduler synchronization tests passed.",8,5,0x0A); } else { debug_text("SAND_TEST:FAILED\n"); write_at("M3 ERROR: scheduler tests failed.",8,5,0x4F); }
     else { debug_text("SAND_TEST:FAILED\n"); write_at("M3 ERROR: scheduler tests failed.",8,5,0x4F); }
     write_at("Timer ticks:",10,5,0x0F); write_hex(timer_ticks(),10,18,0x0F);
     write_at("Context switches:",12,5,0x0F); write_hex(scheduler_switch_count(),12,24,0x0F);
     write_at("Producer events:",14,5,0x0F); write_hex(producer_count,14,24,0x0F);
     write_at("Consumer events:",16,5,0x0F); write_hex(consumer_count,16,24,0x0F);
     write_at("Boot context now provides scheduler idle fallback.",18,5,0x07);
-    debug_text("SAND_TEST:RING3_SETUP\\n");
+    debug_text("SAND_TEST:RING3_SETUP\n");
     gdt_init();
     syscall_init();
     if(user_space_init()!=0) {
-        debug_text("SAND_TEST:RING3_SETUP_FAIL\\n");
+        debug_text("SAND_TEST:RING3_SETUP_FAIL\n");
         for(;;) __asm__ volatile("cli; hlt");
     }
-    debug_text("SAND_TEST:RING3_ENTER\\n");
+    debug_text("SAND_TEST:RING3_ENTER\n");
     user_mode_enter(0u,0u);
     for(;;) __asm__ volatile("cli; hlt");
 }
