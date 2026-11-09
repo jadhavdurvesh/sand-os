@@ -10,7 +10,7 @@ LD ?= ld
 OBJCOPY ?= objcopy
 CFLAGS := -m32 -std=gnu11 -ffreestanding -O2 -Wall -Wextra -Werror -fno-stack-protector -fno-pic -fno-pie -Iinclude
 LDFLAGS := -m elf_i386 -nostdlib -z max-page-size=0x1000 -T linker/kernel.ld
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/exception.o $(BUILD)/pic.o
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o
 .PHONY: all clean kernel disk run check
 all: disk
 $(BUILD):
@@ -39,6 +39,10 @@ $(BUILD)/exception.o: kernel/arch/x86/exception.c include/sand/arch/x86/idt.h | 
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/pic.o: kernel/arch/x86/pic.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/memory_map.o: kernel/mm/memory_map.c include/sand/mm/memory_map.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/frame.o: kernel/mm/frame.c include/sand/mm/frame.h include/sand/mm/memory_map.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 $(KERNEL_BIN): $(KERNEL_ELF)
@@ -54,6 +58,6 @@ disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN)
 run: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M
 check: disk
-	@echo "SAND boot chain and M1 CPU architecture objects built and validated."
+	@echo "SAND boot chain, M1 exception handling, E820 map and M2 frame allocator built."
 clean:
 	rm -rf $(BUILD)
