@@ -54,3 +54,9 @@ This is an early hardware-clock source, not yet a scheduler. The handler does no
 The first scheduler prototype uses four statically allocated kernel-thread slots, each with a 4 KiB stack. A new thread receives a synthetic 32-bit interrupt-return frame and begins at the SAND thread bootstrap routine. The PIT IRQ0 assembly stub saves general-purpose registers, passes the saved stack pointer to the scheduler, then restores the selected thread's stack and returns with `iret`. This provides timer-driven preemption between kernel threads.
 
 This is deliberately an early single-address-space kernel-thread prototype. All threads share kernel privilege and address space. Stacks are static; there is no thread reaper, blocking/wakeup API, priority policy, per-thread FPU state, SMP locking, user mode, or robust idle thread yet. A returning thread is marked dead and yields on a later timer tick. These limitations must be addressed before treating the scheduler as production-ready.
+
+## Blocking synchronization prototype
+
+The M3 extension adds a software reschedule interrupt at vector 48, a BLOCKED thread state, wait-object wakeups, reusable DEAD thread slots, and kernel semaphores and mutexes. The single-core scheduler protects state transitions by disabling maskable interrupts while manipulating its run-state table. A producer-consumer smoke workload exercises blocking and wakeups.
+
+These are experimental kernel-only primitives. The mutex is currently implemented as a binary semaphore without owner tracking, recursion detection, or priority inheritance. Wait queues use a linear scan of a four-slot thread table; thread IDs are not generation-stamped. No SMP support, dynamic stack allocation, robust teardown, deadlock detection, or user-process isolation exists. The boot thread is the always-runnable fallback. This implementation must not be considered production-safe.
