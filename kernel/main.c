@@ -115,8 +115,4 @@ void kernel_main(void) {
     debug_text("SAND_TEST:RING3_ENTER\\n");
     process_launch(first);
     for(;;) __asm__ volatile("cli; hlt");
-    }
-    debug_text("SAND_TEST:RING3_ENTER\n");
-    user_mode_enter(0u,0u);
-    for(;;) __asm__ volatile("cli; hlt");
 }
