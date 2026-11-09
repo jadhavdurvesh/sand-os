@@ -73,14 +73,14 @@ $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
-	test $$(stat -c%s $@) -le 32768
+	test $$(stat -c%s $@) -le 65536
 kernel: $(KERNEL_BIN)
 disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN)
-	dd if=/dev/zero of=$(DISK) bs=512 count=81 status=none
+	dd if=/dev/zero of=$(DISK) bs=512 count=145 status=none
 	dd if=$(BOOT_SECTOR) of=$(DISK) conv=notrunc status=none
 	dd if=$(STAGE2) of=$(DISK) bs=512 seek=1 conv=notrunc status=none
 	dd if=$(KERNEL_BIN) of=$(DISK) bs=512 seek=17 conv=notrunc status=none
-	test $$(stat -c%s $(DISK)) -eq 41472
+	test $$(stat -c%s $(DISK)) -eq 74240
 run: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M
 check: disk
