@@ -1,4 +1,5 @@
 #include "sand/kernel/scheduler.h"
+#include "sand/arch/x86/idt.h"
 #define THREAD_STACK_SIZE 4096u
 #define KERNEL_CS 0x08u
 #define INITIAL_EFLAGS 0x202u
@@ -38,6 +39,8 @@ int scheduler_init(void) {
         threads[i].wait_object=0; threads[i].state=THREAD_UNUSED;
     }
     current_thread=0u; switches=0u; scheduler_ready=1u;
+    idt_set_reschedule(x86_reschedule);
+    idt_load();
     threads[0].state=THREAD_RUNNABLE;
     irq_restore(flags);
     return 0;
