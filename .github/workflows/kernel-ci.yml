@@ -29,13 +29,14 @@ jobs:
           test "$(od -An -tx1 -j510 -N2 build/sand-boot.bin | tr -d ' \n')" = "55aa"
           test "$(stat -c%s build/sand-stage2.bin)" -eq 8192
           test "$(stat -c%s build/sand-os.img)" -eq 41472
-      - name: Boot raw disk image in QEMU and capture evidence
+      - name: Boot raw disk image and assert kernel self-tests
         shell: bash
         run: |
           set -euo pipefail
           qemu-system-i386 -machine pc -m 128M \
             -drive file=build/sand-os.img,format=raw,if=ide \
             -display none -no-reboot -no-shutdown \
+            -debugcon file:build/debug.log -global isa-debugcon.iobase=0xe9 \
             -monitor unix:build/qemu-monitor.sock,server,nowait \
             -serial file:build/serial.log >build/qemu.log 2>&1 &
           QEMU_PID=$!
@@ -46,7 +47,17 @@ jobs:
             sleep 0.25
           done
           test -S build/qemu-monitor.sock
-          sleep 2
+          for attempt in $(seq 1 80); do
+            if grep -q 'SAND_TEST:ALL_PASS' build/debug.log 2>/dev/null; then break; fi
+            if grep -Eq 'SAND_TEST:.*(FAIL)' build/debug.log 2>/dev/null; then cat build/debug.log; exit 1; fi
+            sleep 0.25
+          done
+          cat build/debug.log
+          grep -q 'SAND_TEST:BOOT' build/debug.log
+          grep -q 'SAND_TEST:BLOCK_WAKE_PASS' build/debug.log
+          grep -q 'SAND_TEST:MUTEX_COUNTER_PASS' build/debug.log
+          grep -q 'SAND_TEST:REUSE_PASS' build/debug.log
+          grep -q 'SAND_TEST:ALL_PASS' build/debug.log
           python3 - <<'PY'
           import socket, time
           s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -80,6 +91,7 @@ jobs:
             build/sand-kernel.elf
             build/sand-kernel.bin
             build/sand-os-screenshot.ppm
+            build/debug.log
             build/serial.log
             build/qemu.log
           if-no-files-found: warn
