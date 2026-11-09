@@ -48,3 +48,9 @@ Current limitations: this is a bring-up allocator and bump heap, not a productio
 The initial 32-bit x86 timer uses the programmable interval timer (PIT) channel 0 at a requested 100 Hz. Its IRQ0 entry is installed at IDT vector 32, the master 8259 PIC unmasks only IRQ0, and the handler increments a monotonic 32-bit tick counter before acknowledging the master PIC. The kernel enables interrupts and waits using `hlt` until ten timer ticks have arrived.
 
 This is an early hardware-clock source, not yet a scheduler. The handler does not perform context switches, and the counter will eventually need a wider monotonic time representation and a more capable clock abstraction. Local APIC timer and HPET support are future platform work.
+
+## Kernel threads and preemptive round-robin scheduling
+
+The first scheduler prototype uses four statically allocated kernel-thread slots, each with a 4 KiB stack. A new thread receives a synthetic 32-bit interrupt-return frame and begins at the SAND thread bootstrap routine. The PIT IRQ0 assembly stub saves general-purpose registers, passes the saved stack pointer to the scheduler, then restores the selected thread's stack and returns with `iret`. This provides timer-driven preemption between kernel threads.
+
+This is deliberately an early single-address-space kernel-thread prototype. All threads share kernel privilege and address space. Stacks are static; there is no thread reaper, blocking/wakeup API, priority policy, per-thread FPU state, SMP locking, user mode, or robust idle thread yet. A returning thread is marked dead and yields on a later timer tick. These limitations must be addressed before treating the scheduler as production-ready.
