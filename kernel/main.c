@@ -9,7 +9,7 @@
 #include "sand/mm/memory_map.h"
 void pic_init_masked(void);
 static volatile uint16_t *const vga=(uint16_t *)0xB8000;
-static volatile uint32_t producer_count,consumer_count,protected_count;
+static volatile uint32_t producer_count,consumer_count,protected_count,reuse_done;
 static volatile uint32_t test_failures;
 static sand_semaphore_t available;
 static sand_mutex_t counter_lock;
@@ -18,7 +18,7 @@ static inline void debug_char(char c) { __asm__ volatile ("outb %0, $0xE9" : : "
 static void debug_text(const char *s) { while(*s) debug_char(*s++); }
 static uint16_t ve(char c,uint8_t color) { return (uint16_t)(uint8_t)c|((uint16_t)color<<8); }
 static void clear_screen(uint8_t color) { for(uint32_t i=0;i<2000u;++i) vga[i]=ve(' ',color); }
-static void write_at(const char *s,uint32_t row,uint32_t col,uint8_t color) { for(uint32_t i=0;s[i]!='\\0'&&col+i<80u;++i) vga[row*80u+col+i]=ve(s[i],color); }
+static void write_at(const char *s,uint32_t row,uint32_t col,uint8_t color) { for(uint32_t i=0;s[i]!='\0'&&col+i<80u;++i) vga[row*80u+col+i]=ve(s[i],color); }
 static void write_hex(uint32_t v,uint32_t row,uint32_t col,uint8_t color) { static const char d[]="0123456789ABCDEF"; for(uint32_t i=0;i<8u;++i) vga[row*80u+col+i]=ve(d[(v>>((7u-i)*4u))&15u],color); }
 static void producer(void *arg) {
     (void)arg;
