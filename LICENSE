@@ -1,0 +1,50 @@
+SAND OS — RESTRICTED SOURCE LICENSE
+Version 1.0
+Copyright (c) 2026 Durvesh Mukund Jadhav. All rights reserved.
+
+IMPORTANT: This is a custom, restrictive, source-available license. It is not an OSI-approved open-source license.
+
+1. DEFINITIONS
+“Software” means this repository and its source code, documentation, build scripts, assets, designs, binaries, and other materials distributed with it. “Owner” means the copyright holder named above. “User” means any person or entity accessing or using the Software.
+
+2. LIMITED PERSONAL EVALUATION RIGHT
+The Owner grants the User a limited, revocable, non-exclusive, non-transferable, non-sublicensable permission to view the publicly available source code and to download and compile it solely for personal, non-commercial evaluation and educational study.
+
+3. RESTRICTIONS
+Unless the Owner gives prior written permission, the User must not:
+(a) use the Software or a substantial part of it for commercial purposes;
+(b) redistribute, publish, sublicense, sell, rent, lease, or provide copies of the Software or modified versions to another person;
+(c) create, distribute, or commercially exploit derivative works;
+(d) incorporate the Software into another product, operating system, firmware, service, or distribution;
+(e) remove or alter copyright, attribution, or license notices;
+(f) use the Owner’s names, marks, project identity, or branding to imply endorsement, affiliation, or that a fork is an official SAND OS release;
+(g) use the Software to provide a hosted product or managed service.
+
+4. PRIVATE MODIFICATIONS
+A User may make temporary modifications strictly for the personal, non-commercial evaluation permitted by Section 2. No permission is granted to publish, distribute, sublicense, or commercially exploit those changes.
+
+5. CONTRIBUTIONS
+Nothing in this License requires the Owner to accept contributions. A contribution submitted through a pull request or other channel remains subject to its contributor’s rights. By intentionally submitting a contribution for inclusion, the contributor grants the Owner a perpetual, worldwide, non-exclusive, royalty-free license to use, reproduce, modify, prepare derivative works of, and distribute that contribution as part of SAND OS and its related materials. The contributor confirms they have the right to grant this permission. Separate written terms may apply.
+
+6. THIRD-PARTY MATERIAL
+Third-party components remain governed by their own licenses. This License does not replace, restrict, or relicense third-party materials. Their notices and license terms must be retained and followed. The repository must identify third-party components as they are introduced.
+
+7. NO WARRANTY
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. THE OWNER DOES NOT WARRANT THAT THE SOFTWARE IS SECURE, ERROR-FREE, OR FIT FOR USE ON ANY PARTICULAR HARDWARE.
+
+8. LIMITATION OF LIABILITY
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE OWNER SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM OR RELATED TO THE SOFTWARE OR ITS USE, INCLUDING DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES.
+
+9. TERMINATION
+The permissions in this License terminate automatically if the User materially breaches its terms. Upon termination, the User must stop using the Software and destroy copies in their possession, except where retention is required by applicable law.
+
+10. RESERVATION OF RIGHTS
+All rights not expressly granted are reserved by the Owner. No trademark, patent, or other intellectual-property license is granted except as expressly stated.
+
+11. PERMISSION REQUESTS
+Requests for commercial use, redistribution, publication of modifications, or other permissions outside this License must be made to the Owner and require a separate written agreement.
+
+12. GOVERNING LAW
+This License is to be interpreted subject to applicable law. Nothing in it excludes rights or remedies that cannot lawfully be excluded.
+
+END OF LICENSE
