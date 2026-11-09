@@ -61,7 +61,8 @@ int scheduler_create(sand_thread_entry entry, void *argument) {
     uint32_t flags=irq_save();
     for(uint32_t id=1u;id<SAND_SCHEDULER_MAX_THREADS;++id) {
         if(threads[id].state==THREAD_UNUSED || threads[id].state==THREAD_DEAD) {
-            if(threads[id].state==THREAD_DEAD) stack_release(threads[id].stack_slot);\n            int slot=stack_alloc();
+            if(threads[id].state==THREAD_DEAD) stack_release(threads[id].stack_slot);
+            int slot=stack_alloc();
             if(slot<0) { irq_restore(flags); return -1; }
             threads[id].entry=entry; threads[id].argument=argument;
             threads[id].wait_object=0; threads[id].stack_slot=(uint32_t)slot;
