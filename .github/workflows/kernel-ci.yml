@@ -23,7 +23,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential gcc-multilib binutils \
-            grub-pc-bin grub-common xorriso qemu-system-x86 imagemagick
+            grub-pc-bin grub-common xorriso mtools qemu-system-x86 imagemagick
 
       - name: Compile freestanding kernel
         run: |
