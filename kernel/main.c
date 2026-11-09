@@ -1,6 +1,8 @@
 #include <stdint.h>
 #include "sand/arch/x86/idt.h"
+#include "sand/arch/x86/paging.h"
 #include "sand/mm/frame.h"
+#include "sand/mm/heap.h"
 #include "sand/mm/memory_map.h"
 void pic_init_masked(void);
 static volatile uint16_t *const vga = (uint16_t *)0xB8000;
@@ -20,31 +22,48 @@ void kernel_main(void) {
     __asm__ volatile ("cli");
     clear_screen(0x07);
     write_at("SAND OS", 2, 5, 0x0B);
-    write_at("Custom BIOS boot chain reached kernel.", 4, 5, 0x0A);
     idt_init();
     pic_init_masked();
     __asm__ volatile ("int $0x3");
-    write_at("M1: IDT and controlled INT3 test passed.", 6, 5, 0x0A);
+    write_at("M1: IDT and controlled INT3 test passed.", 4, 5, 0x0A);
 
     struct sand_memory_map map;
-    if (memory_map_get(&map) != 0) {
-        write_at("M2 ERROR: BIOS E820 memory map unavailable.", 8, 5, 0x4F);
+    if (memory_map_get(&map) != 0 || frame_allocator_init() != 0) {
+        write_at("M2 ERROR: memory discovery or frame allocator failed.", 6, 5, 0x4F);
         for (;;) __asm__ volatile ("hlt");
     }
-    write_at("M2: BIOS E820 entries:", 8, 5, 0x0E);
-    write_hex(map.count, 8, 30, 0x0E);
-
-    if (frame_allocator_init() != 0) {
-        write_at("M2 ERROR: physical frame allocator init failed.", 10, 5, 0x4F);
-        for (;;) __asm__ volatile ("hlt");
-    }
+    write_at("M2: BIOS E820 entries:", 6, 5, 0x0E);
+    write_hex(map.count, 6, 30, 0x0E);
     uint32_t first = frame_alloc();
-    write_at("Physical frame allocator initialized. First frame:", 10, 5, 0x0A);
-    write_hex(first, 10, 57, 0x0A);
-    write_at("Free managed frames:", 12, 5, 0x0F);
-    write_hex(frame_free_count(), 12, 27, 0x0F);
-    if (first != 0u) (void)frame_free(first);
-    write_at("Allocator allocate/free smoke test passed.", 14, 5, 0x0A);
-    write_at("Next: paging and kernel virtual memory.", 16, 5, 0x07);
+    if (first == 0u || frame_free(first) != 0) {
+        write_at("M2 ERROR: frame allocate/free test failed.", 8, 5, 0x4F);
+        for (;;) __asm__ volatile ("hlt");
+    }
+    write_at("M2: physical frame allocator test passed.", 8, 5, 0x0A);
+
+    if (paging_init() != 0 || !paging_is_enabled()) {
+        write_at("M3 ERROR: paging initialization failed.", 10, 5, 0x4F);
+        for (;;) __asm__ volatile ("hlt");
+    }
+    write_at("M3: 16 MiB identity paging enabled.", 10, 5, 0x0A);
+
+    if (kheap_init() != 0) {
+        write_at("M3 ERROR: kernel heap initialization failed.", 12, 5, 0x4F);
+        for (;;) __asm__ volatile ("hlt");
+    }
+    volatile uint32_t *sample = (volatile uint32_t *)kmalloc(128u);
+    if (sample == 0) {
+        write_at("M3 ERROR: kernel heap allocation failed.", 12, 5, 0x4F);
+        for (;;) __asm__ volatile ("hlt");
+    }
+    *sample = 0x53414E44u;
+    if (*sample != 0x53414E44u) {
+        write_at("M3 ERROR: heap read/write test failed.", 14, 5, 0x4F);
+        for (;;) __asm__ volatile ("hlt");
+    }
+    write_at("M3: virtual heap allocation and read/write passed.", 12, 5, 0x0A);
+    write_at("Heap used bytes:", 14, 5, 0x0F);
+    write_hex(kheap_used(), 14, 22, 0x0F);
+    write_at("Next: paging protection and virtual memory API.", 16, 5, 0x07);
     for (;;) __asm__ volatile ("hlt");
 }
