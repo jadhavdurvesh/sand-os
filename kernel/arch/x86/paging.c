@@ -32,7 +32,8 @@ int paging_map_page(uint32_t virtual_address, uint32_t physical_address, uint32_
         zero_words(table, PAGE_TABLE_ENTRIES);
         page_directory[directory_index] = table_physical | PAGE_PRESENT | PAGE_WRITABLE | (flags & 0x004u);
     } else {
-        if ((flags & 0x004u) != 0u) page_directory[directory_index] |= 0x004u;\n        table = (uint32_t *)(page_directory[directory_index] & 0xFFFFF000u);
+        if ((flags & 0x004u) != 0u) page_directory[directory_index] |= 0x004u;
+        table = (uint32_t *)(page_directory[directory_index] & 0xFFFFF000u);
     }
 
     if ((table[table_index] & PAGE_PRESENT) != 0u) return -1;
