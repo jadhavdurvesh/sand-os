@@ -68,3 +68,11 @@ The boot context is now explicitly treated as the idle/fallback context: when no
 The QEMU self-test runs a finite producer-consumer workload. The consumer starts first and blocks on a zero-count semaphore; the producer posts work items; both protect shared counters with the mutex primitive. The test checks exact producer/consumer totals, then waits for both workers to exit and starts a short-lived probe to exercise dead-slot and stack-slot reuse. The debug console emits explicit PASS markers, and CI now fails unless all expected markers appear.
 
 Known constraints remain: this is a uniprocessor, ring-0-only prototype with four thread descriptors, a bounded stack pool, linear wait-object scans, and no ownership-aware mutex, priority inheritance, timeout/cancellation, SMP safety, stack guard pages, or robust fault recovery. The mutex is a binary semaphore wrapper, not a fully featured ownership-tracking mutex.
+
+## M4: first user-mode transition and system-call proof
+
+The x86 GDT now defines kernel and ring-3 code/data segments plus a 32-bit TSS. The TSS supplies the ring-0 stack for privilege transitions. The IDT exposes vector 0x80 as a DPL-3 interrupt gate, and the assembly entry saves the general registers before dispatching a small kernel-owned syscall table.
+
+The current smoke test copies one tiny position-independent user test stub into a dedicated physical frame, maps it at a user virtual address, maps one user stack page, and enters ring 3 with IRET. The stub invokes syscall number 1 with a fixed test token. CI requires the user-mode entry and successful syscall markers before reporting PASS.
+
+This is a privilege-boundary proof of concept, not yet a general process model. The kernel and test user page still share one page directory; there are no per-process address spaces, process descriptors, user ELF loading, safe user-pointer validation, syscall argument copying, preemptive user-process scheduling, exit/wait semantics, or fault isolation/recovery. The syscall dispatcher accepts only the fixed test operation and must not be treated as a usable general-purpose ABI. The user test stub intentionally loops after returning from the syscall.
