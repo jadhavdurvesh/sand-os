@@ -10,7 +10,7 @@ LD ?= ld
 OBJCOPY ?= objcopy
 CFLAGS := -m32 -std=gnu11 -ffreestanding -O2 -Wall -Wextra -Werror -fno-stack-protector -fno-pic -fno-pie -Iinclude
 LDFLAGS := -m elf_i386 -nostdlib -z max-page-size=0x1000 -T linker/kernel.ld
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o
 .PHONY: all clean kernel disk run check
 all: disk
 $(BUILD):
@@ -68,6 +68,8 @@ $(BUILD)/syscall-asm.o: kernel/arch/x86/syscall.S | $(BUILD)
 $(BUILD)/user-asm.o: kernel/arch/x86/user.S | $(BUILD)
 	$(AS) --32 $< -o $@
 $(BUILD)/user-space.o: kernel/user/user_space.c include/sand/kernel/user.h include/sand/arch/x86/gdt.h include/sand/arch/x86/paging.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/process.o: kernel/proc/process.c include/sand/kernel/process.h include/sand/arch/x86/paging.h include/sand/arch/x86/gdt.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
