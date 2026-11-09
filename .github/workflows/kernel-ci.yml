@@ -28,7 +28,7 @@ jobs:
           test "$(stat -c%s build/sand-boot.bin)" -eq 512
           test "$(od -An -tx1 -j510 -N2 build/sand-boot.bin | tr -d ' \n')" = "55aa"
           test "$(stat -c%s build/sand-stage2.bin)" -eq 8192
-          test "$(stat -c%s build/sand-os.img)" -eq 74240
+          test "$(stat -c%s build/sand-os.img)" -eq 139776
       - name: Boot raw disk image and assert kernel self-tests
         shell: bash
         run: |
