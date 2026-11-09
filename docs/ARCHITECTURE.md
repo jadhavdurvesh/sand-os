@@ -34,3 +34,11 @@ SAND OS is intended to provide a graphical desktop, not remain a text-only syste
 7. A documented graphics and windowing API for native applications.
 
 The initial VGA text screen is only a bring-up/debug console. It is not the intended final user interface. A graphical environment depends on stable memory management, interrupt/input handling, scheduling, user-mode isolation, and display drivers; it will be built after those foundations.
+
+## Memory and virtual address space
+
+The initial x86 implementation obtains a BIOS E820 memory map before entering protected mode. The kernel uses a bitmap physical-frame allocator with a deliberately bounded first 16 MiB management window. The first 1 MiB is reserved for firmware and early boot structures.
+
+The first paging milestone uses non-PAE 32-bit paging and identity-maps the first 16 MiB so the currently executing kernel, stack, VGA text buffer, and early data remain reachable when CR0.PG is enabled. A small kernel heap reserves virtual addresses beginning at 16 MiB and maps physical frames on demand.
+
+Current limitations: this is a bring-up allocator and bump heap, not a production virtual-memory subsystem. The heap has no free operation; page permissions are supervisor read/write; there is no address-space isolation, unmapping, swapping, demand paging, or memory hotplug. The 16 MiB frame ceiling and identity map will be replaced as the architecture grows.
