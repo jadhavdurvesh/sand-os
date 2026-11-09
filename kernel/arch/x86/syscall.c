@@ -11,6 +11,7 @@ void syscall_dispatch(uint32_t *registers) {
         debug_text("SAND_TEST:RING3_SYSCALL_PASS\n");
         registers[7]=0u;
     } else {
+        debug_text("SAND_TEST:RING3_SYSCALL_REJECTED\n");
         registers[7]=0xFFFFFFFFu;
     }
 }
