@@ -1,0 +1,9 @@
+/build/
+*.iso
+*.img
+*.elf
+*.bin
+*.log
+*.png
+*.qcow2
+*.raw
