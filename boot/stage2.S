@@ -1,6 +1,7 @@
-/* SAND OS stage-2 loader: raw kernel loader and protected-mode switch.
- * Disk layout: LBA 0 boot sector; LBA 1..16 this 8 KiB stage; LBA 17..80
- * kernel payload. The initial milestone intentionally targets legacy BIOS.
+/* SAND OS stage-2 loader.
+ * BIOS E820 map is written at physical 0x5000: count at 0x5000,
+ * followed by up to 32 24-byte entries at 0x5004.
+ * Kernel is read from LBA 17 to physical 0x10000.
  */
 .code16
 .section .text
@@ -14,14 +15,14 @@ stage2_start:
     movw $0x7C00, %sp
     movb %dl, boot_drive
 
-    /* Read 32 KiB kernel payload from LBA 17 to physical 0x10000. */
+    call collect_memory_map
+
     movw $kernel_packet, %si
     movb boot_drive, %dl
     movb $0x42, %ah
     int $0x13
     jc loader_error
 
-    /* Enable A20 using the chipset fast-gate port. */
     inb $0x92, %al
     orb $0x02, %al
     andb $0xFE, %al
@@ -32,6 +33,47 @@ stage2_start:
     orl $0x1, %eax
     movl %eax, %cr0
     ljmpl $0x08, $protected_entry
+
+/* BIOS INT 15h, EAX=E820, EDX='SMAP'. */
+collect_memory_map:
+    pushw %ds
+    pushw %es
+    pushw %di
+    pushw %si
+    pushw %bp
+    movw $0x0500, %ax
+    movw %ax, %es
+    xorw %di, %di
+    movl $0, %es:0
+    movw $0, %es:4
+    movw $0, %bp
+    xorl %ebx, %ebx
+e820_next:
+    cmpl $32, %ebp
+    jae e820_done
+    movl $1, %es:28(%di)
+    movl $0xE820, %eax
+    movl $0x534D4150, %edx
+    movl $24, %ecx
+    int $0x15
+    jc e820_done
+    cmpl $0x534D4150, %eax
+    jne e820_done
+    cmpl $20, %ecx
+    jb e820_continue
+    incw %bp
+    addw $24, %di
+e820_continue:
+    testl %ebx, %ebx
+    jne e820_next
+e820_done:
+    movw %bp, %es:0
+    popw %bp
+    popw %si
+    popw %di
+    popw %es
+    popw %ds
+    ret
 
 loader_error:
     movw $error_text, %si
