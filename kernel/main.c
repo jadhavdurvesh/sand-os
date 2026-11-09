@@ -90,29 +90,29 @@ void kernel_main(void) {
     write_at("Producer events:",14,5,0x0F); write_hex(producer_count,14,24,0x0F);
     write_at("Consumer events:",16,5,0x0F); write_hex(consumer_count,16,24,0x0F);
     write_at("Boot context now provides scheduler idle fallback.",18,5,0x07);
-    debug_text("SAND_TEST:M5_PROCESS_INIT\\n");
-    if(process_system_init()!=0) { debug_text("SAND_TEST:M5_INIT_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    debug_text("SAND_TEST:M5_PROCESS_INIT\n");
+    if(process_system_init()!=0) { debug_text("SAND_TEST:M5_INIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     sand_pid_t first=0u,second=0u;
     if(process_create_test("init",&first)!=0 || process_create_test("worker",&second)!=0 || first==second) {
-        debug_text("SAND_TEST:M5_CREATE_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt");
+        debug_text("SAND_TEST:M5_CREATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
     struct sand_process_info first_info,second_info;
     if(process_get_info(first,&first_info)!=0 || process_get_info(second,&second_info)!=0 ||
        first_info.page_directory==second_info.page_directory) {
-        debug_text("SAND_TEST:M5_ISOLATION_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt");
+        debug_text("SAND_TEST:M5_ISOLATION_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
-    debug_text("SAND_TEST:M5_TWO_ADDRESS_SPACES_PASS\\n");
+    debug_text("SAND_TEST:M5_TWO_ADDRESS_SPACES_PASS\n");
     if(process_activate(first)!=0 || process_current()!=first ||
        process_activate(second)!=0 || process_current()!=second) {
-        debug_text("SAND_TEST:M5_ACTIVATE_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt");
+        debug_text("SAND_TEST:M5_ACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
-    debug_text("SAND_TEST:M5_CR3_SWITCH_PASS\\n");
+    debug_text("SAND_TEST:M5_CR3_SWITCH_PASS\n");
     if(process_terminate(second)!=0 || process_destroy(second)!=0) {
-        debug_text("SAND_TEST:M5_DESTROY_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt");
+        debug_text("SAND_TEST:M5_DESTROY_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
-    debug_text("SAND_TEST:M5_TERMINATE_DESTROY_PASS\\n");
-    if(process_activate(first)!=0) { debug_text("SAND_TEST:M5_REACTIVATE_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt"); }
-    debug_text("SAND_TEST:RING3_ENTER\\n");
+    debug_text("SAND_TEST:M5_TERMINATE_DESTROY_PASS\n");
+    if(process_activate(first)!=0) { debug_text("SAND_TEST:M5_REACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    debug_text("SAND_TEST:RING3_ENTER\n");
     process_launch(first);
     for(;;) __asm__ volatile("cli; hlt");
 }
