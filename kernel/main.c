@@ -76,7 +76,7 @@ void kernel_main(void) {
     while(scheduler_thread_count()!=0u) __asm__ volatile("sti; hlt");
     /* Reuse a dead worker's thread slot and its reclaimed stack slot. */
     if(scheduler_create(reuse_probe,0)<0) {
-        ++test_failures; debug_text("SAND_TEST:REUSE_FAIL\\n");
+        ++test_failures; debug_text("SAND_TEST:REUSE_FAIL\n");
     } else {
         while(reuse_done==0u) __asm__ volatile("sti; hlt");
         __asm__ volatile("cli");
