@@ -3,5 +3,6 @@
 #include <stdint.h>
 void idt_init(void);
 void idt_load(void);
+void idt_set_irq0(void (*handler)(void));
 void x86_exception_dispatch(uint32_t vector, uint32_t error_code);
 #endif
