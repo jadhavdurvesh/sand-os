@@ -12,6 +12,7 @@ int scheduler_wake_one(const void *wait_object);
 uint32_t scheduler_current_id(void);
 uint32_t scheduler_switch_count(void);
 uint32_t scheduler_thread_count(void);
+void scheduler_idle(void);
 void scheduler_thread_bootstrap(void);
 void scheduler_thread_exit(void);
 #endif
