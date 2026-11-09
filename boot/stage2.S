@@ -43,15 +43,14 @@ collect_memory_map:
     pushw %bp
     movw $0x0500, %ax
     movw %ax, %es
-    xorw %di, %di
-    movl $0, %es:0
-    movw $0, %es:4
-    movw $0, %bp
+    movw $4, %di
+    movw $0, %es:0
+    xorl %ebp, %ebp
     xorl %ebx, %ebx
 e820_next:
     cmpl $32, %ebp
     jae e820_done
-    movl $1, %es:28(%di)
+    movl $1, %es:20(%di)
     movl $0xE820, %eax
     movl $0x534D4150, %edx
     movl $24, %ecx
