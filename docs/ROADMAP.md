@@ -7,9 +7,9 @@
 | M2 | BIOS E820 discovery, bounded physical-frame allocator, 32-bit identity paging, page-backed bump heap | QEMU memory-map, frame alloc/free, paging and heap read/write smoke tests |
 | M3 | PIT IRQ0, round-robin kernel threads, blocking/wakeup, semaphore/mutex primitives, idle fallback and bounded stack-slot reuse | QEMU producer-consumer totals, mutex-protected counter, worker termination and stack-slot reuse PASS markers |
 | M4 | Ring-3 privilege transition, kernel TSS stack, DPL-3 syscall gate and first user syscall | QEMU enters ring 3 and the user stub completes syscall 1 |
-| M5 | Storage abstraction and native filesystem | Filesystem image tests |
+| M5 | Independent process control blocks, per-process page directories, activation, termination and destruction | Two distinct address spaces, CR3 switching, lifecycle and user-process syscall smoke tests |
 | M6 | Device model and drivers: serial, timer, keyboard, block, display | Driver-level QEMU tests |
-| M7 | Process model, user mode, executable loader | User-process smoke tests |
+| M7 | Executable loader, user-process scheduler and safe process exit/wait | Multiple isolated user applications run and exit under scheduler control |
 | M8 | Native shell and core utilities | Scripted shell tests |
 | M9 | Networking foundation and security model | Protocol and isolation tests |
 | M10 | Graphics compositor, window manager, input stack | Desktop screenshot tests |
