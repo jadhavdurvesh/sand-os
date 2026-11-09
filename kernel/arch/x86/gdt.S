@@ -22,17 +22,19 @@ x86_tss_load:
 
 .global x86_enter_user
 x86_enter_user:
-    movw $0x23, %ax
-    movw %ax, %ds
-    movw %ax, %es
-    movw %ax, %fs
-    movw %ax, %gs
+    movl 4(%esp), %eax
+    movl 8(%esp), %edx
+    movw $0x23, %cx
+    movw %cx, %ds
+    movw %cx, %es
+    movw %cx, %fs
+    movw %cx, %gs
     pushl $0x23
-    pushl 8(%esp)
+    pushl %edx
     pushfl
-    popl %eax
-    orl $0x200, %eax
-    pushl %eax
+    popl %ecx
+    orl $0x200, %ecx
+    pushl %ecx
     pushl $0x1B
-    pushl 4(%esp)
+    pushl %eax
     iret
