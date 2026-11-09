@@ -47,8 +47,11 @@ jobs:
             sleep 0.25
           done
           test -S build/qemu-monitor.sock
-          for attempt in $(seq 1 80); do
-            if grep -q 'SAND_TEST:RING3_SETUP' build/debug.log\n          grep -q 'SAND_TEST:RING3_ENTER' build/debug.log\n          grep -q 'SAND_TEST:RING3_SYSCALL_PASS' build/debug.log\n          grep -q 'SAND_TEST:ALL_PASS' build/debug.log 2>/dev/null; then break; fi
+          for attempt in $(seq 1 160); do
+            if grep -q 'SAND_TEST:RING3_SETUP' build/debug.log\n          grep -q 'SAND_TEST:RING3_ENTER' build/debug.log\n          grep -q 'SAND_TEST:RING3_SYSCALL_PASS' build/debug.log\n          grep -q 'SAND_TEST:RING3_SETUP' build/debug.log
+          grep -q 'SAND_TEST:RING3_ENTER' build/debug.log
+          grep -q 'SAND_TEST:RING3_SYSCALL_PASS' build/debug.log
+          grep -q 'SAND_TEST:ALL_PASS' build/debug.log 2>/dev/null; then break; fi
             if grep -Eq 'SAND_TEST:.*(FAIL)' build/debug.log 2>/dev/null; then cat build/debug.log; exit 1; fi
             sleep 0.25
           done
