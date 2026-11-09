@@ -1,0 +1,105 @@
+name: SAND OS — Kernel CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-boot:
+    name: Build, boot and capture evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install build and emulator tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcc-multilib binutils \
+            grub-pc-bin grub-common xorriso qemu-system-x86 imagemagick
+
+      - name: Compile freestanding kernel
+        run: |
+          mkdir -p build
+          gcc -m32 -std=gnu11 -ffreestanding -O2 -Wall -Wextra -Werror \
+            -fno-stack-protector -fno-pic -c kernel/main.c -o build/kernel.o
+          as --32 boot/entry.S -o build/boot.o
+          ld -m elf_i386 -nostdlib -z max-page-size=0x1000 \
+            -T linker/kernel.ld -o build/sand-kernel.elf \
+            build/boot.o build/kernel.o
+
+      - name: Validate Multiboot2 header
+        run: grub-file --is-x86-multiboot2 build/sand-kernel.elf
+
+      - name: Create bootable ISO
+        run: |
+          mkdir -p build/iso/boot/grub
+          cp build/sand-kernel.elf build/iso/boot/sand-kernel.elf
+          cp boot/grub.cfg build/iso/boot/grub/grub.cfg
+          grub-mkrescue -o build/sand-os.iso build/iso
+
+      - name: Boot QEMU and capture VGA screenshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          qemu-system-i386 -machine pc -m 128M -cdrom build/sand-os.iso \
+            -display none -no-reboot -no-shutdown \
+            -monitor unix:build/qemu-monitor.sock,server,nowait \
+            -serial file:build/serial.log >build/qemu.log 2>&1 &
+          QEMU_PID=$!
+          cleanup() {
+            kill "$QEMU_PID" 2>/dev/null || true
+            wait "$QEMU_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 40); do
+            [[ -S build/qemu-monitor.sock ]] && break
+            sleep 0.25
+          done
+          test -S build/qemu-monitor.sock
+          sleep 2
+          python3 - <<'PY'
+          import socket, time
+          s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+          s.settimeout(4)
+          s.connect("build/qemu-monitor.sock")
+          time.sleep(0.2)
+          try:
+              s.recv(4096)
+          except TimeoutError:
+              pass
+          s.sendall(b"screendump build/sand-os-screenshot.ppm\n")
+          time.sleep(1)
+          try:
+              print(s.recv(4096).decode(errors="replace"))
+          except TimeoutError:
+              pass
+          s.sendall(b"quit\n")
+          s.close()
+          PY
+          sleep 1
+          test -s build/sand-os-screenshot.ppm
+          convert build/sand-os-screenshot.ppm build/sand-os-screenshot.png
+          test -s build/sand-os-screenshot.png
+
+      - name: Upload build, boot log and screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sand-os-m0-${{ github.run_number }}
+          path: |
+            build/sand-os.iso
+            build/sand-kernel.elf
+            build/sand-os-screenshot.png
+            build/sand-os-screenshot.ppm
+            build/serial.log
+            build/qemu.log
+          if-no-files-found: warn
+          retention-days: 14
