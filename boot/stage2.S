@@ -93,7 +93,7 @@ loader_halt:
 .align 4
 kernel_packet:
     .byte 0x10, 0
-    .word 64
+    .word 128
     .word 0x0000
     .word 0x1000
     .quad 17
