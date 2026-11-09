@@ -43,7 +43,7 @@ static void consumer(void *arg) {
         mutex_unlock(&counter_lock);
     }
 }
-static void reuse_probe(void *arg) { (void)arg; reuse_done=1u; debug_text("SAND_TEST:REUSE_PASS\n"); if(test_failures==0u) debug_text("SAND_TEST:ALL_PASS\n"); else debug_text("SAND_TEST:FAILED\n"); }
+static void reuse_probe(void *arg) { (void)arg; reuse_done=1u; debug_text("SAND_TEST:REUSE_PASS\\n"); }
 void kernel_main(void) {
     __asm__ volatile ("cli");
     clear_screen(0x07); write_at("SAND OS",2,5,0x0B);
