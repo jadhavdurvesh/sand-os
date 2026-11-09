@@ -85,7 +85,6 @@ void kernel_main(void) {
         __asm__ volatile("cli");
     }
     if(test_failures==0u) { write_at("M3: scheduler synchronization tests passed.",8,5,0x0A); } else { debug_text("SAND_TEST:FAILED\n"); write_at("M3 ERROR: scheduler tests failed.",8,5,0x4F); }
-    else { debug_text("SAND_TEST:FAILED\n"); write_at("M3 ERROR: scheduler tests failed.",8,5,0x4F); }
     write_at("Timer ticks:",10,5,0x0F); write_hex(timer_ticks(),10,18,0x0F);
     write_at("Context switches:",12,5,0x0F); write_hex(scheduler_switch_count(),12,24,0x0F);
     write_at("Producer events:",14,5,0x0F); write_hex(producer_count,14,24,0x0F);
