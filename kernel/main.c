@@ -36,7 +36,14 @@ static void wait_test_parent_thread(void *arg) {
     debug_text("SAND_TEST:M7_WAIT_PARENT_STARTED\\n");
     if(process_create_test("wait-child",&wait_test_child)!=0) { debug_text("SAND_TEST:M7_WAIT_PROCESS_CREATE_FAIL\\n"); wait_test_failed=1u; wait_test_done=1u; return; }
     debug_text("SAND_TEST:M7_WAIT_PROCESS_CREATED\\n");
-    if(scheduler_create(wait_test_child_exit,0)<0) { debug_text("SAND_TEST:M7_WAIT_THREAD_CREATE_FAIL\\n"); wait_test_failed=1u; wait_test_done=1u; return; }
+    int child_thread_id=scheduler_create(wait_test_child_exit,0);
+    if(child_thread_id<0) {
+        debug_text("SAND_TEST:M7_WAIT_THREAD_CREATE_FAIL\\n");
+        if(child_thread_id==-3) debug_text("SAND_TEST:M7_WAIT_STACK_POOL_EXHAUSTED\\n");
+        else if(child_thread_id==-4) debug_text("SAND_TEST:M7_WAIT_THREAD_SLOTS_EXHAUSTED\\n");
+        else if(child_thread_id==-2) debug_text("SAND_TEST:M7_WAIT_SCHEDULER_NOT_READY\\n");
+        wait_test_failed=1u; wait_test_done=1u; return;
+    }
     debug_text("SAND_TEST:M7_WAIT_BLOCKING\\n");
     if(process_wait(wait_test_child,&status)!=1 || status!=73) wait_test_failed=1u;
     debug_text("SAND_TEST:M7_WAIT_PARENT_RESUMED\\n");
