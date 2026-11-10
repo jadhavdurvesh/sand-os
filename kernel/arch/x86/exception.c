@@ -8,7 +8,7 @@ void x86_exception_dispatch(uint32_t vector,uint32_t error_code,uint32_t eip) {
     if(vector==3u) return;
     uint32_t fault_address=0u;
     if(vector==14u) __asm__ volatile("mov %%cr2,%0":"=r"(fault_address));
-    debug_text("SAND_EXCEPTION:VECTOR="); debug_hex(vector); debug_text(":ERROR="); debug_hex(error_code);
+    debug_text("SAND_EXCEPTION:VECTOR="); debug_hex(vector); debug_text(":ERROR="); debug_hex(error_code); debug_text(":EIP="); debug_hex(eip);
     if(vector==14u) { debug_text(":CR2="); debug_hex(fault_address); }
     debug_text("\n");
     write_panic("SAND KERNEL PANIC: CPU exception; system halted.");
