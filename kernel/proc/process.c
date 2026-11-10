@@ -143,10 +143,16 @@ int process_activate(sand_pid_t pid) {
     if(paging_activate(slot->info.page_directory)!=0) return -1;
     slot->info.state=SAND_PROCESS_RUNNING; active_pid=pid; return 0;
 }
-int process_terminate(sand_pid_t pid) {
+int process_exit(sand_pid_t pid,int32_t exit_code) {
     struct process_slot *slot=find_slot(pid); if(slot==0 || slot->info.state==SAND_PROCESS_TERMINATED) return -1;
     if(active_pid==pid) { if(paging_activate(paging_kernel_directory())!=0) return -1; active_pid=0u; }
-    slot->info.state=SAND_PROCESS_TERMINATED; return 0;
+    slot->info.exit_code=exit_code; slot->info.state=SAND_PROCESS_TERMINATED; return 0;
+}
+int process_terminate(sand_pid_t pid) { return process_exit(pid,0); }
+int process_wait(sand_pid_t pid,int32_t *exit_code) {
+    struct process_slot *slot=find_slot(pid); if(slot==0 || exit_code==0) return -1;
+    if(slot->info.state!=SAND_PROCESS_TERMINATED) return 0;
+    *exit_code=slot->info.exit_code; return 1;
 }
 int process_destroy(sand_pid_t pid) {
     struct process_slot *slot=find_slot(pid); if(slot==0 || slot->info.state==SAND_PROCESS_RUNNING || active_pid==pid) return -1;
