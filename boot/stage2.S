@@ -22,7 +22,7 @@ stage2_start:
     movw %ax, %es
     xorw %di, %di
     movw $0x4F01, %ax
-    movw $0x0117, %cx
+    movw $0x0118, %cx
     int $0x10
     cmpw $0x004F, %ax
     jne loader_error
@@ -35,7 +35,7 @@ stage2_start:
     movb %es:0x19, %al
     cmpb $24, %al
     jne loader_error
-    movw $0x4117, %bx
+    movw $0x4118, %bx
     movw $0x4F02, %ax
     int $0x10
     cmpw $0x004F, %ax
