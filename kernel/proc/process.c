@@ -122,7 +122,9 @@ int process_create_elf(const char *name,const void *image,uint32_t image_size,sa
     set_process_name(slot,name); *pid_out=pid; return 0;
 }
 int process_create_test(const char *name,sand_pid_t *pid_out) {
-    uint8_t image[sizeof(struct elf32_header)+sizeof(struct elf32_program)+SAND_PAGE_SIZE];
+    /* The generated test ELF is larger than THREAD_STACK_SIZE. Keep it in BSS,
+       not on a scheduler worker stack, or process tests corrupt kernel state. */
+    static uint8_t image[sizeof(struct elf32_header)+sizeof(struct elf32_program)+SAND_PAGE_SIZE];
     for(uint32_t i=0;i<sizeof(image);++i) image[i]=0u;
     struct elf32_header *eh=(struct elf32_header *)image;
     eh->ident[0]=0x7Fu; eh->ident[1]='E'; eh->ident[2]='L'; eh->ident[3]='F';
