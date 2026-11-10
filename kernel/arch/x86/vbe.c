@@ -29,7 +29,7 @@ int vbe_framebuffer_init(sand_framebuffer_t *framebuffer) {
                             aligned_physical + i * PAGE_SIZE,
                             PAGE_PRESENT_WRITE) != 0) return -1;
     }
-    framebuffer->pixels = (volatile uint32_t *)(VBE_VIRTUAL_BASE + offset);
+    framebuffer->pixels = (volatile uint8_t *)(VBE_VIRTUAL_BASE + offset);
     framebuffer->width = width;
     framebuffer->height = height;
     framebuffer->pitch_bytes = pitch;
