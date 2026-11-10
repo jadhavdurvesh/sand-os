@@ -66,14 +66,15 @@ int scheduler_init(void) {
     return 0;
 }
 int scheduler_create(sand_thread_entry entry, void *argument) {
-    if(entry==0 || !scheduler_ready) return -1;
+    if(entry==0) return -1;
+    if(!scheduler_ready) return -2;
     uint32_t flags=irq_save();
     rebuild_stack_usage();
     for(uint32_t id=1u;id<SAND_SCHEDULER_MAX_THREADS;++id) {
         if(threads[id].state==THREAD_UNUSED || threads[id].state==THREAD_DEAD) {
             if(threads[id].state==THREAD_DEAD) stack_release(threads[id].stack_slot);
             int slot=stack_alloc();
-            if(slot<0) { irq_restore(flags); return -1; }
+            if(slot<0) { irq_restore(flags); return -3; }
             threads[id].entry=entry; threads[id].argument=argument;
             threads[id].wait_object=0; threads[id].stack_slot=(uint32_t)slot;
             threads[id].saved_stack=make_initial_stack((uint32_t)slot);
@@ -83,7 +84,7 @@ int scheduler_create(sand_thread_entry entry, void *argument) {
         }
     }
     irq_restore(flags);
-    return -1;
+    return -4;
 }
 uint32_t scheduler_reschedule(uint32_t saved_stack) {
     if(!scheduler_ready) return saved_stack;
