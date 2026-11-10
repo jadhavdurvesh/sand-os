@@ -35,7 +35,8 @@ int window_get(sand_window_id_t id,sand_window_t *out) {
 }
 static void raise_window(sand_window_id_t id) {
     uint32_t i=0u; while(i<count&&order[i]!=id) ++i; if(i==count) return;
-    for(;i+1u<count;++i) order[i]=order[i+1u]; order[count-1u]=id;
+    for(;i+1u<count;++i) { order[i]=order[i+1u]; }
+    order[count-1u]=id;
     for(uint32_t j=0;j<SAND_WINDOW_MAX;++j) windows[j].focused=(uint8_t)(ids[j]==id&&windows[j].used);
     focused=id;
 }
