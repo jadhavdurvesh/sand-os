@@ -117,7 +117,15 @@ void kernel_main(void) {
         debug_text("SAND_TEST:M5_ACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
     debug_text("SAND_TEST:M5_CR3_SWITCH_PASS\n");
-    if(process_terminate(second)!=0 || process_destroy(second)!=0) {
+    if(process_exit(second,37)!=0) {
+        debug_text("SAND_TEST:M7_EXIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
+    }
+    int32_t child_status=-1;
+    if(process_wait(second,&child_status)!=1 || child_status!=37) {
+        debug_text("SAND_TEST:M7_WAIT_STATUS_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
+    }
+    debug_text("SAND_TEST:M7_EXIT_WAIT_STATUS_PASS\n");
+    if(process_destroy(second)!=0) {
         debug_text("SAND_TEST:M5_DESTROY_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
     debug_text("SAND_TEST:M5_TERMINATE_DESTROY_PASS\n");
