@@ -28,7 +28,7 @@ jobs:
           test "$(stat -c%s build/sand-boot.bin)" -eq 512
           test "$(od -An -tx1 -j510 -N2 build/sand-boot.bin | tr -d ' \n')" = "55aa"
           test "$(stat -c%s build/sand-stage2.bin)" -eq 8192
-          test "$(stat -c%s build/sand-os.img)" -eq 139776
+          test "$(stat -c%s build/sand-os.img)" -eq 2097152
       - name: Boot raw disk image and assert kernel self-tests
         shell: bash
         run: |
@@ -62,6 +62,9 @@ jobs:
           grep -q 'SAND_TEST:M5_CR3_SWITCH_PASS' build/debug.log
           grep -q 'SAND_TEST:M5_TERMINATE_DESTROY_PASS' build/debug.log
           grep -q 'SAND_TEST:M5_USER_PROCESS_SYSCALL_PASS' build/debug.log
+          grep -q 'SAND_TEST:M6_ATA_IDENTIFY_PASS' build/debug.log
+          grep -q 'SAND_TEST:M6_SANDFS_FORMAT_PASS' build/debug.log
+          grep -q 'SAND_TEST:M6_FILE_READ_WRITE_PASS' build/debug.log
           grep -q 'SAND_TEST:RING3_ENTER' build/debug.log
           grep -q 'SAND_TEST:RING3_SYSCALL_PASS' build/debug.log
           grep -q 'SAND_TEST:ALL_PASS' build/debug.log
