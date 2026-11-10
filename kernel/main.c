@@ -107,6 +107,11 @@ void kernel_main(void) {
         debug_text("SAND_TEST:M5_ISOLATION_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
     debug_text("SAND_TEST:M5_TWO_ADDRESS_SPACES_PASS\n");
+    uint8_t malformed_elf[16]={0}; sand_pid_t rejected_pid=0u;
+    if(process_create_elf("bad-elf",malformed_elf,sizeof(malformed_elf),&rejected_pid)==0) {
+        debug_text("SAND_TEST:M7_INVALID_ELF_ACCEPTED\\n"); for(;;) __asm__ volatile("cli; hlt");
+    }
+    debug_text("SAND_TEST:M7_ELF_REJECT_INVALID_PASS\\n");
     if(process_activate(first)!=0 || process_current()!=first ||
        process_activate(second)!=0 || process_current()!=second) {
         debug_text("SAND_TEST:M5_ACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
