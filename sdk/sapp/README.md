@@ -1,17 +1,15 @@
-# SAND Application SDK — SAPP v0.1
+# SAND Application SDK — SAPP v0.2
 
-This directory is the first developer-facing SAND application SDK. It defines
-the native SAPP executable container and provides a host-side packer/validator,
-an initial i386 userspace header, a linker script and a hello-world project.
+The first native SAND application format and developer toolchain. SAPP is a
+custom executable container, not ELF renamed with a different extension.
 
 ## Requirements
 
 - Python 3.9+
-- An i386 bare-metal C toolchain: `i686-elf-gcc`, `i686-elf-ld`,
-  `i686-elf-objcopy`
+- An i386 bare-metal toolchain: `i686-elf-gcc`, `i686-elf-ld`
 - GNU Make
 
-## Build an application
+## Build the example
 
 From `sdk/sapp/examples/hello`:
 
@@ -20,37 +18,38 @@ make
 make inspect
 ```
 
-If your cross-compiler uses different command names:
+The output is `build/hello.sapp`. The packer consumes the linked ELF32 file
+and emits a native SAPP image. The SDK can be copied into another application
+repository or included as a Git submodule.
+
+## Packer
 
 ```sh
-make CC=i686-linux-gnu-gcc LD=i686-linux-gnu-ld OBJCOPY=i686-linux-gnu-objcopy
-```
-
-The output is `build/hello.sapp`. Copy `sdk/sapp` into another application
-repository or use it as a Git submodule. The tool is independent of the SAND OS
-kernel build.
-
-## Packer commands
-
-```sh
-python3 tools/sapp.py pack --input app.bin --manifest manifest.json --output app.sapp
+python3 tools/sapp.py pack --input app.elf --manifest manifest.json --output app.sapp
 python3 tools/sapp.py verify app.sapp
 python3 tools/sapp.py info app.sapp
 ```
 
-The packer reads static ELF32 i386 program headers and emits multiple SAPP
-segments, preserving BSS sizes and R/W/X permissions. It can also include
-explicit SAND_ABS32 relocation records from an optional JSON relocation file.
-The kernel loader validates and maps segments, zero-fills BSS and applies those
-relocations. Shared libraries, cryptographic signatures and package installation
-remain follow-on work.
+Optional relocations are supplied as JSON records:
 
-## Current compatibility status
+```json
+[{"target": 1073745920, "addend": 1073741824}]
+```
 
-SAPP v0.1 is a real, custom container with its own magic, header, segment table,
-metadata and validator. The kernel does **not yet** load SAPP. The existing
-kernel process tests still use the temporary ELF32 test loader. Applications
-can be authored and packaged now, but cannot yet be executed by SAND OS until
-the native kernel loader and matching syscall ABI are integrated and tested.
-The userspace syscall declarations document the intended ABI; not every call
-is implemented in the kernel yet.
+Use `--relocations relocations.json`. Relocations use the SAND_ABS32 type.
+
+## Implemented in v0.2
+
+- Multi-segment ELF32-to-SAPP packaging.
+- BSS represented by memory size greater than file size; loader zero-fills it.
+- Per-segment R/W/X permission validation and user page mapping; W+X is rejected.
+- Explicit SAND_ABS32 relocation records, validated and applied by the kernel.
+- Kernel API `process_create_sapp()` and existing `process_launch()` entry path.
+
+## Not yet production complete
+
+The current target is x86-32 with fixed virtual addresses. The filesystem launch
+command, shared-library ABI, dynamic linker, cryptographic signatures and trust
+store are not implemented. SAPP images should be treated as development
+artifacts until those security and compatibility pieces are complete. The
+legacy ELF loader remains temporarily for existing kernel self-tests.
