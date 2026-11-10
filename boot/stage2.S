@@ -32,7 +32,7 @@ stage2_start:
     testw $0x0001, %ax
     jz loader_error
     movb %es:0x19, %al
-    cmpb $32, %al
+    cmpb $24, %al
     jne loader_error
     movw $0x4118, %bx
     movw $0x4F02, %ax
