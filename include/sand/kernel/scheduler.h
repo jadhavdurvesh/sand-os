@@ -1,7 +1,7 @@
 #ifndef SAND_KERNEL_SCHEDULER_H
 #define SAND_KERNEL_SCHEDULER_H
 #include <stdint.h>
-#define SAND_SCHEDULER_MAX_THREADS 4u
+#define SAND_SCHEDULER_MAX_THREADS 8u
 typedef void (*sand_thread_entry)(void *);
 int scheduler_init(void);
 int scheduler_create(sand_thread_entry entry, void *argument);
