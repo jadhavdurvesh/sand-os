@@ -4,7 +4,7 @@ static inline void debug_char(char c) { __asm__ volatile("outb %0, $0xE9"::"a"(c
 static void debug_text(const char *s) { while(*s) debug_char(*s++); }
 static void debug_hex(uint32_t v) { static const char d[]="0123456789ABCDEF"; for(int i=7;i>=0;--i) debug_char(d[(v>>(i*4))&15u]); }
 static void write_panic(const char *text) { for(uint32_t i=0;text[i]!='\0'&&i<70u;++i) vga[12u*80u+5u+i]=(uint16_t)(uint8_t)text[i]|((uint16_t)0x4Fu<<8); }
-void x86_exception_dispatch(uint32_t vector,uint32_t error_code) {
+void x86_exception_dispatch(uint32_t vector,uint32_t error_code,uint32_t eip) {
     if(vector==3u) return;
     uint32_t fault_address=0u;
     if(vector==14u) __asm__ volatile("mov %%cr2,%0":"=r"(fault_address));
