@@ -152,7 +152,8 @@ def parse(path):
     entry_ok=False
     for i in range(count):
         vaddr,memsz,off,filesz,perm,align,zero=SEGMENT.unpack_from(blob,table_off+i*SEGMENT_SIZE)
-        if zero!=bytes(8) or not memsz or filesz>memsz or off<meta_off+meta_len or off+filesz>len(blob):
+        payload_floor=(reloc_off+reloc_count*RELOC_SIZE) if reloc_count else (meta_off+meta_len)
+        if zero!=bytes(8) or not memsz or filesz>memsz or off<payload_floor or off+filesz>len(blob):
             fail(f"segment {i}: invalid sizes or file range")
         if perm&~7 or not perm&1 or perm&6==6:
             fail(f"segment {i}: invalid permissions (W+X forbidden)")
