@@ -15,7 +15,7 @@ struct sand_thread {
 static struct sand_thread threads[SAND_SCHEDULER_MAX_THREADS];
 static uint8_t stack_pool[SAND_SCHEDULER_MAX_THREADS][THREAD_STACK_SIZE] __attribute__((aligned(16)));
 static uint8_t stack_used[SAND_SCHEDULER_MAX_THREADS];
-static uint32_t current_thread, switches, scheduler_ready;
+static uint32_t current_thread, switches;
 extern void x86_thread_bootstrap(void);
 extern void x86_reschedule(void);
 
@@ -59,7 +59,7 @@ int scheduler_init(void) {
         threads[i].wait_object=0; threads[i].state=THREAD_UNUSED;
         threads[i].stack_slot=0u; stack_used[i]=0u;
     }
-    current_thread=0u; switches=0u; scheduler_ready=1u;
+    current_thread=0u; switches=0u;
     idt_set_reschedule(x86_reschedule); idt_load();
     threads[0].state=THREAD_IDLE;
     irq_restore(flags);
@@ -67,7 +67,7 @@ int scheduler_init(void) {
 }
 int scheduler_create(sand_thread_entry entry, void *argument) {
     if(entry==0) return -1;
-    if(!scheduler_ready) return -2;
+    if(threads[0].state!=THREAD_IDLE) return -2;
     uint32_t flags=irq_save();
     rebuild_stack_usage();
     for(uint32_t id=1u;id<SAND_SCHEDULER_MAX_THREADS;++id) {
@@ -87,7 +87,7 @@ int scheduler_create(sand_thread_entry entry, void *argument) {
     return -4;
 }
 uint32_t scheduler_reschedule(uint32_t saved_stack) {
-    if(!scheduler_ready) return saved_stack;
+    if(threads[0].state!=THREAD_IDLE) return saved_stack;
     if(threads[current_thread].state!=THREAD_DEAD)
         threads[current_thread].saved_stack=(uint32_t *)saved_stack;
     uint32_t candidate=0u;
