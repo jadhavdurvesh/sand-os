@@ -64,7 +64,7 @@ jobs:
               s.recv(4096)
           except TimeoutError:
               pass
-          s.sendall(b"screendump build/sand-os-screenshot.ppm\\n")
+          s.sendall(b"screendump build/sand-os-screenshot.ppm\n")
           time.sleep(1)
           try:
               print(s.recv(4096).decode(errors="replace"))
