@@ -67,6 +67,7 @@ jobs:
           grep -q 'SAND_TEST:M6_ATA_IDENTIFY_PASS' build/debug.log
           grep -q 'SAND_TEST:M6_SANDFS_FORMAT_PASS' build/debug.log
           grep -q 'SAND_TEST:M6_FILE_READ_WRITE_PASS' build/debug.log
+          grep -q 'SAND_TEST:GRAPHICS_FRAMEBUFFER_PASS' build/debug.log
           grep -q 'SAND_TEST:RING3_ENTER' build/debug.log
           grep -q 'SAND_TEST:RING3_SYSCALL_PASS' build/debug.log
           grep -q 'SAND_TEST:ALL_PASS' build/debug.log
