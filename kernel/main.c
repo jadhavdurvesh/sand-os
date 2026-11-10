@@ -10,6 +10,9 @@
 #include "sand/mm/frame.h"
 #include "sand/mm/heap.h"
 #include "sand/mm/memory_map.h"
+#include "sand/arch/x86/ata_pio.h"
+#include "sand/fs/sandfs.h"
+#include "sand/storage/block.h"
 void pic_init_masked(void);
 static volatile uint16_t *const vga=(uint16_t *)0xB8000;
 static volatile uint32_t producer_count,consumer_count,protected_count,reuse_done;
@@ -114,6 +117,18 @@ void kernel_main(void) {
     }
     debug_text("SAND_TEST:M5_TERMINATE_DESTROY_PASS\n");
     if(process_activate(first)!=0) { debug_text("SAND_TEST:M5_REACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    debug_text("SAND_TEST:M6_STORAGE_INIT\\n");
+    if(ata_pio_init()!=0 || block_count()!=1u) { debug_text("SAND_TEST:M6_ATA_INIT_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    if(sandfs_format(0u,512u,2048u)!=0 || sandfs_mount(0u,512u)!=0) { debug_text("SAND_TEST:M6_FORMAT_MOUNT_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    static const char storage_message[]="SAND native storage read/write verified";
+    char storage_readback[64]; uint32_t storage_length=0u;
+    if(sandfs_write("m6-test.txt",storage_message,sizeof(storage_message))!=0 ||
+       sandfs_read("m6-test.txt",storage_readback,sizeof(storage_readback),&storage_length)!=0 ||
+       storage_length!=sizeof(storage_message)) { debug_text("SAND_TEST:M6_FILE_IO_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    for(uint32_t i=0;i<storage_length;++i) if(storage_readback[i]!=storage_message[i]) { debug_text("SAND_TEST:M6_VERIFY_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    debug_text("SAND_TEST:M6_ATA_IDENTIFY_PASS\\n");
+    debug_text("SAND_TEST:M6_SANDFS_FORMAT_PASS\\n");
+    debug_text("SAND_TEST:M6_FILE_READ_WRITE_PASS\\n");
     debug_text("SAND_TEST:RING3_ENTER\n");
     process_launch(first);
     for(;;) __asm__ volatile("cli; hlt");
