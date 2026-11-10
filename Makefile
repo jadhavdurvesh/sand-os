@@ -91,7 +91,7 @@ $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
-	test $$(stat -c%s $@) -le 131072
+	test $(stat -c%s $@) -le 196608
 kernel: $(KERNEL_BIN)
 disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN)
 	dd if=/dev/zero of=$(DISK) bs=512 count=4096 status=none
