@@ -79,6 +79,10 @@ $(BUILD)/sandfs.o: kernel/fs/sandfs.c include/sand/fs/sandfs.h include/sand/stor
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/graphics-framebuffer.o: kernel/graphics/framebuffer.c include/sand/graphics/framebuffer.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/vbe.o: kernel/arch/x86/vbe.c include/sand/arch/x86/vbe.h include/sand/graphics/framebuffer.h include/sand/arch/x86/paging.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/desktop.o: kernel/graphics/desktop.c include/sand/graphics/desktop.h include/sand/graphics/framebuffer.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 $(KERNEL_BIN): $(KERNEL_ELF)
