@@ -48,7 +48,7 @@ static struct process_slot *allocate_slot(void) {
 static void set_process_name(struct process_slot *slot,const char *name) {
     uint32_t n=0u;
     while(name[n] && n<SAND_PROCESS_NAME_MAX-1u) { slot->info.name[n]=name[n]; ++n; }
-    slot->info.name[n]='\\0';
+    slot->info.name[n]='\0';
 }
 int process_create_elf(const char *name,const void *image,uint32_t image_size,sand_pid_t *pid_out) {
     if(name==0 || image==0 || pid_out==0 || image_size<sizeof(struct elf32_header)) return -1;
