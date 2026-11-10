@@ -25,6 +25,32 @@ static const uint32_t TEST_ITEMS=1000u;
 static volatile uint32_t wait_test_done, wait_test_failed;
 static sand_pid_t wait_test_child;
 static void debug_text(const char *s);
+static void store_le16(uint8_t *p,uint16_t v) { p[0]=(uint8_t)v; p[1]=(uint8_t)(v>>8); }
+static void store_le32(uint8_t *p,uint32_t v) {
+    p[0]=(uint8_t)v; p[1]=(uint8_t)(v>>8); p[2]=(uint8_t)(v>>16); p[3]=(uint8_t)(v>>24);
+}
+static int sapp_loader_self_test(void) {
+    static uint8_t image[164];
+    static const char metadata[]="{\"id\":\"org.sand.test\",\"name\":\"SAND test\",\"version\":\"0.2\"}";
+    for(uint32_t i=0;i<sizeof(image);++i) image[i]=0u;
+    image[0]='S'; image[1]='A'; image[2]='P'; image[3]='P';
+    store_le16(image+4,1u); store_le16(image+6,1u);
+    store_le32(image+8,64u); store_le32(image+16,0x40000000u);
+    store_le32(image+20,64u); store_le32(image+24,1u);
+    store_le32(image+28,96u); store_le32(image+32,(uint32_t)(sizeof(metadata)-1u));
+    store_le32(image+36,sizeof(image));
+    store_le32(image+64,0x40000000u); store_le32(image+68,4096u);
+    store_le32(image+72,160u); store_le32(image+76,4u);
+    store_le32(image+80,5u); store_le32(image+84,4096u);
+    for(uint32_t i=0;i<sizeof(metadata)-1u;++i) image[96u+i]=(uint8_t)metadata[i];
+    image[160]=0x90u; image[161]=0x90u; image[162]=0x90u; image[163]=0xC3u;
+    sand_pid_t pid=0u;
+    if(process_create_sapp("sapp-test",image,sizeof(image),&pid)!=0) return -1;
+    struct sand_process_info info;
+    if(process_get_info(pid,&info)!=0 || info.entry!=0x40000000u ||
+       info.state!=SAND_PROCESS_READY || process_destroy(pid)!=0) return -1;
+    return 0;
+}
 static void wait_test_child_exit(void *arg) {
     (void)arg;
     debug_text("SAND_TEST:M7_WAIT_CHILD_EXITING\\n");
@@ -184,6 +210,8 @@ void kernel_main(void) {
     debug_text("SAND_TEST:M6_ATA_IDENTIFY_PASS\\n");
     debug_text("SAND_TEST:M6_SANDFS_FORMAT_PASS\\n");
     debug_text("SAND_TEST:M6_FILE_READ_WRITE_PASS\\n");
+    if(sapp_loader_self_test()!=0) { debug_text("SAND_TEST:SAPP_LOADER_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    debug_text("SAND_TEST:SAPP_NATIVE_LOADER_PASS\\n");
     if(scheduler_create(wait_test_parent_thread,0)<0) {
         debug_text("SAND_TEST:M7_BLOCKING_WAIT_CREATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
