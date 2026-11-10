@@ -12,6 +12,8 @@
 #include "sand/mm/memory_map.h"
 #include "sand/arch/x86/ata_pio.h"
 #include "sand/fs/sandfs.h"
+#include "sand/arch/x86/vbe.h"
+#include "sand/graphics/desktop.h"
 #include "sand/storage/block.h"
 void pic_init_masked(void);
 static volatile uint16_t *const vga=(uint16_t *)0xB8000;
@@ -170,6 +172,12 @@ void kernel_main(void) {
         debug_text("SAND_TEST:M7_BLOCKING_WAIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
     debug_text("SAND_TEST:M7_BLOCKING_WAIT_WAKE_PASS\n");
+    sand_framebuffer_t framebuffer;
+    if(vbe_framebuffer_init(&framebuffer)==0 && sand_desktop_render(&framebuffer)==0) {
+        debug_text("SAND_TEST:GRAPHICS_FRAMEBUFFER_PASS\\n");
+    } else {
+        debug_text("SAND_TEST:GRAPHICS_FRAMEBUFFER_UNAVAILABLE\\n");
+    }
     debug_text("SAND_TEST:RING3_ENTER\n");
     process_launch(first);
     for(;;) __asm__ volatile("cli; hlt");
