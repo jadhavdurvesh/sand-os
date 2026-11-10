@@ -36,6 +36,15 @@ static int stack_alloc(void) {
 static void stack_release(uint32_t slot) {
     if(slot<SAND_SCHEDULER_MAX_THREADS) stack_used[slot]=0u;
 }
+static void rebuild_stack_usage(void) {
+    for(uint32_t i=0;i<SAND_SCHEDULER_MAX_THREADS;++i) stack_used[i]=0u;
+    for(uint32_t i=1u;i<SAND_SCHEDULER_MAX_THREADS;++i) {
+        if(threads[i].state==THREAD_RUNNABLE || threads[i].state==THREAD_BLOCKED) {
+            if(threads[i].stack_slot<SAND_SCHEDULER_MAX_THREADS)
+                stack_used[threads[i].stack_slot]=1u;
+        }
+    }
+}
 static uint32_t *make_initial_stack(uint32_t slot) {
     uint32_t *sp=(uint32_t *)(stack_pool[slot]+THREAD_STACK_SIZE);
     *--sp=INITIAL_EFLAGS; *--sp=KERNEL_CS; *--sp=(uint32_t)x86_thread_bootstrap;
@@ -59,6 +68,7 @@ int scheduler_init(void) {
 int scheduler_create(sand_thread_entry entry, void *argument) {
     if(entry==0 || !scheduler_ready) return -1;
     uint32_t flags=irq_save();
+    rebuild_stack_usage();
     for(uint32_t id=1u;id<SAND_SCHEDULER_MAX_THREADS;++id) {
         if(threads[id].state==THREAD_UNUSED || threads[id].state==THREAD_DEAD) {
             if(threads[id].state==THREAD_DEAD) stack_release(threads[id].stack_slot);
