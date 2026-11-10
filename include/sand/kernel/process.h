@@ -9,6 +9,7 @@ struct sand_process_info { sand_pid_t pid; sand_pid_t parent_pid; uint32_t paren
 int process_system_init(void);
 int process_create_test(const char *name, sand_pid_t *pid_out);
 int process_create_elf(const char *name, const void *image, uint32_t image_size, sand_pid_t *pid_out);
+int process_create_sapp(const char *name, const void *image, uint32_t image_size, sand_pid_t *pid_out);
 int process_activate(sand_pid_t pid);
 int process_exit(sand_pid_t pid, int32_t exit_code);
 int process_terminate(sand_pid_t pid);
