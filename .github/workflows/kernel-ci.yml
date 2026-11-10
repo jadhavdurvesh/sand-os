@@ -54,6 +54,25 @@ jobs:
             sleep 0.25
           done
           # Capture the actual guest display even when a self-test fails.
+          python3 - <<'PY'
+          import socket, time
+          s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+          s.settimeout(4)
+          s.connect("build/qemu-monitor.sock")
+          time.sleep(0.2)
+          try:
+              s.recv(4096)
+          except TimeoutError:
+              pass
+          s.sendall(b"screendump build/sand-os-screenshot.ppm\\n")
+          time.sleep(1)
+          try:
+              print(s.recv(4096).decode(errors="replace"))
+          except TimeoutError:
+              pass
+          s.close()
+          PY
+          test -s build/sand-os-screenshot.ppm
           cat build/debug.log
           grep -q 'SAND_TEST:ALL_PASS' build/debug.log
           grep -q 'SAND_TEST:BOOT' build/debug.log
