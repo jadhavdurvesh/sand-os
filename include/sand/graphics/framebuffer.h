@@ -19,6 +19,9 @@ int graphics_put_pixel(sand_framebuffer_t *fb, int32_t x, int32_t y, uint32_t rg
 int graphics_fill(sand_framebuffer_t *fb, uint32_t rgb);
 int graphics_fill_rect(sand_framebuffer_t *fb, int32_t x, int32_t y,
                        uint32_t width, uint32_t height, uint32_t rgb);
+int graphics_fill_round_rect(sand_framebuffer_t *fb, int32_t x, int32_t y,
+                             uint32_t width, uint32_t height, uint32_t radius, uint32_t rgb);
+int graphics_blend_pixel(sand_framebuffer_t *fb, int32_t x, int32_t y, uint32_t rgb, uint8_t alpha);
 int graphics_draw_line(sand_framebuffer_t *fb, int32_t x0, int32_t y0,
                        int32_t x1, int32_t y1, uint32_t rgb);
 #endif
