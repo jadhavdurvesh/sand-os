@@ -142,11 +142,16 @@ int process_activate(sand_pid_t pid) {
     struct process_slot *slot=find_slot(pid); if(slot==0 || slot->info.state==SAND_PROCESS_TERMINATED) return -1;
     if(active_pid!=0u) { struct process_slot *old=find_slot(active_pid); if(old && old->info.state==SAND_PROCESS_RUNNING) old->info.state=SAND_PROCESS_READY; }
     if(paging_activate(slot->info.page_directory)!=0) return -1;
+    tss_set_kernel_stack((uint32_t)(slot->kernel_stack+sizeof(slot->kernel_stack)));
     slot->info.state=SAND_PROCESS_RUNNING; active_pid=pid; return 0;
 }
 int process_exit(sand_pid_t pid,int32_t exit_code) {
     struct process_slot *slot=find_slot(pid); if(slot==0 || slot->info.state==SAND_PROCESS_TERMINATED) return -1;
-    if(active_pid==pid) { if(paging_activate(paging_kernel_directory())!=0) return -1; active_pid=0u; }
+    if(active_pid==pid) {
+        if(paging_activate(paging_kernel_directory())!=0) return -1;
+        tss_set_kernel_stack(0x90000u);
+        active_pid=0u;
+    }
     slot->info.exit_code=exit_code; slot->info.state=SAND_PROCESS_TERMINATED; (void)scheduler_wake_one(slot); return 0;
 }
 int process_terminate(sand_pid_t pid) { return process_exit(pid,0); }
