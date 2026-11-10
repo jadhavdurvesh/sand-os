@@ -10,12 +10,12 @@
 | M5 | Independent process control blocks, per-process page directories, activation, termination and destruction | Two distinct address spaces, CR3 switching, lifecycle and user-process syscall smoke tests |
 | M6 | Block-device abstraction, primary-master ATA PIO, SANDFS v1 format/mount/read/write | ATA IDENTIFY and filesystem write/read/byte-compare tests |
 | M7 | Executable loader, user-process scheduler and safe process exit/wait | Multiple isolated user applications run and exit under scheduler control |
-| M8 | Device model and drivers: serial, timer, keyboard, display, storage expansion | Driver-level hardware and emulator tests |
-| M8 | Native shell and core utilities | Scripted shell tests |
-| M9 | Networking foundation and security model | Protocol and isolation tests |
-| M10 | Graphics compositor, window manager, input stack | Desktop screenshot tests |
-| M11 | Native applications, package format and developer SDK | Application conformance suite |
-| M12 | UEFI boot path, hardware bring-up, installers, recovery and release engineering | Hardware compatibility matrix |
+| M8 | Device model and drivers: serial, keyboard, display, storage expansion | Driver-level hardware and emulator tests |
+| M9 | Native shell and core utilities | Scripted shell tests |
+| M10 | Networking foundation and security model, EREBUS adapter groundwork | Protocol, policy-hook and isolation tests |
+| M11 | Graphics compositor, window manager, input stack | Desktop screenshot tests |
+| M12 | Native applications, package format and developer SDK | Application conformance suite |
+| M13 | UEFI boot path, hardware bring-up, installers, recovery and release engineering | Hardware compatibility matrix |
 
 ## Non-negotiable engineering rules
 
