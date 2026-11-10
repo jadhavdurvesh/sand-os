@@ -116,7 +116,7 @@ int process_create_elf(const char *name,const void *image,uint32_t image_size,sa
     }
     sand_pid_t pid=next_pid++;
     if(next_pid==0u) next_pid=1u;
-    slot->info.pid=pid; slot->info.state=SAND_PROCESS_READY; slot->info.page_directory=directory;
+    slot->info.pid=pid; slot->info.parent_pid=active_pid; slot->info.state=SAND_PROCESS_READY; slot->info.page_directory=directory;
     slot->info.entry=eh->entry; slot->info.user_stack=USER_STACK_TOP;
     set_process_name(slot,name); *pid_out=pid; return 0;
 }
@@ -151,6 +151,7 @@ int process_exit(sand_pid_t pid,int32_t exit_code) {
 int process_terminate(sand_pid_t pid) { return process_exit(pid,0); }
 int process_wait(sand_pid_t pid,int32_t *exit_code) {
     struct process_slot *slot=find_slot(pid); if(slot==0 || exit_code==0) return -1;
+    if(slot->info.parent_pid==0u || slot->info.parent_pid!=active_pid) return -1;
     if(slot->info.state!=SAND_PROCESS_TERMINATED) return 0;
     *exit_code=slot->info.exit_code; return 1;
 }
@@ -160,7 +161,7 @@ int process_destroy(sand_pid_t pid) {
     if(paging_space_destroy(slot->info.page_directory)!=0) return -1;
     /* paging_space_destroy reclaimed the user-mapped code and stack frames. */
     slot->info.page_directory=0u;
-    slot->info.state=SAND_PROCESS_UNUSED; slot->info.pid=0u; return 0;
+    slot->info.state=SAND_PROCESS_UNUSED; slot->info.pid=0u; slot->info.parent_pid=0u; return 0;
 }
 int process_get_info(sand_pid_t pid,struct sand_process_info *out) { struct process_slot *slot=find_slot(pid); if(slot==0 || out==0) return -1; *out=slot->info; return 0; }
 sand_pid_t process_current(void) { return active_pid; }
