@@ -6,5 +6,5 @@ void idt_load(void);
 void idt_set_irq0(void (*handler)(void));
 void idt_set_reschedule(void (*handler)(void));
 void idt_set_syscall(void (*handler)(void));
-void x86_exception_dispatch(uint32_t vector, uint32_t error_code);
+void x86_exception_dispatch(uint32_t vector, uint32_t error_code, uint32_t eip);
 #endif
