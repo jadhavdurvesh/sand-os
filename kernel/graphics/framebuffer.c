@@ -3,26 +3,29 @@
 int graphics_framebuffer_valid(const sand_framebuffer_t *fb) {
     if (fb == 0 || fb->pixels == 0) return 0;
     if (fb->width == 0u || fb->height == 0u) return 0;
-    if (fb->bits_per_pixel != 32u || (fb->pitch_bytes & 3u) != 0u) return 0;
-    if (fb->pitch_bytes < fb->width * 4u) return 0;
+    if (fb->bits_per_pixel != 24u && fb->bits_per_pixel != 32u) return 0;
+    uint32_t bytes_per_pixel = fb->bits_per_pixel / 8u;
+    if (fb->pitch_bytes < fb->width * bytes_per_pixel) return 0;
     return 1;
 }
 
 int graphics_put_pixel(sand_framebuffer_t *fb, int32_t x, int32_t y, uint32_t rgb) {
     if (!graphics_framebuffer_valid(fb)) return -1;
     if (x < 0 || y < 0 || (uint32_t)x >= fb->width || (uint32_t)y >= fb->height) return -1;
-    uint32_t stride = fb->pitch_bytes / 4u;
-    fb->pixels[(uint32_t)y * stride + (uint32_t)x] = rgb & 0x00FFFFFFu;
+    uint32_t bytes_per_pixel = fb->bits_per_pixel / 8u;
+    volatile uint8_t *pixel = fb->pixels + (uint32_t)y * fb->pitch_bytes + (uint32_t)x * bytes_per_pixel;
+    pixel[0] = (uint8_t)rgb;
+    pixel[1] = (uint8_t)(rgb >> 8);
+    pixel[2] = (uint8_t)(rgb >> 16);
+    if (bytes_per_pixel == 4u) pixel[3] = 0u;
     return 0;
 }
 
 int graphics_fill(sand_framebuffer_t *fb, uint32_t rgb) {
     if (!graphics_framebuffer_valid(fb)) return -1;
-    uint32_t stride = fb->pitch_bytes / 4u;
-    uint32_t color = rgb & 0x00FFFFFFu;
     for (uint32_t y = 0; y < fb->height; ++y)
         for (uint32_t x = 0; x < fb->width; ++x)
-            fb->pixels[y * stride + x] = color;
+            (void)graphics_put_pixel(fb, (int32_t)x, (int32_t)y, rgb);
     return 0;
 }
 
@@ -36,11 +39,9 @@ int graphics_fill_rect(sand_framebuffer_t *fb, int32_t x, int32_t y,
     if (x_end < (uint32_t)x || y_end < (uint32_t)y) return -1;
     if (x_end > fb->width) x_end = fb->width;
     if (y_end > fb->height) y_end = fb->height;
-    uint32_t stride = fb->pitch_bytes / 4u;
-    uint32_t color = rgb & 0x00FFFFFFu;
     for (uint32_t row = (uint32_t)y; row < y_end; ++row)
         for (uint32_t col = (uint32_t)x; col < x_end; ++col)
-            fb->pixels[row * stride + col] = color;
+            (void)graphics_put_pixel(fb, (int32_t)col, (int32_t)row, rgb);
     return 0;
 }
 
