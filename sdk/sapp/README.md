@@ -38,9 +38,12 @@ python3 tools/sapp.py verify app.sapp
 python3 tools/sapp.py info app.sapp
 ```
 
-The packer currently creates one RX segment from a flat binary. Multi-segment
-packing, relocations, shared libraries, digital signatures and package
-installation are planned follow-on work.
+The packer reads static ELF32 i386 program headers and emits multiple SAPP
+segments, preserving BSS sizes and R/W/X permissions. It can also include
+explicit SAND_ABS32 relocation records from an optional JSON relocation file.
+The kernel loader validates and maps segments, zero-fills BSS and applies those
+relocations. Shared libraries, cryptographic signatures and package installation
+remain follow-on work.
 
 ## Current compatibility status
 
