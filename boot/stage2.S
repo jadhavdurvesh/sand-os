@@ -42,18 +42,20 @@ stage2_start:
 
     /* Stable kernel handoff at physical 0x6100:
        base, pitch, width, height, bpp (five 32-bit values). */
-    movw $0x0610, %ax
+    movw $0x0600, %ax
     movw %ax, %es
+    movw $0x0610, %ax
+    movw %ax, %fs
     movl %es:0x0028, %eax
-    movl %eax, %es:0x0000
+    movl %eax, %fs:0x0000
     movzwl %es:0x0010, %eax
-    movl %eax, %es:0x0004
+    movl %eax, %fs:0x0004
     movzwl %es:0x0012, %eax
-    movl %eax, %es:0x0008
+    movl %eax, %fs:0x0008
     movzwl %es:0x0014, %eax
-    movl %eax, %es:0x000C
+    movl %eax, %fs:0x000C
     movzbl %es:0x0019, %eax
-    movl %eax, %es:0x0010
+    movl %eax, %fs:0x0010
 
     movw $kernel_packet, %si
     movb boot_drive, %dl
