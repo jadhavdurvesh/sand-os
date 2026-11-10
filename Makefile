@@ -10,7 +10,7 @@ LD ?= ld
 OBJCOPY ?= objcopy
 CFLAGS := -m32 -std=gnu11 -ffreestanding -O2 -Wall -Wextra -Werror -fno-stack-protector -fno-pic -fno-pie -Iinclude
 LDFLAGS := -m elf_i386 -nostdlib -z max-page-size=0x1000 -T linker/kernel.ld
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/sandfs.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/sandfs.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/window.o $(BUILD)/ps2.o
 .PHONY: all clean kernel disk run check
 all: disk
 $(BUILD):
