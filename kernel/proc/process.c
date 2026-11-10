@@ -33,6 +33,26 @@ static struct process_slot *find_slot(sand_pid_t pid) {
 #define ELF32_PF_W 2u
 #define USER_MIN_ADDRESS 0x40000000u
 #define USER_MAX_ADDRESS 0xC0000000u
+#define SAPP_HEADER_SIZE 64u
+#define SAPP_SEGMENT_SIZE 32u
+#define SAPP_RELOC_SIZE 12u
+#define SAPP_ARCH_X86_32 1u
+#define SAPP_RELOC_ABS32 1u
+struct __attribute__((packed)) sapp_header {
+    uint8_t magic[4]; uint16_t version, architecture;
+    uint32_t header_size, flags, entry, segment_offset, segment_count;
+    uint32_t metadata_offset, metadata_size, file_size;
+    uint32_t signature_offset, signature_size;
+    uint32_t relocation_offset, relocation_count;
+    uint8_t reserved[8];
+};
+struct __attribute__((packed)) sapp_segment {
+    uint32_t vaddr, memsz, file_offset, file_size, permissions, alignment;
+    uint8_t reserved[8];
+};
+struct __attribute__((packed)) sapp_relocation {
+    uint32_t target, type, addend;
+};
 struct __attribute__((packed)) elf32_header {
     uint8_t ident[16]; uint16_t type, machine;
     uint32_t version, entry, phoff, shoff, flags;
@@ -120,6 +140,111 @@ int process_create_elf(const char *name,const void *image,uint32_t image_size,sa
     slot->info.pid=pid; slot->info.parent_pid=active_pid; slot->info.parent_thread_id=scheduler_current_id(); slot->info.state=SAND_PROCESS_READY; slot->info.page_directory=directory;
     slot->info.entry=eh->entry; slot->info.user_stack=USER_STACK_TOP;
     set_process_name(slot,name); *pid_out=pid; return 0;
+}
+static int sapp_range_ok(uint32_t offset,uint32_t length,uint32_t total) {
+    return offset<=total && length<=total-offset;
+}
+static int sapp_ranges_overlap(uint32_t a,uint32_t alen,uint32_t b,uint32_t blen) {
+    return a<b+blen && b<a+alen;
+}
+int process_create_sapp(const char *name,const void *image,uint32_t image_size,sand_pid_t *pid_out) {
+    if(name==0 || image==0 || pid_out==0 || image_size<SAPP_HEADER_SIZE) return -1;
+    const uint8_t *bytes=(const uint8_t *)image;
+    const struct sapp_header *h=(const struct sapp_header *)bytes;
+    if(h->magic[0]!='S' || h->magic[1]!='A' || h->magic[2]!='P' || h->magic[3]!='P' ||
+       h->version!=1u || h->architecture!=SAPP_ARCH_X86_32 ||
+       h->header_size!=SAPP_HEADER_SIZE || h->flags!=0u || h->file_size!=image_size ||
+       h->reserved[0] || h->reserved[1] || h->reserved[2] || h->reserved[3] ||
+       h->reserved[4] || h->reserved[5] || h->reserved[6] || h->reserved[7] ||
+       h->segment_count==0u || h->segment_count>8u ||
+       h->signature_offset!=0u || h->signature_size!=0u ||
+       !sapp_range_ok(h->segment_offset,h->segment_count*SAPP_SEGMENT_SIZE,image_size) ||
+       !sapp_range_ok(h->metadata_offset,h->metadata_size,image_size) ||
+       h->segment_offset<SAPP_HEADER_SIZE ||
+       h->metadata_offset<h->segment_offset+h->segment_count*SAPP_SEGMENT_SIZE ||
+       h->metadata_size==0u || h->metadata_size>4096u ||
+       h->relocation_count>256u ||
+       (h->relocation_count && !sapp_range_ok(h->relocation_offset,h->relocation_count*SAPP_RELOC_SIZE,image_size))) return -1;
+    const struct sapp_segment *segments=(const struct sapp_segment *)(bytes+h->segment_offset);
+    const struct sapp_relocation *relocs=(const struct sapp_relocation *)(bytes+h->relocation_offset);
+    uint32_t entry_valid=0u,total_pages=0u;
+    for(uint32_t i=0;i<h->segment_count;++i) {
+        const struct sapp_segment *s=&segments[i];
+        if(s->memsz==0u || s->file_size>s->memsz || s->vaddr<USER_MIN_ADDRESS ||
+           s->vaddr>=USER_MAX_ADDRESS || s->memsz>USER_MAX_ADDRESS-s->vaddr ||
+           !sapp_range_ok(s->file_offset,s->file_size,image_size) ||
+           s->file_offset<h->metadata_offset+h->metadata_size ||
+           (s->permissions&~7u)!=0u || (s->permissions&1u)==0u ||
+           (s->permissions&6u)==6u || s->alignment<SAND_PAGE_SIZE ||
+           (s->alignment&(s->alignment-1u))!=0u || (s->vaddr&(s->alignment-1u))!=0u ||
+           s->reserved[0] || s->reserved[1] || s->reserved[2] || s->reserved[3] ||
+           s->reserved[4] || s->reserved[5] || s->reserved[6] || s->reserved[7]) return -1;
+        if(s->vaddr<USER_STACK_TOP && s->vaddr+s->memsz>USER_STACK_TOP-SAND_PAGE_SIZE) return -1;
+        uint32_t pages=(((s->vaddr+s->memsz-1u)&0xFFFFF000u)-(s->vaddr&0xFFFFF000u))/SAND_PAGE_SIZE+1u;
+        if(pages>ELF32_MAX_IMAGE_PAGES || total_pages>ELF32_MAX_IMAGE_PAGES-pages) return -1;
+        total_pages+=pages;
+        if((s->permissions&4u) && h->entry>=s->vaddr && h->entry<s->vaddr+s->memsz) entry_valid=1u;
+        for(uint32_t j=0;j<i;++j) {
+            if(sapp_ranges_overlap(s->vaddr,s->memsz,segments[j].vaddr,segments[j].memsz) ||
+               sapp_ranges_overlap(s->file_offset,s->file_size,segments[j].file_offset,segments[j].file_size)) return -1;
+        }
+    }
+    if(!entry_valid || total_pages==0u) return -1;
+    for(uint32_t r=0;r<h->relocation_count;++r) {
+        const struct sapp_relocation *rel=&relocs[r];
+        uint32_t found=0u;
+        if(rel->type!=SAPP_RELOC_ABS32 || !sapp_range_ok(h->relocation_offset+r*SAPP_RELOC_SIZE,SAPP_RELOC_SIZE,image_size)) return -1;
+        for(uint32_t i=0;i<h->segment_count;++i)
+            if((segments[i].permissions&2u) && rel->target>=segments[i].vaddr &&
+               rel->target<=segments[i].vaddr+segments[i].memsz-4u) found=1u;
+        if(!found || (rel->target&0xFFFu)>0xFFCu) return -1;
+    }
+    struct process_slot *slot=allocate_slot();
+    if(slot==0) return -1;
+    uint32_t directory=0u;
+    if(paging_space_create(&directory)!=0) return -1;
+    for(uint32_t i=0;i<h->segment_count;++i) {
+        const struct sapp_segment *s=&segments[i];
+        uint32_t first=s->vaddr&0xFFFFF000u;
+        uint32_t last=(s->vaddr+s->memsz-1u)&0xFFFFF000u;
+        for(uint32_t va=first;va<=last;va+=SAND_PAGE_SIZE) {
+            uint32_t frame=frame_alloc();
+            if(frame==0u) { paging_space_destroy(directory); return -1; }
+            uint8_t *dst=(uint8_t *)frame;
+            for(uint32_t b=0;b<SAND_PAGE_SIZE;++b) dst[b]=0u;
+            uint32_t begin=s->vaddr>va?s->vaddr:va;
+            uint32_t end=(s->vaddr+s->memsz)<(va+SAND_PAGE_SIZE)?(s->vaddr+s->memsz):(va+SAND_PAGE_SIZE);
+            uint32_t file_end=s->vaddr+s->file_size;
+            uint32_t copy_end=file_end<end?file_end:end;
+            for(uint32_t a=begin;a<copy_end;++a) dst[a-va]=bytes[s->file_offset+(a-s->vaddr)];
+            for(uint32_t r=0;r<h->relocation_count;++r) {
+                const struct sapp_relocation *rel=&relocs[r];
+                if(rel->target>=va && rel->target+4u<=va+SAND_PAGE_SIZE) {
+                    uint32_t value=rel->addend;
+                    dst[rel->target-va]=(uint8_t)value;
+                    dst[rel->target-va+1u]=(uint8_t)(value>>8);
+                    dst[rel->target-va+2u]=(uint8_t)(value>>16);
+                    dst[rel->target-va+3u]=(uint8_t)(value>>24);
+                }
+            }
+            uint32_t map_flags=0x005u;
+            if(s->permissions&2u) map_flags|=0x002u;
+            if(paging_space_map_page(directory,va,frame,map_flags)!=0) {
+                frame_free(frame); paging_space_destroy(directory); return -1;
+            }
+        }
+    }
+    uint32_t stack=frame_alloc();
+    if(stack==0u) { paging_space_destroy(directory); return -1; }
+    if(paging_space_map_page(directory,USER_STACK_TOP-SAND_PAGE_SIZE,stack,USER_STACK_FLAGS)!=0) {
+        frame_free(stack); paging_space_destroy(directory); return -1;
+    }
+    sand_pid_t pid=next_pid++; if(next_pid==0u) next_pid=1u;
+    slot->info.pid=pid; slot->info.parent_pid=active_pid;
+    slot->info.parent_thread_id=scheduler_current_id(); slot->info.state=SAND_PROCESS_READY;
+    slot->info.page_directory=directory; slot->info.entry=h->entry;
+    slot->info.user_stack=USER_STACK_TOP; set_process_name(slot,name); *pid_out=pid;
+    return 0;
 }
 int process_create_test(const char *name,sand_pid_t *pid_out) {
     /* The generated test ELF is larger than THREAD_STACK_SIZE. Keep it in BSS,
