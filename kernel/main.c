@@ -41,7 +41,7 @@ static int sapp_loader_self_test(void) {
     store_le32(image+28,96u); store_le32(image+32,(uint32_t)(sizeof(metadata)-1u));
     store_le32(image+36,sizeof(image));
     store_le32(image+64,0x40000000u); store_le32(image+68,4096u);
-    store_le32(image+72,160u); store_le32(image+76,4u);
+    store_le32(image+72,160u); store_le32(image+76,14u);
     store_le32(image+80,5u); store_le32(image+84,4096u);
     for(uint32_t i=0;i<sizeof(metadata)-1u;++i) image[96u+i]=(uint8_t)metadata[i];
     /* mov eax,1; mov ebx,0x53414e44; int 0x80; jmp $ */
