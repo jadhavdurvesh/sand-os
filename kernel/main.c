@@ -24,16 +24,22 @@ static sand_mutex_t counter_lock;
 static const uint32_t TEST_ITEMS=1000u;
 static volatile uint32_t wait_test_done, wait_test_failed;
 static sand_pid_t wait_test_child;
+static void debug_text(const char *s);
 static void wait_test_child_exit(void *arg) {
     (void)arg;
+    debug_text("SAND_TEST:M7_WAIT_CHILD_EXITING\\n");
     if(process_exit(wait_test_child,73)!=0) wait_test_failed=1u;
 }
 static void wait_test_parent_thread(void *arg) {
     (void)arg;
     int32_t status=-1;
-    if(process_create_test("wait-child",&wait_test_child)!=0) { wait_test_failed=1u; wait_test_done=1u; return; }
-    if(scheduler_create(wait_test_child_exit,0)<0) { wait_test_failed=1u; wait_test_done=1u; return; }
+    debug_text("SAND_TEST:M7_WAIT_PARENT_STARTED\\n");
+    if(process_create_test("wait-child",&wait_test_child)!=0) { debug_text("SAND_TEST:M7_WAIT_PROCESS_CREATE_FAIL\\n"); wait_test_failed=1u; wait_test_done=1u; return; }
+    debug_text("SAND_TEST:M7_WAIT_PROCESS_CREATED\\n");
+    if(scheduler_create(wait_test_child_exit,0)<0) { debug_text("SAND_TEST:M7_WAIT_THREAD_CREATE_FAIL\\n"); wait_test_failed=1u; wait_test_done=1u; return; }
+    debug_text("SAND_TEST:M7_WAIT_BLOCKING\\n");
     if(process_wait(wait_test_child,&status)!=1 || status!=73) wait_test_failed=1u;
+    debug_text("SAND_TEST:M7_WAIT_PARENT_RESUMED\\n");
     if(process_destroy(wait_test_child)!=0) wait_test_failed=1u;
     wait_test_done=1u;
 }
