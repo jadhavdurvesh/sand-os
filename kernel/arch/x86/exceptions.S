@@ -52,10 +52,12 @@ x86_exception_common:
     cld
     pushal
     leal 32(%esp), %eax
+    movl 8(%eax), %edx
+    pushl %edx
     pushl 4(%eax)
     pushl (%eax)
     call x86_exception_dispatch
-    addl $8, %esp
+    addl $12, %esp
     popal
     addl $8, %esp
     iret
