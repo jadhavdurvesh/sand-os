@@ -14,7 +14,7 @@ int vbe_framebuffer_init(sand_framebuffer_t *framebuffer) {
     uint32_t width = VBE_HANDOFF[2];
     uint32_t height = VBE_HANDOFF[3];
     uint32_t bpp = VBE_HANDOFF[4];
-    if (physical == 0u || pitch == 0u || width == 0u || height == 0u || bpp != 32u)
+    if (physical == 0u || pitch == 0u || width == 0u || height == 0u || (bpp != 24u && bpp != 32u))
         return -1;
     if (pitch < width * 4u || height > 4096u || pitch > 16384u) return -1;
     uint32_t bytes = pitch * height;
