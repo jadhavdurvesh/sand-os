@@ -7,7 +7,7 @@
  * Pixels use 0x00RRGGBB and rows may contain pitch_bytes / 4 pixels.
  */
 typedef struct {
-    volatile uint32_t *pixels;
+    volatile uint8_t *pixels;
     uint32_t width;
     uint32_t height;
     uint32_t pitch_bytes;
