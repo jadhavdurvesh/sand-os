@@ -1,6 +1,26 @@
-# SAND OS API and integration catalogue
+# SAND Veyra interface catalogue
+
+**SAND Veyra** is the native interface architecture of SAND OS: the family of SAND-defined ABI, subsystem, service and SDK contracts. The generic terms API, ABI, syscall and interface remain technically valid and should continue to be used where precise. Veyra is the architecture's identity, not a claim that all interfaces are complete.
 
 This catalogue distinguishes implemented interfaces from prototypes and future contracts. Presence of a header does not mean an interface is stable or safe for general applications.
+
+## Veyra layers
+
+| Layer | Purpose | Current state |
+|---|---|---|
+| Kernel ABI | Privilege boundary and stable low-level system-call contract | ABI v1 proof of concept; not yet a general-purpose stable ABI |
+| Subsystem interfaces | SAND-owned contracts for memory, devices, storage, display, input, graphics, audio and files | Several early internal interfaces; no complete public contract set |
+| Service contracts | IPC, lifecycle and message contracts between isolated services | Not implemented |
+| Native developer interfaces | SDK/runtime interfaces for native applications | Early SAPP SDK; incomplete runtime |
+
+Veyra implementation rules:
+
+- Version public contracts and define compatibility and error conventions.
+- Validate user pointers, lengths, handles and message contents at every privilege boundary.
+- Keep kernel-private data structures out of public ABI.
+- Keep hardware protocol details in drivers behind SAND-owned subsystem contracts.
+- Keep higher-level frameworks, including CONTRACT, outside the kernel and connect them through adapters.
+- Do not mark a contract stable until it has specification, implementation, tests and compatibility policy.
 
 ## Existing SAND-owned interfaces
 
@@ -18,7 +38,7 @@ This catalogue distinguishes implemented interfaces from prototypes and future c
 | Window management | `include/sand/graphics/window.h`, `kernel/graphics/window.c` | Bounded window records, focus/z-order, basic pointer dragging and rendering | Prototype only; no compositor, app surfaces, input integration, close controls or full desktop |
 | SAPP executable / SDK | `sdk/sapp/` | SAPP format specification, builder, example and parser tests | Early custom application format; runtime and process execution still limited |
 
-## Important API gaps before third-party/native applications
+## Important Veyra gaps before third-party/native applications
 
 - A versioned, documented syscall ABI with safe user-memory access and error conventions.
 - A kernel object and handle model, plus IPC/message passing.
@@ -43,7 +63,7 @@ Integration means implementing an adapter against a documented SAND interface. I
 | DUSRM | Architecture responsibility and contract validation | Documented subsystem boundaries, ownership and conformance checks | Use as an architecture governance method; it is not a driver or runtime |
 | EREBUS | Firewall/policy engine | Packet/flow hook, network stack, isolated service runtime and fail-safe enforcement | Future privileged service, not kernel source |
 | ANANTA | Database engine for structured application/system data | Files, memory, process runtime and storage reliability | User-space service/library; never substitute for SANDFS/VFS |
-| CONTRACT | API/service framework | User runtime, networking, process isolation and language runtime | Future app/service framework |
+| CONTRACT | API/service framework | User runtime, networking, process isolation and language runtime | Independent framework; a future Veyra adapter may expose native SAND facilities |
 | NOCTIS | Native browser | Graphics, input, processes, networking, TLS and storage | Application, not OS core |
 | MAINTAIN AI | Device management / industrial telemetry UI and service | Device enumeration, IPC, networking, graphics and storage | Application/service; device contracts should be designed generically |
 | DMJScript and other language/toolchain projects | Compiler target, runtime and SDK bindings | Stable executable format, syscall ABI, linker and runtime contracts | Add target only after ABI stabilizes |
