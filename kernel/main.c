@@ -20,6 +20,22 @@ static volatile uint32_t test_failures;
 static sand_semaphore_t available;
 static sand_mutex_t counter_lock;
 static const uint32_t TEST_ITEMS=1000u;
+static volatile uint32_t wait_test_done, wait_test_failed;
+static sand_pid_t wait_test_child;
+static void wait_test_child_exit(void *arg) {
+    (void)arg;
+    if(process_exit(wait_test_child,73)!=0) wait_test_failed=1u;
+}
+static void wait_test_parent_thread(void *arg) {
+    (void)arg;
+    int32_t status=-1;
+    if(process_create_test("wait-child",&wait_test_child)!=0) { wait_test_failed=1u; wait_test_done=1u; return; }
+    if(scheduler_create(wait_test_child_exit,0)<0) { wait_test_failed=1u; wait_test_done=1u; return; }
+    if(process_wait(wait_test_child,&status)!=1 || status!=73) wait_test_failed=1u;
+    if(process_destroy(wait_test_child)!=0) wait_test_failed=1u;
+    wait_test_done=1u;
+}
+
 static inline void debug_char(char c) { __asm__ volatile ("outb %0, $0xE9" : : "a"(c)); }
 static void debug_text(const char *s) { while(*s) debug_char(*s++); }
 static uint16_t ve(char c,uint8_t color) { return (uint16_t)(uint8_t)c|((uint16_t)color<<8); }
@@ -144,6 +160,16 @@ void kernel_main(void) {
     debug_text("SAND_TEST:M6_ATA_IDENTIFY_PASS\\n");
     debug_text("SAND_TEST:M6_SANDFS_FORMAT_PASS\\n");
     debug_text("SAND_TEST:M6_FILE_READ_WRITE_PASS\\n");
+    if(scheduler_create(wait_test_parent_thread,0)<0) {
+        debug_text("SAND_TEST:M7_BLOCKING_WAIT_CREATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
+    }
+    __asm__ volatile("sti");
+    while(wait_test_done==0u) __asm__ volatile("hlt");
+    __asm__ volatile("cli");
+    if(wait_test_failed!=0u) {
+        debug_text("SAND_TEST:M7_BLOCKING_WAIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
+    }
+    debug_text("SAND_TEST:M7_BLOCKING_WAIT_WAKE_PASS\n");
     debug_text("SAND_TEST:RING3_ENTER\n");
     process_launch(first);
     for(;;) __asm__ volatile("cli; hlt");
