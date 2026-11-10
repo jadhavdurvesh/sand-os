@@ -25,6 +25,7 @@ jobs:
         run: |
           make clean
           make check
+          python3 -m unittest discover -s sdk/sapp/tests -v
           test "$(stat -c%s build/sand-boot.bin)" -eq 512
           test "$(od -An -tx1 -j510 -N2 build/sand-boot.bin | tr -d ' \n')" = "55aa"
           test "$(stat -c%s build/sand-stage2.bin)" -eq 8192
@@ -49,10 +50,12 @@ jobs:
           test -S build/qemu-monitor.sock
           for attempt in $(seq 1 160); do
             if grep -q 'SAND_TEST:ALL_PASS' build/debug.log 2>/dev/null; then break; fi
-            if grep -Eq 'SAND_TEST:.*(FAIL|REJECTED)' build/debug.log 2>/dev/null; then cat build/debug.log; exit 1; fi
+            if grep -Eq 'SAND_TEST:.*(FAIL|REJECTED)' build/debug.log 2>/dev/null; then break; fi
             sleep 0.25
           done
+          # Capture the actual guest display even when a self-test fails.
           cat build/debug.log
+          grep -q 'SAND_TEST:ALL_PASS' build/debug.log
           grep -q 'SAND_TEST:BOOT' build/debug.log
           grep -q 'SAND_TEST:BLOCK_WAKE_PASS' build/debug.log
           grep -q 'SAND_TEST:MUTEX_COUNTER_PASS' build/debug.log
