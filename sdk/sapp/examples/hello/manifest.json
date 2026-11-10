@@ -1,0 +1,9 @@
+{
+  "id": "org.sand.example.hello",
+  "name": "SAND Hello",
+  "version": "0.1.0",
+  "vendor": "SAND SDK",
+  "description": "Minimal native SAND application",
+  "permissions": ["console.write"],
+  "dependencies": []
+}
