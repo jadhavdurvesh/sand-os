@@ -59,6 +59,7 @@ jobs:
           grep -q 'SAND_TEST:REUSE_PASS' build/debug.log
           grep -q 'SAND_TEST:M5_PROCESS_INIT' build/debug.log
           grep -q 'SAND_TEST:M5_TWO_ADDRESS_SPACES_PASS' build/debug.log
+          grep -q 'SAND_TEST:M7_ELF_REJECT_INVALID_PASS' build/debug.log
           grep -q 'SAND_TEST:M5_CR3_SWITCH_PASS' build/debug.log
           grep -q 'SAND_TEST:M5_TERMINATE_DESTROY_PASS' build/debug.log
           grep -q 'SAND_TEST:M5_USER_PROCESS_SYSCALL_PASS' build/debug.log
