@@ -26,7 +26,9 @@ level; new architecture identifiers may be added without changing v1 layouts.
 | 36 | 4 | File size |
 | 40 | 4 | Signature offset (0 when unsigned) |
 | 44 | 4 | Signature length (0 when unsigned) |
-| 48 | 16 | Reserved; must be zero |
+| 48 | 4 | Relocation table file offset (0 when empty) |
+| 52 | 4 | Relocation count |
+| 56 | 8 | Reserved; must be zero |
 
 ## Segment record: 32 bytes
 
