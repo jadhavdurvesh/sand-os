@@ -45,3 +45,24 @@ Veyra subsystem contracts return `sand_veyra_status_t`. Zero means success; nega
 The existing SAPP SDK header contains early syscall declarations, while the current kernel syscall dispatcher is still a ring-3 proof-of-concept test gate. The declared exit/write/tick operations are **not yet implemented as a complete usable syscall ABI**. Do not build general applications against them yet.
 
 The descriptor and status headers are a reusable contract foundation. They do not add syscalls, IPC, device enumeration or service supervision by themselves. Those facilities will be introduced as independently tested Veyra subsystem contracts.
+
+## Compatibility and validation test coverage
+
+The host-side contract test at `tests/veyra/abi_test.c` is compiled and executed
+by the native boot CI. It checks descriptor layout, valid and null descriptors,
+magic and major-version rejection, minimum-size handling, unknown flag tolerance,
+and the stable status convention.
+
+The inline descriptor helper is intended for trusted, already-readable kernel
+memory. It cannot make an arbitrary user pointer safe to dereference. Kernel
+entry points must first validate user address ranges and copy descriptor bytes
+into kernel-owned memory before calling the helper. This distinction is
+mandatory for the future syscall and service boundary implementation.
+
+## Current milestone boundary
+
+M7 establishes the shared Veyra contract vocabulary and a tested descriptor
+format. It does not yet publish stable subsystem function tables, a general
+syscall dispatcher, capability enforcement, or IPC. Those are separate
+milestone deliverables and must not be inferred from the presence of these
+headers.
