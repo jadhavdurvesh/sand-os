@@ -17,6 +17,44 @@ stage2_start:
 
     call collect_memory_map
 
+    /* Ask BIOS VBE for 1024x768x32 linear framebuffer (mode 0x118). */
+    movw $0x0600, %ax
+    movw %ax, %es
+    xorw %di, %di
+    movw $0x4F01, %ax
+    movw $0x0118, %cx
+    int $0x10
+    cmpw $0x004F, %ax
+    jne loader_error
+    movw $0x0600, %ax
+    movw %ax, %es
+    movw %es:0x00, %ax
+    testw $0x0001, %ax
+    jz loader_error
+    movb %es:0x19, %al
+    cmpb $32, %al
+    jne loader_error
+    movw $0x4118, %bx
+    movw $0x4F02, %ax
+    int $0x10
+    cmpw $0x004F, %ax
+    jne loader_error
+
+    /* Stable kernel handoff at physical 0x6100:
+       base, pitch, width, height, bpp (five 32-bit values). */
+    movw $0x0610, %ax
+    movw %ax, %es
+    movl %es:0x0028, %eax
+    movl %eax, %es:0x0000
+    movzwl %es:0x0010, %eax
+    movl %eax, %es:0x0004
+    movzwl %es:0x0012, %eax
+    movl %eax, %es:0x0008
+    movzwl %es:0x0014, %eax
+    movl %eax, %es:0x000C
+    movzbl %es:0x0019, %eax
+    movl %eax, %es:0x0010
+
     movw $kernel_packet, %si
     movb boot_drive, %dl
     movb $0x42, %ah
