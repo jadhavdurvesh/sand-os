@@ -164,7 +164,9 @@ int process_create_sapp(const char *name,const void *image,uint32_t image_size,s
        h->metadata_offset<h->segment_offset+h->segment_count*SAPP_SEGMENT_SIZE ||
        h->metadata_size==0u || h->metadata_size>4096u ||
        h->relocation_count>256u ||
-       (h->relocation_count && !sapp_range_ok(h->relocation_offset,h->relocation_count*SAPP_RELOC_SIZE,image_size))) return -1;
+       (h->relocation_count && (!sapp_range_ok(h->relocation_offset,h->relocation_count*SAPP_RELOC_SIZE,image_size) ||
+          h->relocation_offset<h->metadata_offset+h->metadata_size)) ||
+       (!h->relocation_count && h->relocation_offset!=0u)) return -1;
     const struct sapp_segment *segments=(const struct sapp_segment *)(bytes+h->segment_offset);
     const struct sapp_relocation *relocs=(const struct sapp_relocation *)(bytes+h->relocation_offset);
     uint32_t entry_valid=0u,total_pages=0u;
@@ -173,7 +175,7 @@ int process_create_sapp(const char *name,const void *image,uint32_t image_size,s
         if(s->memsz==0u || s->file_size>s->memsz || s->vaddr<USER_MIN_ADDRESS ||
            s->vaddr>=USER_MAX_ADDRESS || s->memsz>USER_MAX_ADDRESS-s->vaddr ||
            !sapp_range_ok(s->file_offset,s->file_size,image_size) ||
-           s->file_offset<h->metadata_offset+h->metadata_size ||
+           s->file_offset<(h->relocation_count ? h->relocation_offset+h->relocation_count*SAPP_RELOC_SIZE : h->metadata_offset+h->metadata_size) ||
            (s->permissions&~7u)!=0u || (s->permissions&1u)==0u ||
            (s->permissions&6u)==6u || s->alignment<SAND_PAGE_SIZE ||
            (s->alignment&(s->alignment-1u))!=0u || (s->vaddr&(s->alignment-1u))!=0u ||
