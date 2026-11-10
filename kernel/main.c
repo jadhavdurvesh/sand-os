@@ -98,28 +98,30 @@ void kernel_main(void) {
     syscall_init();
     if(process_system_init()!=0) { debug_text("SAND_TEST:M5_INIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     sand_pid_t first=0u,second=0u;
-    if(process_create_test("init",&first)!=0 || process_create_test("worker",&second)!=0 || first==second) {
+    if(process_create_test("init",&first)!=0 || process_activate(first)!=0 ||
+       process_create_test("worker",&second)!=0 || first==second) {
         debug_text("SAND_TEST:M5_CREATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
     struct sand_process_info first_info,second_info;
     if(process_get_info(first,&first_info)!=0 || process_get_info(second,&second_info)!=0 ||
-       first_info.page_directory==second_info.page_directory) {
+       first_info.page_directory==second_info.page_directory || second_info.parent_pid!=first) {
         debug_text("SAND_TEST:M5_ISOLATION_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
+    debug_text("SAND_TEST:M7_PARENT_CHILD_LINK_PASS\n");
     debug_text("SAND_TEST:M5_TWO_ADDRESS_SPACES_PASS\n");
     uint8_t malformed_elf[16]={0}; sand_pid_t rejected_pid=0u;
     if(process_create_elf("bad-elf",malformed_elf,sizeof(malformed_elf),&rejected_pid)==0) {
         debug_text("SAND_TEST:M7_INVALID_ELF_ACCEPTED\\n"); for(;;) __asm__ volatile("cli; hlt");
     }
     debug_text("SAND_TEST:M7_ELF_REJECT_INVALID_PASS\\n");
-    if(process_activate(first)!=0 || process_current()!=first ||
-       process_activate(second)!=0 || process_current()!=second) {
+    if(process_activate(second)!=0 || process_current()!=second) {
         debug_text("SAND_TEST:M5_ACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
     debug_text("SAND_TEST:M5_CR3_SWITCH_PASS\n");
     if(process_exit(second,37)!=0) {
         debug_text("SAND_TEST:M7_EXIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
+    if(process_activate(first)!=0) { debug_text("SAND_TEST:M7_PARENT_REACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     int32_t child_status=-1;
     if(process_wait(second,&child_status)!=1 || child_status!=37) {
         debug_text("SAND_TEST:M7_WAIT_STATUS_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
