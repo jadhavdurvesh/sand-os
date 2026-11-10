@@ -10,7 +10,7 @@ LD ?= ld
 OBJCOPY ?= objcopy
 CFLAGS := -m32 -std=gnu11 -ffreestanding -O2 -Wall -Wextra -Werror -fno-stack-protector -fno-pic -fno-pie -Iinclude
 LDFLAGS := -m elf_i386 -nostdlib -z max-page-size=0x1000 -T linker/kernel.ld
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/sandfs.o
 .PHONY: all clean kernel disk run check
 all: disk
 $(BUILD):
@@ -71,6 +71,12 @@ $(BUILD)/user-space.o: kernel/user/user_space.c include/sand/kernel/user.h inclu
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/process.o: kernel/proc/process.c include/sand/kernel/process.h include/sand/arch/x86/paging.h include/sand/arch/x86/gdt.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/block.o: kernel/storage/block.c include/sand/storage/block.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/ata-pio.o: kernel/arch/x86/ata_pio.c include/sand/arch/x86/ata_pio.h include/sand/storage/block.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/sandfs.o: kernel/fs/sandfs.c include/sand/fs/sandfs.h include/sand/storage/block.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 $(KERNEL_BIN): $(KERNEL_ELF)
@@ -78,11 +84,11 @@ $(KERNEL_BIN): $(KERNEL_ELF)
 	test $$(stat -c%s $@) -le 131072
 kernel: $(KERNEL_BIN)
 disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN)
-	dd if=/dev/zero of=$(DISK) bs=512 count=273 status=none
+	dd if=/dev/zero of=$(DISK) bs=512 count=4096 status=none
 	dd if=$(BOOT_SECTOR) of=$(DISK) conv=notrunc status=none
 	dd if=$(STAGE2) of=$(DISK) bs=512 seek=1 conv=notrunc status=none
 	dd if=$(KERNEL_BIN) of=$(DISK) bs=512 seek=17 conv=notrunc status=none
-	test $$(stat -c%s $(DISK)) -eq 139776
+	test $$(stat -c%s $(DISK)) -eq 2097152
 run: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M
 check: disk
