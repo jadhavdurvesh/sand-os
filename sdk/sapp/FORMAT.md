@@ -43,8 +43,20 @@ level; new architecture identifiers may be added without changing v1 layouts.
 | 24 | 8 | Reserved; must be zero |
 
 Segments may not overlap in virtual memory or in the file. W+X is forbidden.
-The entry point must be inside an executable segment. The v1 loader must
-validate all ranges before allocating or mapping memory.
+The entry point must be inside an executable segment. Memory beyond file size
+is zero-filled as BSS. Segment permissions are applied to user page mappings.
+
+## Relocation record: 12 bytes
+
+| Offset | Size | Field |
+|---:|---:|---|
+| 0 | 4 | Target virtual address |
+| 4 | 4 | Type: 1 = SAND_ABS32 |
+| 8 | 4 | Explicit addend |
+
+Relocations must target a writable segment and may not cross a page boundary.
+SAND_ABS32 writes the 32-bit addend at the target. SAPP v1 uses fixed virtual
+addresses, so no load-bias is applied. The table is optional.
 
 ## Metadata
 
