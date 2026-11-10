@@ -29,8 +29,9 @@ stage2_start:
     movw $0x0600, %ax
     movw %ax, %es
     movw %es:0x00, %ax
-    testw $0x0001, %ax
-    jz loader_error
+    andw $0x0081, %ax
+    cmpw $0x0081, %ax
+    jne loader_error
     movb %es:0x19, %al
     cmpb $24, %al
     jne loader_error
