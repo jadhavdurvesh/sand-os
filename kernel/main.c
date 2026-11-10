@@ -194,6 +194,11 @@ void kernel_main(void) {
         debug_text("SAND_TEST:M7_BLOCKING_WAIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
     debug_text("SAND_TEST:M7_BLOCKING_WAIT_WAKE_PASS\n");
+    /* VBE is mapped in the kernel page directory, not the process CR3. */
+    if(paging_activate(paging_kernel_directory())!=0) {
+        debug_text("SAND_TEST:KERNEL_CR3_RESTORE_FAIL\n");
+        for(;;) __asm__ volatile("cli; hlt");
+    }
     sand_framebuffer_t framebuffer;
     if(vbe_framebuffer_init(&framebuffer)==0 && sand_desktop_render(&framebuffer)==0) {
         debug_text("SAND_TEST:GRAPHICS_FRAMEBUFFER_PASS\\n");
