@@ -16,7 +16,9 @@ int vbe_framebuffer_init(sand_framebuffer_t *framebuffer) {
     uint32_t bpp = VBE_HANDOFF[4];
     if (physical == 0u || pitch == 0u || width == 0u || height == 0u || (bpp != 24u && bpp != 32u))
         return -1;
-    if (pitch < width * 4u || height > 4096u || pitch > 16384u) return -1;
+    if (width > 4096u || height > 4096u || pitch > 16384u) return -1;
+    uint32_t bytes_per_pixel = (bpp + 7u) / 8u;
+    if (width > 0xFFFFFFFFu / bytes_per_pixel || pitch < width * bytes_per_pixel) return -1;
     uint32_t bytes = pitch * height;
     if (bytes / height != pitch || bytes > 0x01000000u) return -1;
     uint32_t aligned_physical = physical & ~(PAGE_SIZE - 1u);
