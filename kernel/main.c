@@ -24,13 +24,14 @@ static sand_mutex_t counter_lock;
 static const uint32_t TEST_ITEMS=1000u;
 static volatile uint32_t wait_test_done, wait_test_failed;
 static sand_pid_t wait_test_child;
+static sand_pid_t sapp_test_pid;
 static void debug_text(const char *s);
 static void store_le16(uint8_t *p,uint16_t v) { p[0]=(uint8_t)v; p[1]=(uint8_t)(v>>8); }
 static void store_le32(uint8_t *p,uint32_t v) {
     p[0]=(uint8_t)v; p[1]=(uint8_t)(v>>8); p[2]=(uint8_t)(v>>16); p[3]=(uint8_t)(v>>24);
 }
 static int sapp_loader_self_test(void) {
-    static uint8_t image[164];
+    static uint8_t image[174];
     static const char metadata[]="{\"id\":\"org.sand.test\",\"name\":\"SAND test\",\"version\":\"0.2\"}";
     for(uint32_t i=0;i<sizeof(image);++i) image[i]=0u;
     image[0]='S'; image[1]='A'; image[2]='P'; image[3]='P';
@@ -43,12 +44,15 @@ static int sapp_loader_self_test(void) {
     store_le32(image+72,160u); store_le32(image+76,4u);
     store_le32(image+80,5u); store_le32(image+84,4096u);
     for(uint32_t i=0;i<sizeof(metadata)-1u;++i) image[96u+i]=(uint8_t)metadata[i];
-    image[160]=0x90u; image[161]=0x90u; image[162]=0x90u; image[163]=0xC3u;
-    sand_pid_t pid=0u;
-    if(process_create_sapp("sapp-test",image,sizeof(image),&pid)!=0) return -1;
+    /* mov eax,1; mov ebx,0x53414e44; int 0x80; jmp $ */
+    static const uint8_t code[14]={0xB8,0x01,0x00,0x00,0x00,
+        0xBB,0x44,0x4E,0x41,0x53,0xCD,0x80,0xEB,0xFE};
+    for(uint32_t i=0;i<sizeof(code);++i) image[160u+i]=code[i];
+    sapp_test_pid=0u;
+    if(process_create_sapp("sapp-test",image,sizeof(image),&sapp_test_pid)!=0) return -1;
     struct sand_process_info info;
-    if(process_get_info(pid,&info)!=0 || info.entry!=0x40000000u ||
-       info.state!=SAND_PROCESS_READY || process_destroy(pid)!=0) return -1;
+    if(process_get_info(sapp_test_pid,&info)!=0 || info.entry!=0x40000000u ||
+       info.state!=SAND_PROCESS_READY) return -1;
     return 0;
 }
 static void wait_test_child_exit(void *arg) {
@@ -234,6 +238,6 @@ void kernel_main(void) {
         debug_text("SAND_TEST:GRAPHICS_FRAMEBUFFER_UNAVAILABLE\\n");
     }
     debug_text("SAND_TEST:RING3_ENTER\n");
-    process_launch(first);
+    process_launch(sapp_test_pid);
     for(;;) __asm__ volatile("cli; hlt");
 }
