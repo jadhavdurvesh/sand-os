@@ -45,9 +45,18 @@ static void wait_test_parent_thread(void *arg) {
         wait_test_failed=1u; wait_test_done=1u; return;
     }
     debug_text("SAND_TEST:M7_WAIT_BLOCKING\\n");
-    if(process_wait(wait_test_child,&status)!=1 || status!=73) wait_test_failed=1u;
+    int wait_result=process_wait(wait_test_child,&status);
     debug_text("SAND_TEST:M7_WAIT_PARENT_RESUMED\\n");
-    if(process_destroy(wait_test_child)!=0) wait_test_failed=1u;
+    if(wait_result!=1 || status!=73) {
+        debug_text("SAND_TEST:M7_WAIT_RESULT_INVALID\\n");
+        wait_test_failed=1u;
+    }
+    if(process_destroy(wait_test_child)!=0) {
+        debug_text("SAND_TEST:M7_WAIT_DESTROY_FAIL\\n");
+        wait_test_failed=1u;
+    } else {
+        debug_text("SAND_TEST:M7_WAIT_DESTROY_PASS\\n");
+    }
     wait_test_done=1u;
 }
 
