@@ -1,8 +1,9 @@
 # SAPP binary format (v0.1)
 
 SAPP is the native SAND application container. It is not ELF with a renamed
-extension. The runtime image consists of a fixed 64-byte header, a table of
-32-byte load segments, UTF-8 JSON metadata, and aligned segment payloads.
+extension. The runtime image consists of a fixed 64-byte header, a table of 32-byte load
+segments, UTF-8 JSON metadata, an optional table of 12-byte relocations, and
+aligned segment payloads.
 
 All integer fields are little-endian. Version 1 is 32-bit x86 (architecture 1).
 The format is deliberately versioned and architecture-neutral at the container
