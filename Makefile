@@ -83,6 +83,10 @@ $(BUILD)/vbe.o: kernel/arch/x86/vbe.c include/sand/arch/x86/vbe.h include/sand/g
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/desktop.o: kernel/graphics/desktop.c include/sand/graphics/desktop.h include/sand/graphics/framebuffer.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/window.o: kernel/graphics/window.c include/sand/graphics/window.h include/sand/graphics/framebuffer.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/ps2.o: kernel/arch/x86/ps2.c include/sand/arch/x86/input.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 $(KERNEL_BIN): $(KERNEL_ELF)
