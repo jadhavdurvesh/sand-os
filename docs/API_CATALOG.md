@@ -89,3 +89,10 @@ Before porting, audit CALLGRAPH's language/runtime dependencies, cryptographic i
 - Keep hardware drivers and safety-critical control isolated from general application frameworks.
 - Prefer shared standards and stable interfaces over source-code duplication.
 - Record every integration as proposed, in development, tested or supported.
+
+
+## DMJ technology integration map
+
+The authoritative placement and sequencing plan for Citadel and the DMJ in-house technology ecosystem is [DMJ_TECHNOLOGY_INTEGRATION.md](DMJ_TECHNOLOGY_INTEGRATION.md). It separates kernel responsibilities from host tools, user-space services, networking and desktop applications. All listed integrations remain proposed until an adapter and tests exist.
+
+The current SAND Apps SAPP v2/STCI implementation is on the `feature/real-app-modules` branch. The default branch still documents SAPP v1. SAND OS currently accepts unsigned SAPP v1 only; native signature verification is not implemented. The integration document records the exact native loader gate and its dependencies. Do not claim that host-side signing tools enforce OS execution.
