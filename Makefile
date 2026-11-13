@@ -17,7 +17,7 @@ APPS := sandsh hello abitest spin crash locus locusc quanta chronos
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
 APP_OBJECTS := $(foreach a,$(APPS),$(APP_BUILD)/$(a)-image.o)
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/sandfs.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(BUILD)/apps.o $(BUILD)/userland-test.o $(APP_OBJECTS)
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/sandfs.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(BUILD)/apps.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(APP_OBJECTS)
 .PHONY: all clean kernel disk run check apps test ui-preview
 apps: $(foreach a,$(APPS),$(APP_BUILD)/$(a).sapp)
 $(APP_BUILD):
@@ -131,6 +131,14 @@ $(BUILD)/drivers.o: kernel/drivers/drivers.c include/sand/drivers/drivers.h incl
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/apps.o: kernel/proc/apps.c include/sand/proc/apps.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/sha512.o: kernel/crypto/sha512.c kernel/crypto/crypto_consts.h include/sand/crypto/sha512.h | $(BUILD)
+	$(CC) $(CFLAGS) -Ikernel/crypto -c $< -o $@
+$(BUILD)/ed25519.o: kernel/crypto/ed25519.c kernel/crypto/crypto_consts.h include/sand/crypto/ed25519.h include/sand/crypto/sha512.h | $(BUILD)
+	$(CC) $(CFLAGS) -Ikernel/crypto -c $< -o $@
+$(BUILD)/stci.o: kernel/security/stci.c include/sand/security/stci.h include/sand/crypto/ed25519.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/stci-kat.o: kernel/selftest/stci_kat.c include/sand/security/stci.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/userland-test.o: kernel/selftest/userland.c $(ABI_H) include/sand/kernel/process.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
@@ -149,7 +157,12 @@ run: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M
 check: disk
 	@echo "SAND boot, memory, paging, heap, PIT, preemptive scheduler and synchronization built."
-test: disk
+host-test:
+	mkdir -p $(BUILD)
+	cc -std=c11 -Wall -Wextra -Werror -Iinclude -Ikernel/crypto -o $(BUILD)/ed25519-kat tests/veyra/ed25519_kat_test.c kernel/crypto/sha512.c kernel/crypto/ed25519.c kernel/security/stci.c
+	./$(BUILD)/ed25519-kat
+	$(PYTHON) tests/veyra/ed25519_crosscheck.py
+test: disk host-test
 	$(PYTHON) tests/qemu/test_shell.py
 	$(PYTHON) tests/qemu/test_desktop.py
 ui-preview:

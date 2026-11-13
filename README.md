@@ -24,7 +24,7 @@ SAND is beyond a boot-sector-only prototype. The repository contains a working 3
 | Shell | Native ring-3 `sandsh` (line editing, ls/cat/write/rm, run/ps/mem/devices, app launcher), supervised and restarted by the kernel (**M9**) | Runs over serial and in the desktop console window; no pipes, scripting or job control |
 | Graphics | **SAND Dusk** desktop with a **window service** (**M11**): original stroke typeface *SAND Sans*, anti-aliased shape/shadow renderer, procedural twilight-dune wallpaper, menu bar with RTC clock, floating dock, frosted-glass windows (blurred-wallpaper title bars, dune-ridge title line, original "horizon" controls - ripple/rising-sun/setting-sun glyphs with hover bloom - and focus glow), dock with a sun-ray app launcher, pointer, focus-aware keyboard routing, system-console window, About panel, and a window service: apps create a surface and paint it with SAND draw commands (ABI v3, syscalls 18-21; up to 3 app windows, 520x380 max) | Kernel-side draw-command renderer, not a general pixel/GPU API; no resize, no per-window pixel buffers owned by apps, no wheel input; app windows are not permission-gated yet; 1024x768 VBE only |
 | Applications | SAPP SDK and development package loader | Current kernel loader accepts unsigned SAPP v1; no native STCI/Ed25519 enforcement yet |
-| Security / trust | Veyra ABI and STCI contracts, trust-model documentation and Ed25519 known-answer fixture | Contract and design work only; kernel verifier, protected trust store and fail-closed SAPP v2 launch gate are not implemented |
+| Security / trust | Veyra ABI and STCI contracts, trust-model documentation and Ed25519 known-answer fixture | Native in-house SHA-512 + Ed25519 verifier and SAPP v2 transcript check pass the STCI known-answer vector (host tests, cross-check, boot self-test). Still NOT implemented: certificate-chain validation, protected trust store and the fail-closed SAPP v2 launch gate — the kernel does not yet block unsigned apps |
 
 Implementation claims are tied to source and automated test evidence. A documented interface, test fixture, roadmap item, or host-side tool is not by itself a working kernel feature.
 
@@ -37,7 +37,7 @@ M7-M9 are complete and M11's window service is in: apps can open windows, paint 
 - Resizable windows and app-owned pixel surfaces (shared memory) for richer apps.
 - Load apps from SANDFS instead of embedding them in the kernel image.
 
-Native STCI/Ed25519 verification remains a later milestone, after Veyra contracts; unsigned SAPP v1 packages are still development-only.
+The native Ed25519 primitive and SAPP v2 transcript check exist (`kernel/crypto`, `kernel/security/stci.c`); the certificate chain, trust store and launch gate remain to do. Unsigned SAPP v1 packages are still development-only.
 
 ## In-house DMJ technology strategy
 

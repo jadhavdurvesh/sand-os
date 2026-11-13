@@ -25,7 +25,7 @@
 | M8 | Complete (emulator) | Markers `M8_SERIAL_LOOPBACK_PASS`, `M8_PS2_INIT_PASS`, `M8_IRQ_ROUTING_PASS`, `M8_ATA_BOOT_DISK_PASS`, `M8_STORAGE_SECOND_DISK_DETECTED/READ_PASS`, `M8_DEVICE_REGISTRY_PASS`, `M8_KEYBOARD_IRQ_PASS`, `M8_MOUSE_IRQ_PASS` |
 | M9 | Complete | `tests/qemu/test_shell.py` drives `sandsh` over serial |
 | M11 | Window service done; compositor features open | Done: font, renderer, wallpaper, frosted-glass chrome, pointer, console window, window service (syscalls 18-21), focus-aware keys (`tests/qemu/test_desktop.py`, incl. windowed LOCUS). Open: resizing, app-owned pixel surfaces, per-window damage from apps, window permissions |
-| M12 | Started | Windowed native LOCUS, QUANTA and CHRONOS (`apps/`), console `locusc` (test_08), `open <app>` and a dock launcher (test_06/test_07 in test_desktop); sand-apps SDK synced to ABI v3. Open: CAIRN/KEYSTONE on the window service, manifest-driven launcher, disk-loaded apps, signed SAPP v2 enforcement |
+| M12 | Started | Windowed native LOCUS, QUANTA and CHRONOS (`apps/`), console `locusc` (test_08), `open <app>` and a dock launcher (test_06/test_07 in test_desktop); sand-apps SDK synced to ABI v3. Open: CAIRN/KEYSTONE on the window service, manifest-driven launcher, disk-loaded apps, signed SAPP v2 enforcement. Done: native SHA-512/Ed25519 verifier + STCI transcript check (`make host-test`, boot marker `STCI_ED25519_KAT_PASS`); not done: certificate chain, trust store, launch gate |
 
 
 The M8 hardware boundary: all driver evidence is from QEMU; nothing is claimed for real hardware.
