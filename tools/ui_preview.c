@@ -9,8 +9,9 @@ static int h_clock(int *h, int *m) { *h = 14; *m = 41; return 0; }
 static void h_sys(struct sand_ui_sysinfo *s) { s->ticks = 123456; s->tick_hz = 100; s->free_frames = 3700; s->total_frames = 4096; s->heap_used = 2400000; s->heap_total = 8388608; s->switches = 48213; s->processes = 2; }
 static uint32_t h_pid(void) { return 7u; }
 static int h_alive(uint32_t pid) { (void)pid; return 1; }
+static int h_launch(const char *a) { (void)a; return 0; }
 int main(int argc, char **argv) {
-    sand_ui_host_t host = { h_alloc, h_ticks, h_clock, h_sys, h_pid, h_alive };
+    sand_ui_host_t host = { h_alloc, h_ticks, h_clock, h_sys, h_pid, h_alive, h_launch };
     static sand_ui_t ui;
     if (sand_ui_init(&ui, &host, 1024, 768)) { fprintf(stderr, "init failed\n"); return 1; }
     const char *t = "\x1b[38;2;242;201;138mSAND\x1b[0m shell \x1b[2m- type help\x1b[0m\r\n\x1b[1;36msand\x1b[0m> ls\r\nhello.txt   18\r\nnotes.md    204\r\n\x1b[1;36msand\x1b[0m> ";

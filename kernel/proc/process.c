@@ -416,3 +416,14 @@ void process_launch(sand_pid_t pid) {
     tss_set_kernel_stack((uint32_t)(slot->kernel_stack+sizeof(slot->kernel_stack))); x86_enter_user(slot->info.entry,slot->info.user_stack);
     for(;;) __asm__ volatile("cli; hlt");
 }
+
+/* Spawn on behalf of the desktop: the child has no parent process, so it is reaped
+ * automatically when it exits (same path as an orphan). */
+int process_spawn_detached(const char *name, const void *image, uint32_t image_size, sand_pid_t *pid_out) {
+    sand_pid_t pid = 0u;
+    if(process_spawn_sapp(name,image,image_size,&pid)!=0) return -1;
+    struct process_slot *slot=find_slot(pid);
+    if(slot!=0) slot->info.parent_pid=SAND_PID_ORPHAN;
+    if(pid_out!=0) *pid_out=pid;
+    return 0;
+}
