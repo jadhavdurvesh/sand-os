@@ -48,6 +48,7 @@ static void cmd_help(void)
         {"rm <file>", "remove a file"},
         {"apps", "list installed applications"},
         {"run <app>", "launch an app and wait for it"},
+        {"open <app>", "launch an app in the background (windows)"},
         {"ps", "list processes"},
         {"mem", "memory and scheduler counters"},
         {"uptime", "time since boot"},
@@ -177,7 +178,28 @@ static void cmd_run(const char *app)
     }
 }
 
-static void prompt(void) { out(C_ACCENT "sand" C_MUTED " > " C_RESET); }
+#define OPEN_MAX 8
+static int32_t opened[OPEN_MAX];
+static void reap_opened(void)          /* collect finished background apps so their slots are reusable */
+{
+    for (int i = 0; i < OPEN_MAX; ++i) {
+        if (opened[i] <= 0) continue;
+        struct sand_procinfo info; int found = 0;
+        for (uint32_t n = 0; sand_proc_list(n, &info) == 0; ++n)
+            if ((int32_t)info.pid == opened[i]) { found = 1; if (info.state == 3u) { int32_t st; (void)sand_wait(opened[i], &st); opened[i] = 0; } break; }
+        if (!found) opened[i] = 0;
+    }
+}
+static void cmd_open(const char *app)
+{
+    reap_opened();
+    int slot = -1; for (int i = 0; i < OPEN_MAX; ++i) if (opened[i] <= 0) { slot = i; break; }
+    int32_t pid = slot < 0 ? -1 : sand_spawn(app);
+    if (pid < 0) { out(C_BAD "open: cannot start '" C_RESET); out(app); out(C_BAD "'" C_RESET "\n"); return; }
+    opened[slot] = pid;
+    out(C_MUTED "[pid "); sand_putu((uint32_t)pid); out(" started]" C_RESET "\n");
+}
+static void prompt(void) { reap_opened(); out(C_ACCENT "sand" C_MUTED " > " C_RESET); }
 
 /* Returns 1 when the shell should exit. */
 static int execute(char *line)
@@ -205,6 +227,7 @@ static int execute(char *line)
         else out(C_BAD "rm: no such file: " C_RESET), out(argv[1]), out("\n");
     }
     else if (!strcmp(c, "apps")) cmd_apps();
+    else if (!strcmp(c, "open")) { if (argc < 2) out(C_WARN "usage: open <app>" C_RESET "\n"); else cmd_open(argv[1]); }
     else if (!strcmp(c, "run")) { if (argc < 2) out(C_WARN "usage: run <app>" C_RESET "\n"); else cmd_run(argv[1]); }
     else if (!strcmp(c, "ps")) cmd_ps();
     else if (!strcmp(c, "mem")) cmd_mem();

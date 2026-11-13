@@ -104,6 +104,29 @@ class DesktopTest(unittest.TestCase):
         self.assertIn("note-1.txt", out)
         self.vm.run_command("rm note-1.txt")
 
+    def test_06_multiple_app_windows_and_calculator(self):
+        """Background apps: several windows at once, keyboard goes to the focused one."""
+        self.vm.run_command("open chronos")
+        self.vm.run_command("open quanta")
+        time.sleep(2.0)
+        before = self.shot("desktop-apps-before.ppm")
+        for key in ("7", "asterisk", "6", "equal"):
+            self.vm.sendkey(key)
+        time.sleep(1.0)
+        after = self.shot("desktop-apps.ppm")
+        # QUANTA's display panel (surface 12,12 -> window at 168,118 + 36 title) changes after 7*6.
+        region = [(x, y) for x in range(330, 450) for y in range(190, 230)]
+        diff = sum(1 for (x, y) in region if pixel(before, x, y) != pixel(after, x, y))
+        self.assertGreater(diff, 60)
+        self.vm.sendkey("q")                                  # quanta (focused) exits
+        time.sleep(0.8)
+        self.vm.sendkey("q")                                  # then chronos
+        time.sleep(1.5)
+        self.vm.run_command("ps")                             # prompt reaps the finished background apps
+        ps = self.vm.run_command("ps")
+        self.assertNotIn("quanta", ps)
+        self.assertNotIn("chronos", ps)
+
 
 if __name__ == "__main__":
     unittest.main()
