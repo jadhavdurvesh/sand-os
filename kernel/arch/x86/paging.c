@@ -82,3 +82,27 @@ int paging_activate(uint32_t directory_physical) {
 uint32_t paging_kernel_directory(void) { return (uint32_t)&kernel_directory[0]; }
 uint32_t paging_current_directory(void) { return active_directory; }
 int paging_is_enabled(void) { return paging_active; }
+int paging_user_range_ok(uint32_t directory_physical,uint32_t address,uint32_t length,int writable) {
+    if(directory_physical==0u || length==0u) return 0;
+    if(address<(USER_DIRECTORY_FIRST<<22) || address>=(USER_DIRECTORY_LAST<<22)) return 0;
+    if(length>((USER_DIRECTORY_LAST<<22)-address)) return 0;
+    const uint32_t *directory=(const uint32_t *)directory_physical;
+    uint32_t last=(address+length-1u)&0xFFFFF000u;
+    for(uint32_t page=address&0xFFFFF000u;;page+=SAND_PAGE_SIZE) {
+        uint32_t pde=directory[page>>22];
+        if((pde&(PAGE_PRESENT|PAGE_USER))!=(PAGE_PRESENT|PAGE_USER)) return 0;
+        uint32_t pte=((const uint32_t *)(pde&0xFFFFF000u))[(page>>12)&0x3FFu];
+        uint32_t need=PAGE_PRESENT|PAGE_USER|(writable?PAGE_WRITABLE:0u);
+        if((pte&need)!=need) return 0;
+        if(page==last) break;
+    }
+    return 1;
+}
+int paging_reserve_table(uint32_t virtual_address) {
+    uint32_t di=virtual_address>>22;
+    if(di>=PAGE_DIRECTORY_ENTRIES || (kernel_directory[di]&PAGE_PRESENT)!=0u) return di<PAGE_DIRECTORY_ENTRIES?0:-1;
+    uint32_t table_phys=frame_alloc(); if(table_phys==0u) return -1;
+    zero_words((uint32_t *)table_phys,PAGE_TABLE_ENTRIES);
+    kernel_directory[di]=table_phys|PAGE_PRESENT|PAGE_WRITABLE;
+    return 0;
+}

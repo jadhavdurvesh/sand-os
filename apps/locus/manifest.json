@@ -1,0 +1,1 @@
+{"id":"org.sand.locus","name":"LOCUS","version":"0.3.0","vendor":"SAND","description":"Windowed file explorer for SANDFS","permissions":["window.create","fs.read","fs.write"],"dependencies":[]}

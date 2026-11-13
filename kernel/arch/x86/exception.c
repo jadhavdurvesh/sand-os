@@ -1,13 +1,22 @@
 #include "sand/arch/x86/idt.h"
+#include "sand/kernel/process.h"
 static volatile uint16_t *const vga=(uint16_t *)0xB8000;
 static inline void debug_char(char c) { __asm__ volatile("outb %0, $0xE9"::"a"(c)); }
 static void debug_text(const char *s) { while(*s) debug_char(*s++); }
 static void debug_hex(uint32_t v) { static const char d[]="0123456789ABCDEF"; for(int i=7;i>=0;--i) debug_char(d[(v>>(i*4))&15u]); }
 static void write_panic(const char *text) { for(uint32_t i=0;text[i]!='\0'&&i<70u;++i) vga[12u*80u+5u+i]=(uint16_t)(uint8_t)text[i]|((uint16_t)0x4Fu<<8); }
-void x86_exception_dispatch(uint32_t vector,uint32_t error_code,uint32_t eip) {
-    if(vector==3u) return;
+uint32_t x86_exception_dispatch(uint32_t vector,uint32_t error_code,uint32_t eip,uint32_t cs,uint32_t frame) {
+    if(vector==3u) return frame;
     uint32_t fault_address=0u;
     if(vector==14u) __asm__ volatile("mov %%cr2,%0":"=r"(fault_address));
+    /* A fault raised in ring 3 only kills the offending process. */
+    if((cs&3u)==3u && process_current()!=0u) {
+        debug_text("SAND_TEST:USER_FAULT:PID="); debug_hex(process_current());
+        debug_text(":VECTOR="); debug_hex(vector); debug_text(":EIP="); debug_hex(eip);
+        if(vector==14u) { debug_text(":CR2="); debug_hex(fault_address); }
+        debug_text("\n");
+        return process_fault_current(vector,frame);
+    }
     debug_text("SAND_EXCEPTION:VECTOR="); debug_hex(vector); debug_text(":ERROR="); debug_hex(error_code); debug_text(":EIP="); debug_hex(eip);
     if(vector==14u) { debug_text(":CR2="); debug_hex(fault_address); }
     debug_text("\n");

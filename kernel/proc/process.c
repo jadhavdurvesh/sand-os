@@ -3,11 +3,13 @@
 #include "sand/arch/x86/gdt.h"
 #include "sand/mm/frame.h"
 #include "sand/kernel/scheduler.h"
+#include "sand/abi.h"
 #define USER_CODE_BASE 0x40000000u
 #define USER_STACK_TOP 0xBFFFE000u
 #define USER_CODE_FLAGS 0x005u
 #define USER_STACK_FLAGS 0x007u
-struct process_slot { struct sand_process_info info; uint8_t kernel_stack[8192] __attribute__((aligned(16))); };
+#define NO_THREAD 0xFFFFFFFFu
+struct process_slot { struct sand_process_info info; uint32_t thread_id; uint32_t sleep_deadline; uint8_t kernel_stack[8192] __attribute__((aligned(16))); };
 static struct process_slot slots[SAND_PROCESS_LIMIT];
 static sand_pid_t active_pid;
 static sand_pid_t next_pid=1u;
@@ -16,8 +18,10 @@ extern uint8_t __user_text_start[];
 extern uint8_t __user_text_end[];
 extern void x86_enter_user(uint32_t entry,uint32_t stack_top);
 int process_system_init(void) {
-    for(uint32_t i=0;i<SAND_PROCESS_LIMIT;++i) { slots[i].info.pid=0u; slots[i].info.state=SAND_PROCESS_UNUSED; slots[i].info.page_directory=0u; }
-    active_pid=0u; next_pid=1u; return 0;
+    for(uint32_t i=0;i<SAND_PROCESS_LIMIT;++i) { slots[i].info.pid=0u; slots[i].info.state=SAND_PROCESS_UNUSED; slots[i].info.page_directory=0u; slots[i].thread_id=NO_THREAD; slots[i].sleep_deadline=0u; }
+    active_pid=0u; next_pid=1u;
+    scheduler_set_switch_hook(process_scheduler_hook);
+    return 0;
 }
 static struct process_slot *find_slot(sand_pid_t pid) {
     if(pid==0u) return 0;
@@ -137,7 +141,7 @@ int process_create_elf(const char *name,const void *image,uint32_t image_size,sa
     }
     sand_pid_t pid=next_pid++;
     if(next_pid==0u) next_pid=1u;
-    slot->info.pid=pid; slot->info.parent_pid=active_pid; slot->info.parent_thread_id=scheduler_current_id(); slot->info.state=SAND_PROCESS_READY; slot->info.page_directory=directory;
+    slot->info.pid=pid; slot->info.parent_pid=active_pid; slot->info.parent_thread_id=scheduler_current_id(); slot->info.state=SAND_PROCESS_READY; slot->info.page_directory=directory; slot->thread_id=NO_THREAD; slot->sleep_deadline=0u;
     slot->info.entry=eh->entry; slot->info.user_stack=USER_STACK_TOP;
     set_process_name(slot,name); *pid_out=pid; return 0;
 }
@@ -243,6 +247,7 @@ int process_create_sapp(const char *name,const void *image,uint32_t image_size,s
     }
     sand_pid_t pid=next_pid++; if(next_pid==0u) next_pid=1u;
     slot->info.pid=pid; slot->info.parent_pid=active_pid;
+    slot->thread_id=NO_THREAD; slot->sleep_deadline=0u;
     slot->info.parent_thread_id=scheduler_current_id(); slot->info.state=SAND_PROCESS_READY;
     slot->info.page_directory=directory; slot->info.entry=h->entry;
     slot->info.user_stack=USER_STACK_TOP; set_process_name(slot,name); *pid_out=pid;
@@ -286,7 +291,7 @@ int process_exit(sand_pid_t pid,int32_t exit_code) {
 int process_terminate(sand_pid_t pid) { return process_exit(pid,0); }
 int process_wait(sand_pid_t pid,int32_t *exit_code) {
     struct process_slot *slot=find_slot(pid); if(slot==0 || exit_code==0) return -1;
-    if(slot->info.parent_pid==0u || slot->info.parent_pid!=active_pid ||
+    if(slot->info.parent_pid!=active_pid ||
        slot->info.parent_thread_id!=scheduler_current_id()) return -1;
     for(;;) {
         uint32_t flags;
@@ -311,10 +316,101 @@ int process_destroy(sand_pid_t pid) {
     if(paging_space_destroy(slot->info.page_directory)!=0) return -1;
     /* paging_space_destroy reclaimed the user-mapped code and stack frames. */
     slot->info.page_directory=0u;
-    slot->info.state=SAND_PROCESS_UNUSED; slot->info.pid=0u; slot->info.parent_pid=0u; slot->info.parent_thread_id=0u; return 0;
+    slot->info.state=SAND_PROCESS_UNUSED; slot->info.pid=0u; slot->info.parent_pid=0u; slot->info.parent_thread_id=0u; slot->thread_id=NO_THREAD; slot->sleep_deadline=0u; return 0;
 }
 int process_get_info(sand_pid_t pid,struct sand_process_info *out) { struct process_slot *slot=find_slot(pid); if(slot==0 || out==0) return -1; *out=slot->info; return 0; }
 sand_pid_t process_current(void) { return active_pid; }
+
+/* ---- M7: scheduler-controlled user processes ------------------------- */
+static uint32_t proc_irq_save(void) { uint32_t f; __asm__ volatile("pushfl; popl %0; cli":"=r"(f)::"memory"); return f; }
+static void proc_irq_restore(uint32_t f) { if((f&0x200u)!=0u) __asm__ volatile("sti":::"memory"); }
+static struct process_slot *slot_for_thread(uint32_t tid) {
+    for(uint32_t i=0;i<SAND_PROCESS_LIMIT;++i)
+        if(slots[i].info.pid!=0u && slots[i].thread_id==tid &&
+           (slots[i].info.state==SAND_PROCESS_READY || slots[i].info.state==SAND_PROCESS_RUNNING)) return &slots[i];
+    return 0;
+}
+/* Runs with interrupts off from inside scheduler_reschedule. */
+void process_scheduler_hook(uint32_t thread_id) {
+    struct process_slot *next=slot_for_thread(thread_id);
+    if(active_pid!=0u) {
+        struct process_slot *old=find_slot(active_pid);
+        if(old && old->info.state==SAND_PROCESS_RUNNING) old->info.state=SAND_PROCESS_READY;
+    }
+    if(next) {
+        (void)paging_activate(next->info.page_directory);
+        tss_set_kernel_stack((uint32_t)(next->kernel_stack+sizeof(next->kernel_stack)));
+        next->info.state=SAND_PROCESS_RUNNING; active_pid=next->info.pid;
+    } else {
+        (void)paging_activate(paging_kernel_directory());
+        tss_set_kernel_stack(0x90000u); active_pid=0u;
+    }
+}
+static void process_thread_entry(void *argument) {
+    struct process_slot *slot=find_slot((sand_pid_t)(uint32_t)argument);
+    if(slot==0) return;
+    x86_enter_user(slot->info.entry,slot->info.user_stack);
+}
+int process_spawn_sapp(const char *name,const void *image,uint32_t image_size,sand_pid_t *pid_out) {
+    sand_pid_t pid=0u;
+    if(process_create_sapp(name,image,image_size,&pid)!=0) return -1;
+    struct process_slot *slot=find_slot(pid);
+    uint32_t flags=proc_irq_save();
+    int tid=slot?scheduler_create(process_thread_entry,(void *)pid):-1;
+    if(tid<0) { proc_irq_restore(flags); (void)process_destroy(pid); return -1; }
+    slot->thread_id=(uint32_t)tid;
+    proc_irq_restore(flags);
+    *pid_out=pid; return 0;
+}
+/* Reap terminated children of a dying process; orphan the live ones. */
+static void release_children(sand_pid_t parent) {
+    for(uint32_t i=0;i<SAND_PROCESS_LIMIT;++i) {
+        struct process_slot *c=&slots[i];
+        if(c->info.pid==0u || c->info.parent_pid!=parent) continue;
+        if(c->info.state==SAND_PROCESS_TERMINATED) (void)process_destroy(c->info.pid);
+        else c->info.parent_pid=SAND_PID_ORPHAN;
+    }
+}
+uint32_t process_exit_current(int32_t exit_code,uint32_t saved_stack) {
+    struct process_slot *slot=find_slot(active_pid);
+    if(slot==0) return saved_stack;
+    slot->info.exit_code=exit_code; slot->info.state=SAND_PROCESS_TERMINATED;
+    sand_pid_t pid=slot->info.pid;
+    release_children(pid);
+    (void)scheduler_wake_all(slot);
+    uint32_t next=scheduler_exit_current(saved_stack);
+    /* Orphans have no parent to reap them; free them once off their stack. */
+    if(slot->info.parent_pid==SAND_PID_ORPHAN) (void)process_destroy(pid);
+    return next;
+}
+uint32_t process_fault_current(uint32_t vector,uint32_t saved_stack) {
+    return process_exit_current(SAND_EXIT_FAULT_BASE-(int32_t)vector,saved_stack);
+}
+int process_poll_child(sand_pid_t pid,int32_t *exit_code) {
+    struct process_slot *slot=find_slot(pid);
+    if(slot==0 || slot->info.parent_pid!=active_pid || active_pid==0u) return -1;
+    if(slot->info.state!=SAND_PROCESS_TERMINATED) return 0;
+    if(exit_code) *exit_code=slot->info.exit_code;
+    return 1;
+}
+const void *process_wait_object(sand_pid_t pid) { return find_slot(pid); }
+uint32_t *process_sleep_deadline(void) {
+    struct process_slot *slot=find_slot(active_pid);
+    return slot?&slot->sleep_deadline:0;
+}
+int process_list_at(uint32_t ordinal,struct sand_process_info *out) {
+    if(out==0) return -1;
+    for(uint32_t i=0;i<SAND_PROCESS_LIMIT;++i) {
+        if(slots[i].info.pid==0u || slots[i].info.state==SAND_PROCESS_UNUSED) continue;
+        if(ordinal--==0u) { *out=slots[i].info; return 0; }
+    }
+    return -1;
+}
+uint32_t process_live_count(void) {
+    uint32_t n=0u;
+    for(uint32_t i=0;i<SAND_PROCESS_LIMIT;++i) if(slots[i].info.pid!=0u && slots[i].info.state!=SAND_PROCESS_UNUSED) ++n;
+    return n;
+}
 void process_launch(sand_pid_t pid) {
     struct process_slot *slot=find_slot(pid); if(slot==0 || process_activate(pid)!=0) for(;;) __asm__ volatile("cli; hlt");
     tss_set_kernel_stack((uint32_t)(slot->kernel_stack+sizeof(slot->kernel_stack))); x86_enter_user(slot->info.entry,slot->info.user_stack);

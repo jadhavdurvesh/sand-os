@@ -7,3 +7,4 @@
 *.png
 *.qcow2
 *.raw
+__pycache__/
