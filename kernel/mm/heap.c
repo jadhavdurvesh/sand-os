@@ -3,7 +3,7 @@
 #include "sand/mm/frame.h"
 
 #define KHEAP_BASE 0x01000000u
-#define KHEAP_LIMIT 0x01400000u
+#define KHEAP_LIMIT 0x01C00000u
 
 static uint32_t heap_current = KHEAP_BASE;
 static uint32_t heap_mapped_end = KHEAP_BASE;
@@ -12,6 +12,9 @@ int kheap_init(void) {
     if (!paging_is_enabled()) return -1;
     heap_current = KHEAP_BASE;
     heap_mapped_end = KHEAP_BASE;
+    /* Pre-create the heap page table so every later address space shares it. */
+    for (uint32_t va = KHEAP_BASE; va < KHEAP_LIMIT; va += 0x400000u)
+        if (paging_reserve_table(va) != 0) return -1;
     return 0;
 }
 

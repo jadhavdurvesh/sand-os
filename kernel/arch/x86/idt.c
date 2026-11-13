@@ -14,6 +14,7 @@ static void idt_set_gate_attributes(uint8_t vector,void (*handler)(void),uint8_t
 }
 static void idt_set_gate(uint8_t vector,void (*handler)(void)) { idt_set_gate_attributes(vector,handler,IDT_INTERRUPT_GATE); }
 void idt_set_irq0(void (*handler)(void)) { idt_set_gate(32u,handler); }
+void idt_set_irq(uint8_t irq,void (*handler)(void)) { if(irq<16u) idt_set_gate((uint8_t)(32u+irq),handler); }
 void idt_set_reschedule(void (*handler)(void)) { idt_set_gate(48u,handler); }
 void idt_set_syscall(void (*handler)(void)) { idt_set_gate_attributes(0x80u,handler,IDT_USER_INTERRUPT_GATE); }
 void idt_load(void) {

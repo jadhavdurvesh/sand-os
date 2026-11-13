@@ -1,0 +1,1 @@
+{"id":"org.sand.locusc","name":"LOCUS (console)","version":"0.2.0","vendor":"SAND","description":"Native file explorer for SANDFS (console front end)","permissions":["console.read","console.write","fs.read","fs.write"],"dependencies":[]}

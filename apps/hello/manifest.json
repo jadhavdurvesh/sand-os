@@ -1,0 +1,1 @@
+{"id":"org.sand.hello","name":"Hello","version":"0.2.0","vendor":"SAND","description":"Greets from ring 3","permissions":["console.write"],"dependencies":[]}
