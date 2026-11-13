@@ -92,6 +92,10 @@ jobs:
           grep -q 'SAND_TEST:M6_SANDFS_FORMAT_PASS' build/debug.log
           grep -q 'SAND_TEST:M6_FILE_READ_WRITE_PASS' build/debug.log
           grep -q 'SAND_TEST:GRAPHICS_FRAMEBUFFER_PASS' build/debug.log
+          grep -q 'SAND_TEST:M11_DESKTOP_FIRST_FRAME' build/debug.log
+          grep -q 'SAND_TEST:M8_DEVICE_REGISTRY_PASS' build/debug.log
+          grep -q 'SAND_TEST:M8_IRQ_ROUTING_PASS' build/debug.log
+          grep -q 'SAND_TEST:M9_SHELL_STARTED' build/debug.log
           grep -q 'SAND_TEST:RING3_ENTER' build/debug.log
           grep -q 'SAND_TEST:RING3_SYSCALL_PASS' build/debug.log
           grep -q 'SAND_TEST:ALL_PASS' build/debug.log
@@ -116,6 +120,10 @@ jobs:
           PY
           sleep 1
           test -s build/sand-os-screenshot.ppm
+      - name: Interactive QEMU tests (shell and desktop)
+        run: |
+          python3 tests/qemu/test_shell.py
+          python3 tests/qemu/test_desktop.py
       - name: Upload boot image and test evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -128,6 +136,7 @@ jobs:
             build/sand-kernel.elf
             build/sand-kernel.bin
             build/sand-os-screenshot.ppm
+            build/desktop-*.ppm
             build/debug.log
             build/serial.log
             build/qemu.log

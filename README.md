@@ -15,27 +15,28 @@ SAND is beyond a boot-sector-only prototype. The repository contains a working 3
 | Boot | Custom 16-bit BIOS boot sector and 8 KiB second stage; raw kernel load; A20, GDT and protected-mode transition | Legacy BIOS, fixed LBAs and bounded raw image; no UEFI or long mode |
 | CPU / interrupts | GDT, IDT, exception stubs, PIC and PIT | Early x86 implementation; no SMP/APIC support |
 | Memory | E820 discovery, bounded physical-frame allocator, 32-bit paging, per-process page-directory creation, small kernel heap | First 16 MiB identity-mapped; no demand paging, swap or mature VM subsystem |
-| Kernel threads | Timer-driven round-robin kernel-thread scheduler, blocking/wakeup, semaphore and mutex prototypes | Fixed thread/stack pools; single CPU; kernel threads only |
-| User mode / syscalls | Ring-3 entry, TSS kernel stack and DPL-3 syscall gate | Minimal proof-of-concept syscall dispatcher, not a stable general-purpose ABI |
-| Processes | Separate address spaces, ELF32/SAPP v1 loading, activation, termination, exit status and wait primitives | **M7 is in progress:** user processes do not yet have complete scheduler-managed execution contexts and preemptive multi-process execution |
-| Storage | Block-device abstraction, primary-master ATA PIO and SANDFS v1 format/mount/read/write | Experimental one-sector-per-file filesystem; not suitable for important data |
-| Graphics | VBE framebuffer setup, drawing primitives, initial desktop rendering and window structures | Static kernel-rendered desktop; no complete compositor, input routing or interactive shell |
+| Kernel threads | Timer-driven round-robin kernel-thread scheduler, blocking/wakeup, semaphore and mutex prototypes; user processes run as scheduler threads | Fixed thread/stack pools (10 threads, 8 KiB stacks); single CPU |
+| User mode / syscalls | Ring-3 entry, TSS kernel stack, DPL-3 `int 0x80` gate, 21 syscalls (ABI v3 in `sdk/sapp/include/sand/abi.h`) with user-pointer validation | Development ABI; not yet declared stable |
+| Processes | Separate address spaces, ELF32/SAPP v1 loading, activation, termination, exit status and wait primitives | **M7 complete:** scheduler-owned process contexts, per-process kernel stacks, CR3/TSS switching, exit/wait/spawn, ring-3 fault containment (exit status `-256-vector`), orphan reaping, up to 6 processes |
+| Drivers | Device registry, 16550 serial, IRQ-driven PS/2 keyboard and mouse, generic IRQ routing, 4-position PATA ATA PIO, CMOS RTC (**M8**) | Emulator-tested only; no USB, AHCI or APIC |
+| Storage | Block-device abstraction, ATA PIO and SANDFS v1 (volume at LBA 1024) format/mount/read/write/list/remove | Experimental one-sector-per-file filesystem; not suitable for important data |
+| Native apps | `locus` (windowed file explorer, sand-apps catalogue), `locusc` (console variant) plus `hello`, `abitest`, `spin`, `crash`; embedded in the kernel image | Not loaded from disk; other sand-apps (CAIRN, QUANTA, ...) are still host-side prototypes |
+| Shell | Native ring-3 `sandsh` (line editing, ls/cat/write/rm, run/ps/mem/devices, app launcher), supervised and restarted by the kernel (**M9**) | Runs over serial and in the desktop console window; no pipes, scripting or job control |
+| Graphics | **SAND Dusk** desktop with a **window service** (**M11**): original stroke typeface *SAND Sans*, anti-aliased shape/shadow renderer, procedural twilight-dune wallpaper, menu bar with RTC clock, floating dock, frosted-glass windows (blurred-wallpaper title bars, dune-ridge title line, capsule controls, focus glow), dynamic dock, pointer, focus-aware keyboard routing, system-console window, About panel, and a window service: apps create a surface and paint it with SAND draw commands (ABI v3, syscalls 18-21; up to 3 app windows, 520x380 max) | Kernel-side draw-command renderer, not a general pixel/GPU API; no resize, no per-window pixel buffers owned by apps, no wheel input; app windows are not permission-gated yet; 1024x768 VBE only |
 | Applications | SAPP SDK and development package loader | Current kernel loader accepts unsigned SAPP v1; no native STCI/Ed25519 enforcement yet |
 | Security / trust | Veyra ABI and STCI contracts, trust-model documentation and Ed25519 known-answer fixture | Contract and design work only; kernel verifier, protected trust store and fail-closed SAPP v2 launch gate are not implemented |
 
 Implementation claims are tied to source and automated test evidence. A documented interface, test fixture, roadmap item, or host-side tool is not by itself a working kernel feature.
 
-## Current engineering focus: M7 process execution
+## Current engineering focus: M11/M12 desktop apps
 
-The immediate milestone is to turn process loading and address-space management into a real execution model:
+M7-M9 are complete and M11's window service is in: apps can open windows, paint them, and receive routed keyboard and pointer events (`tests/qemu/test_desktop.py`). Next:
 
-- Give each runnable user process a scheduler-owned execution context and kernel stack.
-- Preserve and restore the complete interrupt-return context across timer preemption.
-- Switch address spaces and the TSS ring-0 stack together when a process is scheduled.
-- Add a defined process-exit syscall path, parent/child wait semantics and safe resource reclamation.
-- Test multiple isolated user programs, timer preemption, blocking wait, exit status and cleanup under QEMU.
+- Port more sand-apps (CAIRN terminal as a window, QUANTA, KEYSTONE) onto the window service.
+- Resizable windows and app-owned pixel surfaces (shared memory) for richer apps.
+- Load apps from SANDFS instead of embedding them in the kernel image.
 
-The current ring-3 test program is a privilege-boundary smoke test, not evidence that concurrent user applications are already supported.
+Native STCI/Ed25519 verification remains a later milestone, after Veyra contracts; unsigned SAPP v1 packages are still development-only.
 
 ## In-house DMJ technology strategy
 

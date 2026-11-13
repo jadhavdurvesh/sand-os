@@ -15,7 +15,15 @@
 #include "sand/arch/x86/vbe.h"
 #include "sand/graphics/desktop.h"
 #include "sand/storage/block.h"
+#include "sand/console/console.h"
+#include "sand/drivers/drivers.h"
+#include "sand/proc/apps.h"
+#include "sand/drivers/device.h"
 void pic_init_masked(void);
+int userland_selftest(void);
+extern uint8_t sapp_test_image[174];
+/* SANDFS lives above the 5-window kernel area (LBA 17-656). */
+#define SAND_SANDFS_START_LBA 1024u
 static volatile uint16_t *const vga=(uint16_t *)0xB8000;
 static volatile uint32_t producer_count,consumer_count,protected_count,reuse_done;
 static volatile uint32_t test_failures;
@@ -30,62 +38,65 @@ static void store_le16(uint8_t *p,uint16_t v) { p[0]=(uint8_t)v; p[1]=(uint8_t)(
 static void store_le32(uint8_t *p,uint32_t v) {
     p[0]=(uint8_t)v; p[1]=(uint8_t)(v>>8); p[2]=(uint8_t)(v>>16); p[3]=(uint8_t)(v>>24);
 }
+uint8_t sapp_test_image[174];
 static int sapp_loader_self_test(void) {
-    static uint8_t image[174];
+    uint8_t *const image=sapp_test_image;
+    const uint32_t image_size=sizeof(sapp_test_image);
     static const char metadata[]="{\"id\":\"org.sand.test\",\"name\":\"SAND test\",\"version\":\"0.2\"}";
-    for(uint32_t i=0;i<sizeof(image);++i) image[i]=0u;
+    for(uint32_t i=0;i<image_size;++i) image[i]=0u;
     image[0]='S'; image[1]='A'; image[2]='P'; image[3]='P';
     store_le16(image+4,1u); store_le16(image+6,1u);
     store_le32(image+8,64u); store_le32(image+16,0x40000000u);
     store_le32(image+20,64u); store_le32(image+24,1u);
     store_le32(image+28,96u); store_le32(image+32,(uint32_t)(sizeof(metadata)-1u));
-    store_le32(image+36,sizeof(image));
+    store_le32(image+36,image_size);
     store_le32(image+64,0x40000000u); store_le32(image+68,4096u);
     store_le32(image+72,160u); store_le32(image+76,14u);
     store_le32(image+80,5u); store_le32(image+84,4096u);
     for(uint32_t i=0;i<sizeof(metadata)-1u;++i) image[96u+i]=(uint8_t)metadata[i];
-    /* mov eax,1; mov ebx,0x53414e44; int 0x80; jmp $ */
+    /* exit(SAND_ABI_TOKEN): mov eax,1; mov ebx,0x53414e44; int 0x80; jmp $ */
     static const uint8_t code[14]={0xB8,0x01,0x00,0x00,0x00,
         0xBB,0x44,0x4E,0x41,0x53,0xCD,0x80,0xEB,0xFE};
     for(uint32_t i=0;i<sizeof(code);++i) image[160u+i]=code[i];
     sapp_test_pid=0u;
-    if(process_create_sapp("sapp-test",image,sizeof(image),&sapp_test_pid)!=0) return -1;
+    if(process_create_sapp("sapp-test",image,image_size,&sapp_test_pid)!=0) return -1;
     struct sand_process_info info;
     if(process_get_info(sapp_test_pid,&info)!=0 || info.entry!=0x40000000u ||
        info.state!=SAND_PROCESS_READY) return -1;
-    return 0;
+    /* Loader validated; the userland self-test spawns this image for real. */
+    return process_destroy(sapp_test_pid);
 }
 static void wait_test_child_exit(void *arg) {
     (void)arg;
-    debug_text("SAND_TEST:M7_WAIT_CHILD_EXITING\\n");
+    debug_text("SAND_TEST:M7_WAIT_CHILD_EXITING\n");
     if(process_exit(wait_test_child,73)!=0) wait_test_failed=1u;
 }
 static void wait_test_parent_thread(void *arg) {
     (void)arg;
     int32_t status=-1;
-    debug_text("SAND_TEST:M7_WAIT_PARENT_STARTED\\n");
-    if(process_create_test("wait-child",&wait_test_child)!=0) { debug_text("SAND_TEST:M7_WAIT_PROCESS_CREATE_FAIL\\n"); wait_test_failed=1u; wait_test_done=1u; return; }
-    debug_text("SAND_TEST:M7_WAIT_PROCESS_CREATED\\n");
+    debug_text("SAND_TEST:M7_WAIT_PARENT_STARTED\n");
+    if(process_create_test("wait-child",&wait_test_child)!=0) { debug_text("SAND_TEST:M7_WAIT_PROCESS_CREATE_FAIL\n"); wait_test_failed=1u; wait_test_done=1u; return; }
+    debug_text("SAND_TEST:M7_WAIT_PROCESS_CREATED\n");
     int child_thread_id=scheduler_create(wait_test_child_exit,0);
     if(child_thread_id<0) {
-        debug_text("SAND_TEST:M7_WAIT_THREAD_CREATE_FAIL\\n");
-        if(child_thread_id==-3) debug_text("SAND_TEST:M7_WAIT_STACK_POOL_EXHAUSTED\\n");
-        else if(child_thread_id==-4) debug_text("SAND_TEST:M7_WAIT_THREAD_SLOTS_EXHAUSTED\\n");
-        else if(child_thread_id==-2) debug_text("SAND_TEST:M7_WAIT_SCHEDULER_NOT_READY\\n");
+        debug_text("SAND_TEST:M7_WAIT_THREAD_CREATE_FAIL\n");
+        if(child_thread_id==-3) debug_text("SAND_TEST:M7_WAIT_STACK_POOL_EXHAUSTED\n");
+        else if(child_thread_id==-4) debug_text("SAND_TEST:M7_WAIT_THREAD_SLOTS_EXHAUSTED\n");
+        else if(child_thread_id==-2) debug_text("SAND_TEST:M7_WAIT_SCHEDULER_NOT_READY\n");
         wait_test_failed=1u; wait_test_done=1u; return;
     }
-    debug_text("SAND_TEST:M7_WAIT_BLOCKING\\n");
+    debug_text("SAND_TEST:M7_WAIT_BLOCKING\n");
     int wait_result=process_wait(wait_test_child,&status);
-    debug_text("SAND_TEST:M7_WAIT_PARENT_RESUMED\\n");
+    debug_text("SAND_TEST:M7_WAIT_PARENT_RESUMED\n");
     if(wait_result!=1 || status!=73) {
-        debug_text("SAND_TEST:M7_WAIT_RESULT_INVALID\\n");
+        debug_text("SAND_TEST:M7_WAIT_RESULT_INVALID\n");
         wait_test_failed=1u;
     }
     if(process_destroy(wait_test_child)!=0) {
-        debug_text("SAND_TEST:M7_WAIT_DESTROY_FAIL\\n");
+        debug_text("SAND_TEST:M7_WAIT_DESTROY_FAIL\n");
         wait_test_failed=1u;
     } else {
-        debug_text("SAND_TEST:M7_WAIT_DESTROY_PASS\\n");
+        debug_text("SAND_TEST:M7_WAIT_DESTROY_PASS\n");
     }
     wait_test_done=1u;
 }
@@ -138,7 +149,7 @@ void kernel_main(void) {
     if(scheduler_create(consumer,0)<0||scheduler_create(producer,0)<0) {
         debug_text("SAND_TEST:THREAD_CREATE_FAIL\n"); for(;;)__asm__ volatile("hlt");
     }
-    timer_init(100u);
+    timer_init(SAND_TICK_HZ);
     __asm__ volatile("sti");
     while(consumer_count<TEST_ITEMS) __asm__ volatile("hlt");
     __asm__ volatile("cli");
@@ -166,6 +177,8 @@ void kernel_main(void) {
     debug_text("SAND_TEST:M5_PROCESS_INIT\n");
     gdt_init();
     syscall_init();
+    (void)paging_reserve_table(0xE0000000u); /* VBE window: share it with every address space */
+    if(drivers_init()!=0) { debug_text("SAND_TEST:M8_DRIVERS_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     if(process_system_init()!=0) { debug_text("SAND_TEST:M5_INIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     sand_pid_t first=0u,second=0u;
     if(process_create_test("init",&first)!=0 || process_activate(first)!=0 ||
@@ -181,9 +194,9 @@ void kernel_main(void) {
     debug_text("SAND_TEST:M5_TWO_ADDRESS_SPACES_PASS\n");
     uint8_t malformed_elf[16]={0}; sand_pid_t rejected_pid=0u;
     if(process_create_elf("bad-elf",malformed_elf,sizeof(malformed_elf),&rejected_pid)==0) {
-        debug_text("SAND_TEST:M7_INVALID_ELF_ACCEPTED\\n"); for(;;) __asm__ volatile("cli; hlt");
+        debug_text("SAND_TEST:M7_INVALID_ELF_ACCEPTED\n"); for(;;) __asm__ volatile("cli; hlt");
     }
-    debug_text("SAND_TEST:M7_ELF_REJECT_INVALID_PASS\\n");
+    debug_text("SAND_TEST:M7_ELF_REJECT_INVALID_PASS\n");
     if(process_activate(second)!=0 || process_current()!=second) {
         debug_text("SAND_TEST:M5_ACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
@@ -202,20 +215,21 @@ void kernel_main(void) {
     }
     debug_text("SAND_TEST:M5_TERMINATE_DESTROY_PASS\n");
     if(process_activate(first)!=0) { debug_text("SAND_TEST:M5_REACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
-    debug_text("SAND_TEST:M6_STORAGE_INIT\\n");
-    if(ata_pio_init()!=0 || block_count()!=1u) { debug_text("SAND_TEST:M6_ATA_INIT_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt"); }
-    if(sandfs_format(0u,512u,2048u)!=0 || sandfs_mount(0u,512u)!=0) { debug_text("SAND_TEST:M6_FORMAT_MOUNT_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    debug_text("SAND_TEST:M6_STORAGE_INIT\n");
+    if(ata_pio_init()!=0 || block_count()<1u) { debug_text("SAND_TEST:M6_ATA_INIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    if(sandfs_mount(0u,SAND_SANDFS_START_LBA)!=0 && (sandfs_format(0u,SAND_SANDFS_START_LBA,2048u)!=0 || sandfs_mount(0u,SAND_SANDFS_START_LBA)!=0)) { debug_text("SAND_TEST:M6_FORMAT_MOUNT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     static const char storage_message[]="SAND native storage read/write verified";
     char storage_readback[64]; uint32_t storage_length=0u;
     if(sandfs_write("m6-test.txt",storage_message,sizeof(storage_message))!=0 ||
        sandfs_read("m6-test.txt",storage_readback,sizeof(storage_readback),&storage_length)!=0 ||
-       storage_length!=sizeof(storage_message)) { debug_text("SAND_TEST:M6_FILE_IO_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt"); }
-    for(uint32_t i=0;i<storage_length;++i) if(storage_readback[i]!=storage_message[i]) { debug_text("SAND_TEST:M6_VERIFY_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt"); }
-    debug_text("SAND_TEST:M6_ATA_IDENTIFY_PASS\\n");
-    debug_text("SAND_TEST:M6_SANDFS_FORMAT_PASS\\n");
-    debug_text("SAND_TEST:M6_FILE_READ_WRITE_PASS\\n");
-    if(sapp_loader_self_test()!=0) { debug_text("SAND_TEST:SAPP_LOADER_FAIL\\n"); for(;;) __asm__ volatile("cli; hlt"); }
-    debug_text("SAND_TEST:SAPP_NATIVE_LOADER_PASS\\n");
+       storage_length!=sizeof(storage_message)) { debug_text("SAND_TEST:M6_FILE_IO_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    for(uint32_t i=0;i<storage_length;++i) if(storage_readback[i]!=storage_message[i]) { debug_text("SAND_TEST:M6_VERIFY_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    debug_text("SAND_TEST:M6_ATA_IDENTIFY_PASS\n");
+    drivers_storage_report();
+    debug_text("SAND_TEST:M6_SANDFS_FORMAT_PASS\n");
+    debug_text("SAND_TEST:M6_FILE_READ_WRITE_PASS\n");
+    if(sapp_loader_self_test()!=0) { debug_text("SAND_TEST:SAPP_LOADER_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    debug_text("SAND_TEST:SAPP_NATIVE_LOADER_PASS\n");
     if(scheduler_create(wait_test_parent_thread,0)<0) {
         debug_text("SAND_TEST:M7_BLOCKING_WAIT_CREATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
@@ -226,18 +240,35 @@ void kernel_main(void) {
         debug_text("SAND_TEST:M7_BLOCKING_WAIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
     debug_text("SAND_TEST:M7_BLOCKING_WAIT_WAKE_PASS\n");
-    /* VBE is mapped in the kernel page directory, not the process CR3. */
-    if(paging_activate(paging_kernel_directory())!=0) {
-        debug_text("SAND_TEST:KERNEL_CR3_RESTORE_FAIL\n");
-        for(;;) __asm__ volatile("cli; hlt");
-    }
-    sand_framebuffer_t framebuffer;
-    if(vbe_framebuffer_init(&framebuffer)==0 && sand_desktop_render(&framebuffer)==0) {
-        debug_text("SAND_TEST:GRAPHICS_FRAMEBUFFER_PASS\\n");
-    } else {
-        debug_text("SAND_TEST:GRAPHICS_FRAMEBUFFER_UNAVAILABLE\\n");
-    }
+    if(process_destroy(first)!=0) { debug_text("SAND_TEST:M5_FIRST_DESTROY_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    /* M7: ring-3 applications run as scheduler threads, each in its own address space. */
     debug_text("SAND_TEST:RING3_ENTER\n");
-    process_launch(sapp_test_pid);
-    for(;;) __asm__ volatile("cli; hlt");
+    if(userland_selftest()!=0) { debug_text("SAND_TEST:M7_USERLAND_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    sand_framebuffer_t framebuffer;
+    int desktop_rc=-1;
+    if(vbe_framebuffer_init(&framebuffer)==0 && (desktop_rc=sand_desktop_start(&framebuffer))==0) {
+        debug_text("SAND_TEST:GRAPHICS_FRAMEBUFFER_PASS\n");
+        debug_text("SAND_TEST:M11_DESKTOP_STARTED\n");
+    } else {
+        debug_text("SAND_TEST:GRAPHICS_FRAMEBUFFER_UNAVAILABLE\n");
+    }
+    debug_text("SAND_TEST:ALL_PASS\n");
+    /* Session supervisor: the boot context is the idle thread. It keeps one
+     * interactive shell alive and restarts it if the user exits it. */
+    console_input_flush();
+    sand_pid_t shell=0u; uint32_t restarts=0u;
+    for(;;) {
+        struct sand_process_info info;
+        if(shell!=0u && process_get_info(shell,&info)==0 && info.state==SAND_PROCESS_TERMINATED) {
+            (void)process_destroy(shell); shell=0u; ++restarts;
+            debug_text("SAND_TEST:M9_SHELL_EXITED\n");
+        }
+        if(shell==0u) {
+            const uint8_t *image; uint32_t size;
+            if(apps_find("sandsh",&image,&size)==0 && process_spawn_sapp("sandsh",image,size,&shell)==0) {
+                debug_text(restarts?"SAND_TEST:M9_SHELL_RESTARTED\n":"SAND_TEST:M9_SHELL_STARTED\n");
+            }
+        }
+        __asm__ volatile("sti; hlt");
+    }
 }

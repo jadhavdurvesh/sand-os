@@ -9,13 +9,26 @@
 | M4 | Ring-3 privilege transition, kernel TSS stack, DPL-3 syscall gate and first user syscall | QEMU enters ring 3 and the user stub completes syscall 1 |
 | M5 | Independent process control blocks, per-process page directories, activation, termination and destruction | Two distinct address spaces, CR3 switching, lifecycle and user-process syscall smoke tests |
 | M6 | Block-device abstraction, primary-master ATA PIO, SANDFS v1 format/mount/read/write | ATA IDENTIFY and filesystem write/read/byte-compare tests |
-| M7 | Complete user-process execution: scheduler-owned process contexts, per-process kernel stacks, timer preemption across user contexts, CR3/TSS switching, syscall exit, parent/child wait and deterministic cleanup | QEMU runs at least two isolated ring-3 programs under timer preemption; each exits with a checked status; parent blocks/wakes; address spaces and kernel stacks are reclaimed; invalid user state is contained |
-| M8 | Device model and drivers: serial, keyboard, display, storage expansion | Driver-level hardware and emulator tests |
-| M9 | Native shell and core utilities | Scripted shell tests |
+| M7 ✅ | Complete user-process execution: scheduler-owned process contexts, per-process kernel stacks, timer preemption across user contexts, CR3/TSS switching, syscall exit, parent/child wait and deterministic cleanup | QEMU runs at least two isolated ring-3 programs under timer preemption; each exits with a checked status; parent blocks/wakes; address spaces and kernel stacks are reclaimed; invalid user state is contained |
+| M8 ✅ | Device model and drivers: serial, keyboard, display, storage expansion | Driver-level hardware and emulator tests |
+| M9 ✅ | Native shell and core utilities | Scripted shell tests |
 | M10 | Networking foundation and security model, EREBUS adapter groundwork | Protocol, policy-hook and isolation tests |
-| M11 | Graphics compositor, window manager, input stack | Desktop screenshot tests |
-| M12 | Native applications, package format and developer SDK | Application conformance suite |
+| M11 🔧 | Graphics compositor, window manager, input stack | Desktop screenshot tests |
+| M12 🔧 | Native applications, package format and developer SDK | Application conformance suite |
 | M13 | UEFI boot path, hardware bring-up, installers, recovery and release engineering | Hardware compatibility matrix |
+
+## Status and evidence
+
+| Milestone | Status | Evidence in this tree |
+|---|---|---|
+| M7 | Complete | `userland_selftest` markers, `abitest`, `spin`, `crash` apps; `tests/qemu/test_shell.py` (fault containment, spawn/wait, exit status) |
+| M8 | Complete (emulator) | Markers `M8_SERIAL_LOOPBACK_PASS`, `M8_PS2_INIT_PASS`, `M8_IRQ_ROUTING_PASS`, `M8_ATA_BOOT_DISK_PASS`, `M8_STORAGE_SECOND_DISK_DETECTED/READ_PASS`, `M8_DEVICE_REGISTRY_PASS`, `M8_KEYBOARD_IRQ_PASS`, `M8_MOUSE_IRQ_PASS` |
+| M9 | Complete | `tests/qemu/test_shell.py` drives `sandsh` over serial |
+| M11 | Window service done; compositor features open | Done: font, renderer, wallpaper, frosted-glass chrome, pointer, console window, window service (syscalls 18-21), focus-aware keys (`tests/qemu/test_desktop.py`, incl. windowed LOCUS). Open: resizing, app-owned pixel surfaces, per-window damage from apps, window permissions |
+| M12 | Started | Windowed native LOCUS (`apps/locus`) and console `locusc` (test_08); sand-apps SDK synced to ABI v3. Open: more apps on the window service, disk-loaded apps, signed SAPP v2 enforcement |
+
+
+The M8 hardware boundary: all driver evidence is from QEMU; nothing is claimed for real hardware.
 
 ## Non-negotiable engineering rules
 

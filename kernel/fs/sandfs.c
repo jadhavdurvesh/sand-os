@@ -61,3 +61,26 @@ int sandfs_read(const char *name,void *data,uint32_t capacity,uint32_t *length_o
     } }
     return -1;
 }
+int sandfs_list(uint32_t ordinal,char *name_out,uint32_t name_capacity,uint32_t *length_out) {
+    if(mounted_device==0 || name_out==0 || name_capacity<SANDFS_NAME_MAX || length_out==0) return -1;
+    for(uint32_t i=0;i<SANDFS_ENTRY_COUNT;++i) {
+        if(entries[i].name[0]=='\0') continue;
+        if(ordinal--!=0u) continue;
+        for(uint32_t k=0;k<SANDFS_NAME_MAX;++k) name_out[k]=entries[i].name[k];
+        name_out[SANDFS_NAME_MAX-1u]='\0';
+        *length_out=entries[i].length; return 0;
+    }
+    return -1;
+}
+int sandfs_remove(const char *name) {
+    if(mounted_device==0 || !valid_name(name)) return -1;
+    for(uint32_t i=0;i<SANDFS_ENTRY_COUNT;++i) {
+        uint32_t j=0; while(name[j] && entries[i].name[j]==name[j]) ++j;
+        if(name[j]=='\0' && entries[i].name[j]=='\0' && entries[i].name[0]!='\0') {
+            for(uint32_t k=0;k<sizeof(entries[i]);++k) ((uint8_t *)&entries[i])[k]=0u;
+            return sync_directory();
+        }
+    }
+    return -1;
+}
+int sandfs_is_mounted(void) { return mounted_device!=0; }

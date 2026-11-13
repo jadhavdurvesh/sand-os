@@ -1,6 +1,6 @@
 #include "sand/kernel/scheduler.h"
 #include "sand/arch/x86/idt.h"
-#define THREAD_STACK_SIZE 4096u
+#define THREAD_STACK_SIZE 8192u
 #define KERNEL_CS 0x08u
 #define INITIAL_EFLAGS 0x202u
 enum thread_state { THREAD_UNUSED=0, THREAD_RUNNABLE, THREAD_BLOCKED, THREAD_DEAD, THREAD_IDLE };
@@ -16,6 +16,7 @@ static struct sand_thread threads[SAND_SCHEDULER_MAX_THREADS];
 static uint8_t stack_pool[SAND_SCHEDULER_MAX_THREADS][THREAD_STACK_SIZE] __attribute__((aligned(16)));
 static uint8_t stack_used[SAND_SCHEDULER_MAX_THREADS];
 static uint32_t current_thread, switches;
+static sand_switch_hook switch_hook;
 extern void x86_thread_bootstrap(void);
 extern void x86_reschedule(void);
 
@@ -99,8 +100,32 @@ uint32_t scheduler_reschedule(uint32_t saved_stack) {
     }
     if(candidate==0u && threads[0].state!=THREAD_IDLE &&
        threads[0].state!=THREAD_RUNNABLE) return saved_stack;
-    if(candidate!=current_thread) { current_thread=candidate; ++switches; }
+    if(candidate!=current_thread) {
+        current_thread=candidate; ++switches;
+        if(switch_hook!=0) switch_hook(current_thread);
+    }
     return (uint32_t)threads[current_thread].saved_stack;
+}
+void scheduler_set_switch_hook(sand_switch_hook hook) { switch_hook=hook; }
+uint32_t scheduler_exit_current(uint32_t saved_stack) {
+    threads[current_thread].state=THREAD_DEAD;
+    threads[current_thread].wait_object=0;
+    return scheduler_reschedule(saved_stack);
+}
+uint32_t scheduler_block_current_irq(const void *wait_object, uint32_t saved_stack) {
+    threads[current_thread].wait_object=wait_object;
+    threads[current_thread].state=THREAD_BLOCKED;
+    return scheduler_reschedule(saved_stack);
+}
+int scheduler_wake_all(const void *wait_object) {
+    if(wait_object==0) return 0;
+    uint32_t flags=irq_save(); int woken=0;
+    for(uint32_t i=1u;i<SAND_SCHEDULER_MAX_THREADS;++i) {
+        if(threads[i].state==THREAD_BLOCKED && threads[i].wait_object==wait_object) {
+            threads[i].wait_object=0; threads[i].state=THREAD_RUNNABLE; ++woken;
+        }
+    }
+    irq_restore(flags); return woken;
 }
 void scheduler_yield(void) { __asm__ volatile ("int $0x30" : : : "memory"); }
 void scheduler_block_current(const void *wait_object) {

@@ -1,158 +1,71 @@
 #include "sand/graphics/desktop.h"
+#include "sand/graphics/ui.h"
+#include "sand/arch/x86/input.h"
+#include "sand/arch/x86/rtc.h"
+#include "sand/arch/x86/timer.h"
+#include "sand/kernel/scheduler.h"
+#include "sand/kernel/process.h"
+#include "sand/console/console.h"
+#include "sand/mm/frame.h"
+#include "sand/mm/heap.h"
 
-/* SAND native boot desktop. The font is intentionally embedded so the
- * kernel display never depends on a disk, app package, or userspace service. */
-static const uint8_t font[36][5] = {
- {0x3E,0x51,0x49,0x45,0x3E},{0x00,0x42,0x7F,0x40,0x00},
- {0x42,0x61,0x51,0x49,0x46},{0x21,0x41,0x45,0x4B,0x31},
- {0x18,0x14,0x12,0x7F,0x10},{0x27,0x45,0x45,0x45,0x39},
- {0x3C,0x4A,0x49,0x49,0x30},{0x01,0x71,0x09,0x05,0x03},
- {0x36,0x49,0x49,0x49,0x36},{0x06,0x49,0x49,0x29,0x1E},
- {0x7E,0x11,0x11,0x11,0x7E},{0x7F,0x49,0x49,0x49,0x36},
- {0x3E,0x41,0x41,0x41,0x22},{0x7F,0x41,0x41,0x22,0x1C},
- {0x7F,0x49,0x49,0x49,0x41},{0x7F,0x09,0x09,0x09,0x01},
- {0x3E,0x41,0x49,0x49,0x7A},{0x7F,0x08,0x08,0x08,0x7F},
- {0x00,0x41,0x7F,0x41,0x00},{0x20,0x40,0x41,0x3F,0x01},
- {0x7F,0x08,0x14,0x22,0x41},{0x7F,0x40,0x40,0x40,0x40},
- {0x7F,0x02,0x0C,0x02,0x7F},{0x7F,0x04,0x08,0x10,0x7F},
- {0x3E,0x41,0x41,0x41,0x3E},{0x7F,0x09,0x09,0x09,0x06},
- {0x3E,0x41,0x51,0x21,0x5E},{0x7F,0x09,0x19,0x29,0x46},
- {0x46,0x49,0x49,0x49,0x31},{0x01,0x01,0x7F,0x01,0x01},
- {0x3F,0x40,0x40,0x40,0x3F},{0x1F,0x20,0x40,0x20,0x1F},
- {0x3F,0x40,0x38,0x40,0x3F},{0x63,0x14,0x08,0x14,0x63},
- {0x07,0x08,0x70,0x08,0x07},{0x61,0x51,0x49,0x45,0x43}
-};
-static uint32_t glyph(char c) {
-    if(c>='a'&&c<='z') c=(char)(c-'a'+'A');
-    if(c>='0'&&c<='9') return (uint32_t)(c-'0');
-    if(c>='A'&&c<='Z') return 10u+(uint32_t)(c-'A');
-    return 36u;
+static sand_ui_t ui;
+static volatile int desktop_ready;
+static sand_framebuffer_t fb;
+static volatile uint32_t frames_presented;
+static volatile uint32_t pointer_events;
+
+static void debug_text(const char *s) { while (*s) __asm__ volatile("outb %0,%1" : : "a"(*s++), "Nd"((uint16_t)0xE9)); }
+static int host_clock(int *h, int *m) { return rtc_read_time(h, m, 0); }
+static void host_sysinfo(struct sand_ui_sysinfo *s) {
+    s->ticks = timer_ticks(); s->tick_hz = SAND_TICK_HZ; s->free_frames = frame_free_count(); s->total_frames = SAND_FRAME_LIMIT;
+    s->heap_used = kheap_used(); s->heap_total = 0x00C00000u; s->switches = scheduler_switch_count(); s->processes = process_live_count();
 }
-static void txt(sand_framebuffer_t *fb,uint32_t x,uint32_t y,const char *s,uint32_t color,uint32_t scale) {
-    while(*s) {
-        uint32_t g=glyph(*s++);
-        if(g<36u) for(uint32_t col=0;col<5u;++col)
-            for(uint32_t row=0;row<7u;++row) if(font[g][col]&(1u<<row))
-                (void)graphics_fill_rect(fb,(int32_t)(x+col*scale),(int32_t)(y+row*scale),scale,scale,color);
-        x+=6u*scale;
+static uint32_t host_pid(void) { return process_current(); }
+static int host_pid_alive(uint32_t pid) { struct sand_process_info info; return process_get_info(pid, &info) == 0 && info.state != SAND_PROCESS_TERMINATED; }
+static void console_to_ui(const char *data, uint32_t length) { sand_ui_term_write(&ui, data, length); }
+
+static void present_frame(void) {
+    struct sand_ui_rect r;
+    if (sand_ui_frame(&ui, &r)) {
+        sand_ui_present(&ui, fb.pixels, fb.pitch_bytes, fb.bits_per_pixel, &r);
+        if (++frames_presented == 1u) debug_text("SAND_TEST:M11_DESKTOP_FIRST_FRAME\n");
     }
 }
-static void line(sand_framebuffer_t *fb,int32_t x0,int32_t y0,int32_t x1,int32_t y1,uint32_t c) {
-    (void)graphics_draw_line(fb,x0,y0,x1,y1,c);
-}
-static void panel(sand_framebuffer_t *fb,uint32_t x,uint32_t y,uint32_t w,uint32_t h,uint32_t color) {
-    (void)graphics_fill_round_rect(fb,(int32_t)x+2,(int32_t)y+4,w,h,12u,0x070E18u);
-    (void)graphics_fill_round_rect(fb,(int32_t)x,(int32_t)y,w,h,12u,color);
-    (void)graphics_fill_rect(fb,(int32_t)x+14,(int32_t)y+1,w-28u,1u,0x34465Au);
-}
-static void dot(sand_framebuffer_t *fb,uint32_t x,uint32_t y,uint32_t color,uint32_t r) {
-    for(uint32_t yy=0;yy<r*2u+1u;++yy) for(uint32_t xx=0;xx<r*2u+1u;++xx) {
-        int32_t dx=(int32_t)xx-(int32_t)r,dy=(int32_t)yy-(int32_t)r;
-        if((uint32_t)(dx*dx+dy*dy)<=r*r)
-            (void)graphics_put_pixel(fb,(int32_t)(x+xx),(int32_t)(y+yy),color);
-    }
-}
-static void wallpaper(sand_framebuffer_t *fb) {
-    for(uint32_t y=0;y<fb->height;++y) {
-        uint32_t t=y*255u/fb->height;
-        uint32_t r=7u+t*7u/255u,g=14u+t*15u/255u,b=29u+t*34u/255u;
-        (void)graphics_fill_rect(fb,0,(int32_t)y,fb->width,1u,(r<<16)|(g<<8)|b);
-    }
-    /* Low-contrast ambient rings and angled light. */
-    uint32_t cx=fb->width*3u/4u,cy=fb->height/3u;
-    for(uint32_t ring=0;ring<7u;++ring) {
-        uint32_t radius=90u+ring*24u;
-        int32_t px=(int32_t)(cx+radius),py=(int32_t)cy;
-        for(uint32_t a=1u;a<=48u;++a) {
-            uint32_t nx=cx+(radius*(48u-a)*(48u-a))/(48u*48u);
-            (void)nx;
-            int32_t x=(int32_t)(cx+(radius*(a<24u?a:48u-a))/24u);
-            int32_t y=(int32_t)(cy+(a<24u?1:-1)*(int32_t)(radius*a*(48u-a)/576u));
-            line(fb,px,py,x,y,0x142B43u); px=x; py=y;
+static void desktop_thread(void *arg) {
+    (void)arg;
+    for (;;) {
+        sand_input_event_t e; int moved = 0; int32_t dx = 0, dy = 0; uint8_t buttons = ui.buttons;
+        while (ps2_input_poll(&e)) {
+            if (e.type == SAND_INPUT_KEY) {
+                if (e.pressed && e.ascii != 0u && !sand_ui_key(&ui, (uint8_t)e.ascii) && e.ascii < 0x80u) console_input_push((uint8_t)e.ascii);
+                continue;
+            }
+            if (e.type != SAND_INPUT_POINTER) continue;
+            dx += e.mouse_dx; dy += e.mouse_dy; buttons = e.buttons; moved = 1;
+            if (e.buttons != ui.buttons || dx > 40 || dx < -40) { sand_ui_pointer(&ui, dx, dy, buttons); dx = dy = 0; moved = 0; }
         }
+        if (moved || buttons != ui.buttons) { sand_ui_pointer(&ui, dx, dy, buttons); if (++pointer_events == 1u) debug_text("SAND_TEST:M11_POINTER_EVENT\n"); }
+        present_frame();
+        __asm__ volatile("sti; hlt");
     }
 }
-static void status_card(sand_framebuffer_t *fb,uint32_t x,uint32_t y,uint32_t w,
-                        uint32_t accent,const char *label,const char *value,const char *detail,uint32_t kind) {
-    panel(fb,x,y,w,112u,0x111F30u);
-    dot(fb,x+25u,y+27u,accent,4u);
-    if(kind==0u) {
-        (void)graphics_fill_round_rect(fb,(int32_t)x+43,(int32_t)y+17,25u,20u,4u,0x263D52u);
-        (void)graphics_fill_rect(fb,(int32_t)x+48,(int32_t)y+22,15u,3u,accent);
-        (void)graphics_fill_rect(fb,(int32_t)x+48,(int32_t)y+29,10u,3u,accent);
-    } else if(kind==1u) {
-        (void)graphics_fill_round_rect(fb,(int32_t)x+45,(int32_t)y+17,20u,20u,5u,0x263D52u);
-        line(fb,(int32_t)x+55,(int32_t)y+20,(int32_t)x+55,(int32_t)y+34,accent);
-        line(fb,(int32_t)x+48,(int32_t)y+27,(int32_t)x+62,(int32_t)y+27,accent);
-    } else {
-        (void)graphics_fill_round_rect(fb,(int32_t)x+45,(int32_t)y+17,20u,20u,4u,0x263D52u);
-        line(fb,(int32_t)x+49,(int32_t)y+22,(int32_t)x+61,(int32_t)y+22,accent);
-        line(fb,(int32_t)x+49,(int32_t)y+27,(int32_t)x+61,(int32_t)y+27,accent);
-        line(fb,(int32_t)x+49,(int32_t)y+32,(int32_t)x+58,(int32_t)y+32,accent);
-    }
-    txt(fb,x+18u,y+53u,label,0x8EA5BCu,1u);
-    txt(fb,x+18u,y+70u,value,0xEAF2FAu,2u);
-    txt(fb,x+18u,y+96u,detail,accent,1u);
-}
-int sand_desktop_render(sand_framebuffer_t *fb) {
-    if(!graphics_framebuffer_valid(fb)||fb->width<640u||fb->height<480u) return -1;
-    wallpaper(fb);
-    /* Top panel */
-    (void)graphics_fill_rect(fb,0,0,fb->width,48u,0x091321u);
-    (void)graphics_fill_rect(fb,0,47,(uint32_t)fb->width,1u,0x26394Fu);
-    (void)graphics_fill_round_rect(fb,18,10,29u,28u,8u,0x18394Au);
-    txt(fb,25,20,"S",0x69E4CFu,2u);
-    txt(fb,59,18,"SAND",0xE7F0F8u,2u);
-    txt(fb,127,22,"SYSTEM",0x8FA7BEu,1u);
-    dot(fb,fb->width-154u,23u,0x60DCC5u,3u);
-    txt(fb,fb->width-140u,19u,"ONLINE",0xA8BACB,1u);
-    /* Main heading */
-    txt(fb,42u,82u,"YOUR SPACE",0x72E2D0u,1u);
-    txt(fb,40u,103u,"A CLEARER WAY TO COMPUTE",0xF0F5FAu,2u);
-    txt(fb,42u,129u,"SAND OS KERNEL SESSION",0x91A7BDu,1u);
-    uint32_t margin=40u,gap=14u,content=fb->width-margin*2u;
-    uint32_t cw=(content-gap*2u)/3u,cy=164u;
-    status_card(fb,margin,cy,cw,0x62DCC5u,"MEMORY","PAGING","FRAME MANAGER",0u);
-    status_card(fb,margin+cw+gap,cy,cw,0x91BDF0u,"PROCESSES","SCHEDULER","PREEMPTIVE CORE",1u);
-    status_card(fb,margin+(cw+gap)*2u,cy,cw,0xC5A8F0u,"STORAGE","SANDFS","NATIVE FILESYSTEM",2u);
-    /* Wide system panel with actual architecture information, not empty filler. */
-    uint32_t py=cy+132u,ph=fb->height-py-104u;
-    panel(fb,margin,py,content,ph,0x101E2Eu);
-    txt(fb,margin+22u,py+20u,"SYSTEM STATUS",0xEAF2FAu,1u);
-    (void)graphics_fill_rect(fb,(int32_t)margin+22,(int32_t)py+40u,content-44u,1u,0x2A4055u);
-    uint32_t col1=margin+24u,col2=margin+content/3u,col3=margin+content*2u/3u;
-    txt(fb,col1,py+57u,"ARCHITECTURE",0x7894AEu,1u);
-    txt(fb,col1,py+79u,"X86 32 BIT",0xDDE8F2u,2u);
-    txt(fb,col2,py+57u,"DISPLAY",0x7894AEu,1u);
-    txt(fb,col2,py+79u,"VBE GRAPHICS",0xDDE8F2u,2u);
-    txt(fb,col3,py+57u,"SESSION",0x7894AEu,1u);
-    txt(fb,col3,py+79u,"KERNEL MODE",0xDDE8F2u,2u);
-    /* Small live-state indicators along panel base. */
-    dot(fb,col1,py+ph-19u,0x62DCC5u,3u);
-    txt(fb,col1+12u,py+ph-23u,"CORE ACTIVE",0x91A7BDu,1u);
-    dot(fb,col2,py+ph-19u,0x91BDF0u,3u);
-    txt(fb,col2+12u,py+ph-23u,"FRAMEBUFFER",0x91A7BDu,1u);
-    dot(fb,col3,py+ph-19u,0xC5A8F0u,3u);
-    txt(fb,col3+12u,py+ph-23u,"NATIVE KERNEL",0x91A7BDu,1u);
-    /* Dock */
-    uint32_t dock_y=fb->height-62u;
-    (void)graphics_fill_rect(fb,0,(int32_t)dock_y,fb->width,62u,0x08111Du);
-    (void)graphics_fill_rect(fb,0,(int32_t)dock_y,fb->width,1u,0x2B4055u);
-    uint32_t dx=fb->width/2u-48u;
-    for(uint32_t i=0;i<3u;++i) {
-        uint32_t x=dx+i*42u;
-        (void)graphics_fill_round_rect(fb,(int32_t)x,(int32_t)dock_y+12,32u,32u,9u,
-            i==0u?0x214B4B:(i==1u?0x263D59:0x3A3152));
-        if(i==0u) {
-            (void)graphics_fill_round_rect(fb,(int32_t)x+9,(int32_t)dock_y+20,14u,14u,4u,0x69E4CFu);
-        } else if(i==1u) {
-            line(fb,(int32_t)x+8,(int32_t)dock_y+28,(int32_t)x+16,(int32_t)dock_y+17,0x91BDF0u);
-            line(fb,(int32_t)x+16,(int32_t)dock_y+17,(int32_t)x+24,(int32_t)dock_y+28,0x91BDF0u);
-        } else {
-            (void)graphics_fill_rect(fb,(int32_t)x+9,(int32_t)dock_y+20,14u,14u,0xC5A8F0u);
-        }
-    }
-    txt(fb,18u,dock_y+27u,"SAND OS",0x91A7BDu,1u);
-    txt(fb,fb->width-104u,dock_y+27u,"READY",0x69E4CFu,1u);
+
+int sand_desktop_start(const sand_framebuffer_t *framebuffer) {
+    if (!graphics_framebuffer_valid(framebuffer) || (framebuffer->bits_per_pixel != 24u && framebuffer->bits_per_pixel != 32u)) return -1;
+    fb = *framebuffer;
+    sand_ui_host_t host = { kmalloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive };
+    if (sand_ui_init(&ui, &host, (int32_t)fb.width, (int32_t)fb.height) != 0) return -2;
+    present_frame();
+    if (console_add_sink(console_to_ui) < 0) return -3;
+    ps2_input_set_console_forward(0);
+    desktop_ready = 1;
+    if (scheduler_create(desktop_thread, 0) < 0) return -4;
     return 0;
 }
+uint32_t sand_desktop_frames(void) { return frames_presented; }
+
+int sand_desktop_win_create(const char *title, int32_t w, int32_t h) { return desktop_ready ? sand_ui_win_create(&ui, process_current(), title, w, h) : SAND_E_NOSYS; }
+int sand_desktop_win_draw(int32_t id, const struct sand_draw *cmds, uint32_t count) { return desktop_ready ? sand_ui_win_draw(&ui, id, process_current(), cmds, count) : SAND_E_NOSYS; }
+int sand_desktop_win_event(int32_t id, struct sand_event *out) { return desktop_ready ? sand_ui_win_event(&ui, id, process_current(), out) : SAND_E_NOSYS; }
+int sand_desktop_win_close(int32_t id) { return desktop_ready ? sand_ui_win_close(&ui, id, process_current()) : SAND_E_NOSYS; }
