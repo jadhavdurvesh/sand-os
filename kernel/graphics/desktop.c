@@ -6,6 +6,7 @@
 #include "sand/kernel/scheduler.h"
 #include "sand/kernel/process.h"
 #include "sand/console/console.h"
+#include "sand/proc/apps.h"
 #include "sand/mm/frame.h"
 #include "sand/mm/heap.h"
 
@@ -23,6 +24,14 @@ static void host_sysinfo(struct sand_ui_sysinfo *s) {
 }
 static uint32_t host_pid(void) { return process_current(); }
 static int host_pid_alive(uint32_t pid) { struct sand_process_info info; return process_get_info(pid, &info) == 0 && info.state != SAND_PROCESS_TERMINATED; }
+static int host_launch(const char *app) {
+    const uint8_t *image; uint32_t size, flags; sand_pid_t pid;
+    if (apps_find(app, &image, &size) != 0) return -1;
+    __asm__ volatile("pushf; pop %0; cli" : "=r"(flags) : : "memory");
+    int rc = process_spawn_detached(app, image, size, &pid);
+    if (flags & 0x200u) __asm__ volatile("sti" : : : "memory");
+    return rc;
+}
 static void console_to_ui(const char *data, uint32_t length) { sand_ui_term_write(&ui, data, length); }
 
 static void present_frame(void) {
@@ -54,7 +63,7 @@ static void desktop_thread(void *arg) {
 int sand_desktop_start(const sand_framebuffer_t *framebuffer) {
     if (!graphics_framebuffer_valid(framebuffer) || (framebuffer->bits_per_pixel != 24u && framebuffer->bits_per_pixel != 32u)) return -1;
     fb = *framebuffer;
-    sand_ui_host_t host = { kmalloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive };
+    sand_ui_host_t host = { kmalloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive, host_launch };
     if (sand_ui_init(&ui, &host, (int32_t)fb.width, (int32_t)fb.height) != 0) return -2;
     present_frame();
     if (console_add_sink(console_to_ui) < 0) return -3;

@@ -168,7 +168,7 @@ int sand_ui_init(sand_ui_t *ui, const sand_ui_host_t *host, int32_t w, int32_t h
     ui->win[1] = (struct sand_ui_window){ .x = w - 304, .y = 118, .w = 280, .h = 330, .title = "About SAND", .kind = 1, .visible = 1, .alive = 1 };
     if (ui->win[1].x < 80) ui->win[1].x = 80;
     ui->order[0] = 2; ui->order[1] = 3; ui->order[2] = 4; ui->order[3] = 1; ui->order[4] = 0;
-    ui->press_win = -1; ui->hover_ctrl = -1; ui->liveness_seen = 0;
+    ui->press_win = -1; ui->hover_ctrl = -1; ui->launcher_open = 0; ui->launcher_hover = -1; ui->liveness_seen = 0;
     ui->px = w / 2; ui->py = h / 2; ui->buttons = 0; ui->drag_win = -1; ui->hover_dock = -1;
     ui->dirty = (struct sand_ui_rect){ 0, 0, 0, 0 };
     ui->cursor_box = (struct sand_ui_rect){ 0, 0, 0, 0 };
@@ -255,11 +255,12 @@ void sand_ui_term_write(sand_ui_t *ui, const char *data, uint32_t length) {
 /* ---- layout ---- */
 static int dock_items(const sand_ui_t *ui, int *items) {
     int n = 0;
+    items[n++] = -1;                                      /* launcher */
     for (int i = 0; i < SAND_UI_WINDOWS; ++i) if (i < SAND_UI_SHELL_WINDOWS || ui->win[i].alive) items[n++] = i;
     return n;
 }
 static void dock_rect(const sand_ui_t *ui, int32_t *x, int32_t *y, int32_t *w, int32_t *h) {
-    int items[SAND_UI_WINDOWS]; int n = dock_items(ui, items);
+    int items[SAND_UI_WINDOWS + 1]; int n = dock_items(ui, items);
     *w = n * DOCK_ICON + (n - 1) * DOCK_GAP + 2 * DOCK_PAD + 8;
     *h = DOCK_ICON + 2 * DOCK_PAD - 2; *x = (ui->w - *w) / 2; *y = ui->h - *h - 14;
 }
@@ -277,7 +278,7 @@ static int top_window(const sand_ui_t *ui) {
 static void draw_dock(sand_ui_t *ui) {
     gfx_t *g = &ui->g; int32_t dx, dy, dw, dh; dock_rect(ui, &dx, &dy, &dw, &dh);
     if (!gfx_visible(g, dx - 40, dy - 40, dw + 80, dh + 80)) return;
-    int items[SAND_UI_WINDOWS]; int n = dock_items(ui, items);
+    int items[SAND_UI_WINDOWS + 1]; int n = dock_items(ui, items);
     gfx_shadow(g, dx, dy, dw, dh, 24, 26, 10, 0x000000u, 120u);
     glass(ui, dx, dy, dw, dh, 24, dy, dy + dh, 0x1B1740u, 150u);
     gfx_rrect_ring(g, dx, dy, dw, dh, 24, 1, C_LINE, 44u);
@@ -287,7 +288,13 @@ static void draw_dock(sand_ui_t *ui) {
     for (int k = 0; k < n; ++k) {
         int i = items[k]; int32_t x, y; dock_icon_pos(ui, k, &x, &y); int32_t c = DOCK_ICON;
         gfx_shadow(g, x, y, c, c, 14, 10, 4, 0x000000u, 90u);
-        if (i == 0) {                                   /* System Console: dusk tile, chevron + caret */
+        if (i < 0) {                                    /* launcher: a sun with eight rays */
+            gfx_rrect_gradient(g, x, y, c, c, 14, 0x2A2560u, 0x100D27u, 255u);
+            gfx_circle(g, x + 27, y + 27, 6, C_CHAMP, 255u);
+            static const int8_t ray[8][4] = { {0,-11,0,-16}, {8,-8,11,-11}, {11,0,16,0}, {8,8,11,11}, {0,11,0,16}, {-8,8,-11,11}, {-11,0,-16,0}, {-8,-8,-11,-11} };
+            for (int q = 0; q < 8; ++q) gfx_line(g, x + 27 + ray[q][0], y + 27 + ray[q][1], x + 27 + ray[q][2], y + 27 + ray[q][3], 26, 0xFFE2B0u, ui->launcher_open ? 255u : 190u);
+            if (ui->launcher_open) gfx_rrect_ring(g, x, y, c, c, 14, 2, C_CHAMP, 200u);
+        } else if (i == 0) {                                   /* System Console: dusk tile, chevron + caret */
             gfx_rrect_gradient(g, x, y, c, c, 14, 0x3A2F6Eu, 0x15112Fu, 255u);
             gfx_line(g, x + 15, y + 17, x + 25, y + 27, 40, C_CHAMP, 255u);
             gfx_line(g, x + 25, y + 27, x + 15, y + 37, 40, C_CHAMP, 255u);
@@ -303,8 +310,51 @@ static void draw_dock(sand_ui_t *ui) {
             gfx_text_center(g, &ui->large, x + c / 2, y + 38, l, 0xFFFFFFu, 245u);
         }
         gfx_rect(g, x + 8, y + 1, c - 16, 1, C_LINE, 90u);
-        gfx_rrect_ring(g, x, y, c, c, 14, 1, C_LINE, 60u);
-        if (ui->win[i].visible) gfx_circle(g, x + c / 2, dy + dh - 8, 2, C_CHAMP, 230u);
+        if (i >= 0) gfx_rrect_ring(g, x, y, c, c, 14, 1, C_LINE, 60u);
+        if (i >= 0 && ui->win[i].visible) gfx_circle(g, x + c / 2, dy + dh - 8, 2, C_CHAMP, 230u);
+    }
+}
+/* ---- launcher: a glass panel above the dock ---- */
+struct launcher_app { const char *label, *app, *desc; uint32_t top, bottom; char glyph; };
+static const struct launcher_app launcher_apps[] = {
+    { "LOCUS", "locus", "Files", 0x5CD6A0u, 0x1E7A66u, 'L' },
+    { "QUANTA", "quanta", "Calculator", 0xE8836Bu, 0x9C3E5Au, 'Q' },
+    { "CHRONOS", "chronos", "Stopwatch", 0xB48CFFu, 0x5A3AA0u, 'C' },
+};
+#define LAUNCHER_COUNT ((int)(sizeof(launcher_apps) / sizeof(launcher_apps[0])))
+#define LAUNCHER_W 280
+#define LAUNCHER_ROW 52
+static void launcher_rect(const sand_ui_t *ui, int32_t *x, int32_t *y, int32_t *w, int32_t *h) {
+    int32_t dx, dy, dw, dh; dock_rect(ui, &dx, &dy, &dw, &dh);
+    *w = LAUNCHER_W; *h = 40 + LAUNCHER_COUNT * LAUNCHER_ROW + 10; *x = dx; *y = dy - *h - 14;
+    if (*x + *w > ui->w - 10) *x = ui->w - 10 - *w;
+}
+static int launcher_row(const sand_ui_t *ui, int32_t px, int32_t py) {
+    if (!ui->launcher_open) return -1;
+    int32_t x, y, w, h; launcher_rect(ui, &x, &y, &w, &h);
+    if (px < x + 8 || px >= x + w - 8 || py < y + 36) return -1;
+    int row = (py - y - 36) / LAUNCHER_ROW;
+    return (row >= 0 && row < LAUNCHER_COUNT) ? row : -1;
+}
+static void mark_launcher(sand_ui_t *ui) { int32_t x, y, w, h; launcher_rect(ui, &x, &y, &w, &h); mark(ui, x - 50, y - 50, x + w + 50, y + h + 50); mark_dock(ui); }
+static void draw_launcher(sand_ui_t *ui) {
+    if (!ui->launcher_open) return;
+    gfx_t *g = &ui->g; int32_t x, y, w, h; launcher_rect(ui, &x, &y, &w, &h);
+    if (!gfx_visible(g, x - 50, y - 50, w + 100, h + 100)) return;
+    gfx_shadow(g, x, y, w, h, 20, 34, 14, 0x000000u, 150u);
+    glass(ui, x, y, w, h, 20, y, y + h, 0x17133Au, 165u);
+    gfx_rrect_ring(g, x, y, w, h, 20, 1, C_LINE, 50u);
+    gfx_rect(g, x + 20, y + 1, w - 40, 1, C_LINE, 60u);
+    gfx_text(g, &ui->sans_small, x + 20, y + 26, "APPLICATIONS", C_MUTED, 255u, 120);
+    for (int i = 0; i < LAUNCHER_COUNT; ++i) {
+        const struct launcher_app *a = &launcher_apps[i]; int32_t ry = y + 36 + i * LAUNCHER_ROW;
+        if (ui->launcher_hover == i) { gfx_rrect(g, x + 8, ry, w - 16, LAUNCHER_ROW - 6, 12, 0x3A3578u, 200u); gfx_rrect_ring(g, x + 8, ry, w - 16, LAUNCHER_ROW - 6, 12, 1, C_CHAMP, 90u); }
+        gfx_rrect_gradient(g, x + 18, ry + 5, 36, 36, 11, a->top, a->bottom, 255u);
+        char l[2] = { a->glyph, 0 };
+        gfx_text_center(g, &ui->large, x + 36, ry + 32, l, 0xFFFFFFu, 245u);
+        gfx_rrect_ring(g, x + 18, ry + 5, 36, 36, 11, 1, C_LINE, 60u);
+        gfx_text(g, &ui->sans_medium, x + 66, ry + 20, a->label, C_TEXT, 255u, 60);
+        gfx_text(g, &ui->sans_small, x + 66, ry + 36, a->desc, C_MUTED, 255u, 0);
     }
 }
 static void draw_menubar(sand_ui_t *ui) {
@@ -562,7 +612,7 @@ static void raise_window(sand_ui_t *ui, int idx) {
 }
 static int dock_hit(const sand_ui_t *ui, int32_t x, int32_t y) {
     int32_t dx, dy, dw, dh; dock_rect(ui, &dx, &dy, &dw, &dh);
-    int items[SAND_UI_WINDOWS]; int n = dock_items(ui, items);
+    int items[SAND_UI_WINDOWS + 1]; int n = dock_items(ui, items);
     if (x < dx || x >= dx + dw || y < dy - 10 || y >= dy + dh) return -1;
     for (int k = 0; k < n; ++k) {
         int32_t ix, iy; dock_icon_pos(ui, k, &ix, &iy);
@@ -601,11 +651,21 @@ void sand_ui_pointer(sand_ui_t *ui, int32_t dx, int32_t dy, uint8_t buttons) {
         mark_window(ui, ui->drag_win);
     }
     if (!(buttons & 1u)) ui->drag_win = -1;
-    if (pressed) {
+    { int hr = launcher_row(ui, ui->px, ui->py); if (hr != ui->launcher_hover) { ui->launcher_hover = hr; if (ui->launcher_open) mark_launcher(ui); } }
+    int consumed = 0;
+    if (pressed && ui->launcher_open) {
+        int row = launcher_row(ui, ui->px, ui->py); int dd = dock_hit(ui, ui->px, ui->py);
+        int litems[SAND_UI_WINDOWS + 1]; (void)dock_items(ui, litems);
+        if (row >= 0 && ui->host.launch) { (void)ui->host.launch(launcher_apps[row].app); consumed = 1; }
+        else if (dd >= 0 && litems[dd] < 0) consumed = 1;
+        mark_launcher(ui); ui->launcher_open = 0;
+    }
+    if (pressed && !consumed) {
         int d = dock_hit(ui, ui->px, ui->py);
         if (d >= 0) {
-            int items[SAND_UI_WINDOWS]; (void)dock_items(ui, items); int wi = items[d];
-            if (ui->win[wi].visible && top_window(ui) == wi) { ui->win[wi].visible = 0; mark_window(ui, wi); }
+            int items[SAND_UI_WINDOWS + 1]; (void)dock_items(ui, items); int wi = items[d];
+            if (wi < 0) { ui->launcher_open = 1; ui->launcher_hover = -1; mark_launcher(ui); }
+            else if (ui->win[wi].visible && top_window(ui) == wi) { ui->win[wi].visible = 0; mark_window(ui, wi); }
             else { ui->win[wi].visible = 1; raise_window(ui, wi); }
             mark_dock(ui);
         } else {
@@ -685,6 +745,7 @@ int sand_ui_frame(sand_ui_t *ui, struct sand_ui_rect *out) {
     }
     draw_menubar(ui);
     draw_dock(ui);
+    draw_launcher(ui);
     gfx_set_clip(&ui->g, 0, 0, ui->w, ui->h);
     ++ui->frames;
     *out = present;

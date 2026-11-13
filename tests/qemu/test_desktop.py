@@ -127,6 +127,37 @@ class DesktopTest(unittest.TestCase):
         self.assertNotIn("quanta", ps)
         self.assertNotIn("chronos", ps)
 
+    def move_to(self, x, y):
+        """Pointer starts wherever earlier tests left it; steer relative to the tracked position."""
+        cx, cy = getattr(self, "_ptr", (None, None))
+        if cx is None:
+            for _ in range(12):                      # clamp to the top-left corner first (deltas are per-packet limited)
+                self.vm.mouse_move(-100, -100)
+            cx, cy = 0, 0
+        dx, dy = x - cx, y - cy
+        while dx or dy:
+            sx = max(-100, min(100, dx)); sy = max(-100, min(100, dy))
+            self.vm.mouse_move(sx, sy); dx -= sx; dy -= sy
+        DesktopTest._ptr = (x, y)
+
+    def test_07_dock_launcher_starts_an_app(self):
+        """Click the launcher tile, pick LOCUS from the panel: the app starts and opens a window."""
+        self.move_to(444, 716)                               # launcher tile in the dock
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(1.0)
+        panel = self.shot("desktop-launcher.ppm")
+        self.assertGreater(sum(1 for x in range(420, 680) for y in range(470, 640) if sum(pixel(panel, x, y)) > 500), 200)   # panel text and icons
+        self.move_to(501, 517)                               # LOCUS row
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(2.5)
+        win = self.shot("desktop-launched.ppm")
+        ps = self.vm.run_command("ps")
+        self.assertIn("locus", ps)
+        self.vm.sendkey("q")                                  # focused app exits; detached child is reaped by the kernel
+        time.sleep(1.5)
+        ps = self.vm.run_command("ps")
+        self.assertNotIn("locus", ps)
+
 
 if __name__ == "__main__":
     unittest.main()

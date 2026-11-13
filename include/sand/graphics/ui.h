@@ -19,6 +19,7 @@ typedef struct {
     void (*sysinfo)(struct sand_ui_sysinfo *out);
     uint32_t (*current_pid)(void);                              /* caller of a window syscall */
     int (*pid_alive)(uint32_t pid);                             /* 0 when the owner has exited */
+    int (*launch)(const char *app);                             /* start an app for the desktop; <0 on failure */
 } sand_ui_host_t;
 
 #define SAND_UI_TERM_COLS 80
@@ -48,6 +49,7 @@ typedef struct sand_ui {
     int32_t drag_win, drag_dx, drag_dy, press_win, hover_ctrl;   /* hover_ctrl = window*4 + control, -1 none */
     uint32_t *blur; int32_t bw, bh;                   /* 1/4-resolution frosted wallpaper */
     uint32_t liveness_seen;
+    int launcher_open, launcher_hover;
     int32_t hover_dock;
     struct sand_ui_rect dirty, cursor_box;
     int cursor_moved;
