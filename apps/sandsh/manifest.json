@@ -1,0 +1,1 @@
+{"id":"org.sand.sandsh","name":"SAND Shell","version":"0.2.0","vendor":"SAND","description":"Native command shell","permissions":["console.rw","fs.rw","process.spawn"],"dependencies":[]}

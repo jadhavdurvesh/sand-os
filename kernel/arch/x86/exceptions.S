@@ -51,15 +51,25 @@ ISR_NOERR 31
 x86_exception_common:
     cld
     pushal
+    movl %esp, %ebx
     leal 32(%esp), %eax
-    movl 8(%eax), %edx
-    pushl %edx
+    pushl %ebx
+    pushl 12(%eax)
+    pushl 8(%eax)
     pushl 4(%eax)
     pushl (%eax)
     call x86_exception_dispatch
-    addl $12, %esp
+    addl $20, %esp
+    cmpl %ebx, %eax
+    jne 1f
+    movl %eax, %esp
     popal
-    addl $8, %esp
+    addl $8, %esp           /* drop vector + error code */
+    iret
+1:  /* Another thread was scheduled: its context uses the IRQ/syscall
+       layout (PUSHAL + IRET frame), without vector/error words. */
+    movl %eax, %esp
+    popal
     iret
 .section .rodata
 .align 4
