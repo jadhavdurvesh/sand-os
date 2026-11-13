@@ -1,0 +1,1 @@
+{"id":"org.sand.abitest","name":"ABI Test","version":"0.2.0","vendor":"SAND","description":"Syscall ABI conformance from ring 3","permissions":["console.write","fs.rw","process.spawn"],"dependencies":[]}
