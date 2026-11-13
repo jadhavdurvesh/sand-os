@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     if (sand_ui_init(&ui, &host, 1024, 768)) { fprintf(stderr, "init failed\n"); return 1; }
     const char *t = "\x1b[38;2;242;201;138mSAND\x1b[0m shell \x1b[2m- type help\x1b[0m\r\n\x1b[1;36msand\x1b[0m> ls\r\nhello.txt   18\r\nnotes.md    204\r\n\x1b[1;36msand\x1b[0m> ";
     sand_ui_term_write(&ui, t, (uint32_t)strlen(t));
-    sand_ui_pointer(&ui, -300, -200, 0);
+    sand_ui_pointer(&ui, 170, -302, 0);
     sand_ui_pointer(&ui, 0, 0, 0);
     int id = sand_ui_win_create(&ui, 7u, "LOCUS", 520, 360);
     struct sand_draw d[3] = { { .op = SAND_DRAW_CLEAR, .color = 0x15122Fu }, { .op = SAND_DRAW_RRECT, .x = 14, .y = 266, .w = 112, .h = 28, .r = 9, .aux = 1, .color = 0x7FD6B0u, .color2 = 0x3E8F78u },

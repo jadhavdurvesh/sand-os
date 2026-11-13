@@ -45,7 +45,7 @@ typedef struct sand_ui {
     struct sand_ui_window win[SAND_UI_WINDOWS];
     uint8_t order[SAND_UI_WINDOWS];                    /* z-order, back to front */
     int32_t px, py; uint8_t buttons;
-    int32_t drag_win, drag_dx, drag_dy, press_win;
+    int32_t drag_win, drag_dx, drag_dy, press_win, hover_ctrl;   /* hover_ctrl = window*4 + control, -1 none */
     uint32_t *blur; int32_t bw, bh;                   /* 1/4-resolution frosted wallpaper */
     uint32_t liveness_seen;
     int32_t hover_dock;

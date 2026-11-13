@@ -20,9 +20,9 @@ SAND is beyond a boot-sector-only prototype. The repository contains a working 3
 | Processes | Separate address spaces, ELF32/SAPP v1 loading, activation, termination, exit status and wait primitives | **M7 complete:** scheduler-owned process contexts, per-process kernel stacks, CR3/TSS switching, exit/wait/spawn, ring-3 fault containment (exit status `-256-vector`), orphan reaping, up to 6 processes |
 | Drivers | Device registry, 16550 serial, IRQ-driven PS/2 keyboard and mouse, generic IRQ routing, 4-position PATA ATA PIO, CMOS RTC (**M8**) | Emulator-tested only; no USB, AHCI or APIC |
 | Storage | Block-device abstraction, ATA PIO and SANDFS v1 (volume at LBA 1024) format/mount/read/write/list/remove | Experimental one-sector-per-file filesystem; not suitable for important data |
-| Native apps | `locus` (windowed file explorer, sand-apps catalogue), `locusc` (console variant) plus `hello`, `abitest`, `spin`, `crash`; embedded in the kernel image | Not loaded from disk; other sand-apps (CAIRN, QUANTA, ...) are still host-side prototypes |
+| Native apps | Windowed `locus` (files), `quanta` (calculator), `chronos` (stopwatch) from the sand-apps catalogue, console `locusc`, plus `hello`, `abitest`, `spin`, `crash`; embedded in the kernel image | Not loaded from disk; other sand-apps (CAIRN, KEYSTONE, ...) are still host-side prototypes; start windowed apps with `open <app>` in the shell (no dock launcher yet) |
 | Shell | Native ring-3 `sandsh` (line editing, ls/cat/write/rm, run/ps/mem/devices, app launcher), supervised and restarted by the kernel (**M9**) | Runs over serial and in the desktop console window; no pipes, scripting or job control |
-| Graphics | **SAND Dusk** desktop with a **window service** (**M11**): original stroke typeface *SAND Sans*, anti-aliased shape/shadow renderer, procedural twilight-dune wallpaper, menu bar with RTC clock, floating dock, frosted-glass windows (blurred-wallpaper title bars, dune-ridge title line, capsule controls, focus glow), dynamic dock, pointer, focus-aware keyboard routing, system-console window, About panel, and a window service: apps create a surface and paint it with SAND draw commands (ABI v3, syscalls 18-21; up to 3 app windows, 520x380 max) | Kernel-side draw-command renderer, not a general pixel/GPU API; no resize, no per-window pixel buffers owned by apps, no wheel input; app windows are not permission-gated yet; 1024x768 VBE only |
+| Graphics | **SAND Dusk** desktop with a **window service** (**M11**): original stroke typeface *SAND Sans*, anti-aliased shape/shadow renderer, procedural twilight-dune wallpaper, menu bar with RTC clock, floating dock, frosted-glass windows (blurred-wallpaper title bars, dune-ridge title line, original "horizon" controls - ripple/rising-sun/setting-sun glyphs with hover bloom - and focus glow), dynamic dock, pointer, focus-aware keyboard routing, system-console window, About panel, and a window service: apps create a surface and paint it with SAND draw commands (ABI v3, syscalls 18-21; up to 3 app windows, 520x380 max) | Kernel-side draw-command renderer, not a general pixel/GPU API; no resize, no per-window pixel buffers owned by apps, no wheel input; app windows are not permission-gated yet; 1024x768 VBE only |
 | Applications | SAPP SDK and development package loader | Current kernel loader accepts unsigned SAPP v1; no native STCI/Ed25519 enforcement yet |
 | Security / trust | Veyra ABI and STCI contracts, trust-model documentation and Ed25519 known-answer fixture | Contract and design work only; kernel verifier, protected trust store and fail-closed SAPP v2 launch gate are not implemented |
 
@@ -32,7 +32,8 @@ Implementation claims are tied to source and automated test evidence. A document
 
 M7-M9 are complete and M11's window service is in: apps can open windows, paint them, and receive routed keyboard and pointer events (`tests/qemu/test_desktop.py`). Next:
 
-- Port more sand-apps (CAIRN terminal as a window, QUANTA, KEYSTONE) onto the window service.
+- Port more sand-apps (CAIRN terminal as a window, KEYSTONE) onto the window service; QUANTA and CHRONOS are done.
+- A dock launcher so apps start from the desktop, not only from `open <app>`.
 - Resizable windows and app-owned pixel surfaces (shared memory) for richer apps.
 - Load apps from SANDFS instead of embedding them in the kernel image.
 

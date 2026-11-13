@@ -168,7 +168,7 @@ int sand_ui_init(sand_ui_t *ui, const sand_ui_host_t *host, int32_t w, int32_t h
     ui->win[1] = (struct sand_ui_window){ .x = w - 304, .y = 118, .w = 280, .h = 330, .title = "About SAND", .kind = 1, .visible = 1, .alive = 1 };
     if (ui->win[1].x < 80) ui->win[1].x = 80;
     ui->order[0] = 2; ui->order[1] = 3; ui->order[2] = 4; ui->order[3] = 1; ui->order[4] = 0;
-    ui->press_win = -1; ui->liveness_seen = 0;
+    ui->press_win = -1; ui->hover_ctrl = -1; ui->liveness_seen = 0;
     ui->px = w / 2; ui->py = h / 2; ui->buttons = 0; ui->drag_win = -1; ui->hover_dock = -1;
     ui->dirty = (struct sand_ui_rect){ 0, 0, 0, 0 };
     ui->cursor_box = (struct sand_ui_rect){ 0, 0, 0, 0 };
@@ -322,6 +322,45 @@ static void draw_menubar(sand_ui_t *ui) {
     else { uint32_t s = ui->host.ticks() / 100u; p = put_2(p, (s / 60u) % 100u); *p++ = ':'; p = put_2(p, s % 60u); *p = 0; }
     gfx_text_right(g, &ui->sans_medium, ui->w - 16, 20, t, C_TEXT, 255u);
 }
+/* "Horizon" window controls (SAND's own): minimise = a dune ripple, centre = a rising sun,
+ * close = a setting sun. They sit on the right, are bare glyphs at rest, and bloom into a
+ * tinted halo on hover. Window identity is a small accent sun on the left of the title bar. */
+#define CTRL_MIN 0
+#define CTRL_CENTER 1
+#define CTRL_CLOSE 2
+static int32_t ctrl_cx(const struct sand_ui_window *w, int c) { return w->x + w->w - 78 + c * 28 + (c == CTRL_CLOSE ? 0 : 0); }
+static void half_disc(gfx_t *g, int32_t cx, int32_t base_y, int32_t r, uint32_t col, uint32_t a) {
+    for (int32_t dy = 0; dy < r; ++dy) {
+        int32_t half = (int32_t)sand_isqrt((uint32_t)(r * r - dy * dy));
+        gfx_rect(g, cx - half, base_y - dy, half * 2 + 1, 1, col, a);
+    }
+}
+static void draw_controls(sand_ui_t *ui, int i, int focused) {
+    gfx_t *g = &ui->g; struct sand_ui_window *w = &ui->win[i];
+    static const uint32_t hue[3] = { 0x7FD6B0u, 0xF2C98Au, 0xFF7E73u };
+    int32_t cy = w->y + 18;
+    uint32_t accent = i == 0 ? C_CHAMP : (i == 1 ? C_CORAL : 0x8FA8FFu);
+    gfx_circle(g, w->x + 20, cy, 6, accent, focused ? 255u : 120u);          /* identity sun */
+    gfx_circle(g, w->x + 22, cy - 2, 3, 0xFFFFFFu, focused ? 110u : 50u);
+    for (int c = 0; c < 3; ++c) {
+        int32_t cx = ctrl_cx(w, c);
+        int hot = ui->hover_ctrl == i * 4 + c;
+        uint32_t col = hot ? hue[c] : (focused ? 0xB9B3D6u : 0x6E6890u), a = hot ? 255u : 230u;
+        if (hot) { gfx_circle(g, cx, cy, 12, hue[c], 46u); gfx_rrect_ring(g, cx - 12, cy - 12, 24, 24, 12, 1, hue[c], 120u); }
+        if (c == CTRL_MIN) {                                                  /* dune ripple */
+            gfx_line(g, cx - 7, cy + 1, cx - 3, cy - 2, 26, col, a); gfx_line(g, cx - 3, cy - 2, cx + 1, cy + 2, 26, col, a);
+            gfx_line(g, cx + 1, cy + 2, cx + 5, cy - 1, 26, col, a); gfx_line(g, cx + 5, cy - 1, cx + 8, cy + 1, 26, col, a);
+        } else if (c == CTRL_CENTER) {                                        /* rising sun, hollow */
+            gfx_line(g, cx - 8, cy + 4, cx + 8, cy + 4, 24, col, a);
+            gfx_line(g, cx - 5, cy + 4, cx - 4, cy, 24, col, a); gfx_line(g, cx - 4, cy, cx - 1, cy - 3, 24, col, a);
+            gfx_line(g, cx - 1, cy - 3, cx + 2, cy - 3, 24, col, a); gfx_line(g, cx + 2, cy - 3, cx + 4, cy, 24, col, a);
+            gfx_line(g, cx + 4, cy, cx + 5, cy + 4, 24, col, a);
+        } else {                                                              /* setting sun, filled */
+            half_disc(g, cx, cy + 4, 6, col, a);
+            gfx_line(g, cx - 9, cy + 5, cx + 9, cy + 5, 24, col, a);
+        }
+    }
+}
 /* "Dune glass" window chrome: frosted title bar and body, a dune-ridge title line, a
  * capsule control pod, and a champagne glow on the focused window. */
 static void draw_frame(sand_ui_t *ui, int i, int focused) {
@@ -338,10 +377,7 @@ static void draw_frame(sand_ui_t *ui, int i, int focused) {
         int32_t yy = w->y + TITLE_H - 2 + ((sand_ui_sin((uint32_t)xx * 7u) * 3) >> 13);
         gfx_rect(g, w->x + xx, yy, 1, 1, C_CHAMP, (uint32_t)(focused ? 90 : 34) * (uint32_t)edge / 40u);
     }
-    gfx_rrect(g, w->x + 14, w->y + 10, 62, 16, 8, 0x06051Au, focused ? 160u : 110u);   /* control capsule */
-    gfx_rrect_ring(g, w->x + 14, w->y + 10, 62, 16, 8, 1, C_LINE, 26u);
-    uint32_t cc[3] = { C_CLOSE, C_WARN, C_OK };
-    for (int k = 0; k < 3; ++k) gfx_circle(g, w->x + 27 + k * 18, w->y + 18, 5, focused ? cc[k] : 0x4A4570u, 255u);
+    draw_controls(ui, i, focused);
     gfx_text_center(g, &ui->title_face, w->x + w->w / 2, w->y + 23, w->title, focused ? C_TEXT : C_MUTED, 255u);
     gfx_rrect_ring(g, w->x, w->y, w->w, w->h, 12, 1, focused ? C_CHAMP : C_LINE, focused ? 84u : 30u);
 }
@@ -541,6 +577,21 @@ void sand_ui_pointer(sand_ui_t *ui, int32_t dx, int32_t dy, uint8_t buttons) {
     if (moved) ui->cursor_moved = 1;
     int hd = dock_hit(ui, ui->px, ui->py);
     if (hd != ui->hover_dock) { ui->hover_dock = hd; mark_dock(ui); }
+    { int hc = -1; int th = top_window(ui);
+      for (int k = SAND_UI_WINDOWS - 1; k >= 0 && hc < 0; --k) {
+          int wi = ui->order[k]; const struct sand_ui_window *hw = &ui->win[wi];
+          if (!hw->visible) continue;
+          if (ui->px >= hw->x && ui->px < hw->x + hw->w && ui->py >= hw->y && ui->py < hw->y + hw->h) {
+              for (int c = 0; c < 3; ++c) { int32_t ex = ui->px - ctrl_cx(hw, c), ey = ui->py - (hw->y + 18); if (ex * ex + ey * ey <= 144 && ui->py < hw->y + TITLE_H) hc = wi * 4 + c; }
+              break;
+          }
+      }
+      (void)th;
+      if (hc != ui->hover_ctrl) {
+          int old = ui->hover_ctrl; ui->hover_ctrl = hc;
+          if (old >= 0) mark(ui, ui->win[old / 4].x, ui->win[old / 4].y, ui->win[old / 4].x + ui->win[old / 4].w, ui->win[old / 4].y + TITLE_H);
+          if (hc >= 0) mark(ui, ui->win[hc / 4].x, ui->win[hc / 4].y, ui->win[hc / 4].x + ui->win[hc / 4].w, ui->win[hc / 4].y + TITLE_H);
+      } }
     int pressed = (buttons & 1u) && !(ui->buttons & 1u), released = !(buttons & 1u) && (ui->buttons & 1u);
     if (ui->drag_win >= 0 && (buttons & 1u)) {
         struct sand_ui_window *w = &ui->win[ui->drag_win];
@@ -565,12 +616,16 @@ void sand_ui_pointer(sand_ui_t *ui, int32_t dx, int32_t dy, uint8_t buttons) {
                 if (top_window(ui) != wi) raise_window(ui, wi);
                 if (ly < TITLE_H) {
                     int k = -1;
-                    for (int c = 0; c < 3; ++c) if (lx >= 27 + c * 18 - 8 && lx <= 27 + c * 18 + 8 && ly >= 8 && ly <= 28) k = c;
-                    if (k == 0 || k == 1) {
-                        if (k == 0 && w->kind == 2) destroy_app_window(ui, wi);
+                    for (int c = 0; c < 3; ++c) { int32_t dxc = ui->px - ctrl_cx(w, c), dyc = ui->py - (w->y + 18); if (dxc * dxc + dyc * dyc <= 144) k = c; }
+                    if (k == CTRL_CLOSE || k == CTRL_MIN) {
+                        if (k == CTRL_CLOSE && w->kind == 2) destroy_app_window(ui, wi);
                         else { w->visible = 0; mark_window(ui, wi); mark(ui, 0, 0, ui->w, MENU_H + 1); }
-                        mark_dock(ui);
-                    } else if (k < 0) { ui->drag_win = wi; ui->drag_dx = lx; ui->drag_dy = ly; }
+                        ui->hover_ctrl = -1; mark_dock(ui);
+                    } else if (k == CTRL_CENTER) {
+                        mark_window(ui, wi);
+                        w->x = (ui->w - w->w) / 2; w->y = imax(MENU_H + 8, (ui->h - 90 - w->h) / 2);
+                        mark_window(ui, wi);
+                    } else { ui->drag_win = wi; ui->drag_dx = lx; ui->drag_dy = ly; }
                 } else if (w->kind == 2) {
                     struct sand_event e = { SAND_EV_MOUSE_DOWN, lx, ly - TITLE_H, 0, buttons };
                     push_event(w, &e); ui->press_win = wi;
