@@ -83,6 +83,7 @@ jobs:
           grep -q 'SAND_TEST:MUTEX_COUNTER_PASS' build/debug.log
           grep -q 'SAND_TEST:REUSE_PASS' build/debug.log
           grep -q 'SAND_TEST:STCI_ED25519_KAT_PASS' build/debug.log
+          grep -q 'SAND_TEST:STCI_LAUNCH_GATE_PASS' build/debug.log
           grep -q 'SAND_TEST:M5_PROCESS_INIT' build/debug.log
           grep -q 'SAND_TEST:M5_TWO_ADDRESS_SPACES_PASS' build/debug.log
           grep -q 'SAND_TEST:M7_ELF_REJECT_INVALID_PASS' build/debug.log
