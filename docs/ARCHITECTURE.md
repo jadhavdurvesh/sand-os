@@ -105,6 +105,9 @@ Window controls are SAND's own "horizon" set, drawn as vector glyphs on the righ
 
 The dock starts with a launcher tile (a sun with eight rays). It opens a glass panel listing the windowed apps; choosing one asks the kernel to start it via `process_spawn_detached`, which gives the child no parent so it is reaped automatically when it exits. The panel's list is a catalogue generated at build time by `tools/gen_app_table.py` from each app's `manifest.json`: an app appears only if its manifest has a `launcher` object (`label`, `subtitle`, `accent`/`accent2` gradient colours as `#RRGGBB`, one-character `glyph`, `order`). The generator validates every field and fails the build on a malformed manifest; the compositor reads the catalogue through host hooks, so it stays independent of the app table. Until apps load from SANDFS the catalogue is fixed at build time.
 
+### System settings (ABI v5)
+Syscalls 24/25 (`SETTING_GET`/`SETTING_SET`) read and write a small kernel-owned settings table: accent colour (`SAND_SET_ACCENT`, 5 palettes), reduced motion (skips window fade animation) and 12/24-hour clock. A change repaints the whole desktop. The desktop thread persists the table to `system.cfg` in SANDFS (text `accent=N`, `motion=N`, `clock24=N`) about 50 ticks after the last change and reloads it at boot. The shell `settings` command and the KEYSTONE window are two clients of the same calls. Values are range-checked; any app may currently change them (no permission gating yet).
+
 ### Window polish (ABI v4)
 
 - **Animation:** app windows fade in and rise 14 px over 160 ms (ease-out) and fade out on close. The compositor snapshots the backdrop under the window into a lazily allocated scratch buffer and blends the freshly drawn window against it; a closing window stays allocated until the fade finishes and is already invisible to its owner (`WIN_*` return NOENT).

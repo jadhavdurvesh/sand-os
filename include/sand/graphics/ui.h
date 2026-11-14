@@ -56,6 +56,7 @@ typedef struct sand_ui {
     uint32_t *blur; int32_t bw, bh;                   /* 1/4-resolution frosted wallpaper */
     uint32_t liveness_seen;
     int launcher_open, launcher_hover;
+    uint8_t accent, reduced_motion, clock24;           /* settings */
     int32_t hover_dock;
     struct sand_ui_rect dirty, cursor_box;
     int cursor_moved;
@@ -79,6 +80,9 @@ int sand_ui_win_create(sand_ui_t *ui, uint32_t owner, const char *title, int32_t
 int sand_ui_win_draw(sand_ui_t *ui, int id, uint32_t owner, const struct sand_draw *cmds, uint32_t count);
 int sand_ui_win_event(sand_ui_t *ui, int id, uint32_t owner, struct sand_event *out);
 int sand_ui_win_close(sand_ui_t *ui, int id, uint32_t owner);
+/* System settings (appearance). get: value or <0; set: 0 or <0. */
+int sand_ui_setting_get(const sand_ui_t *ui, uint32_t key);
+int sand_ui_setting_set(sand_ui_t *ui, uint32_t key, uint32_t value);
 int sand_ui_win_blit(sand_ui_t *ui, int id, uint32_t owner, const struct sand_blit *b, const uint32_t *pixels);
 int sand_ui_win_resizable(sand_ui_t *ui, int id, uint32_t owner, int32_t min_w, int32_t min_h);
 /* Keyboard routing: returns 1 when the focused window is an app window and took the key. */
