@@ -103,7 +103,7 @@ Current limitations: ATA support is primary-master PATA/IDE only, polling only, 
 
 Window controls are SAND's own "horizon" set, drawn as vector glyphs on the right of the title bar: a dune ripple (minimise to the dock), a rising sun (centre the window), a setting sun (close). They are bare strokes at rest and bloom into a tinted halo on hover; the left of the title bar carries a small accent "sun" that identifies the window. "Centre" is deliberate: shell windows and app surfaces have fixed sizes, so there is no maximise yet.
 
-The dock starts with a launcher tile (a sun with eight rays). It opens a glass panel listing the windowed apps; choosing one asks the kernel to start it via `process_spawn_detached`, which gives the child no parent so it is reaped automatically when it exits. The panel's app list is a fixed table in `ui.c` today.
+The dock starts with a launcher tile (a sun with eight rays). It opens a glass panel listing the windowed apps; choosing one asks the kernel to start it via `process_spawn_detached`, which gives the child no parent so it is reaped automatically when it exits. The panel's list is a catalogue generated at build time by `tools/gen_app_table.py` from each app's `manifest.json`: an app appears only if its manifest has a `launcher` object (`label`, `subtitle`, `accent`/`accent2` gradient colours as `#RRGGBB`, one-character `glyph`, `order`). The generator validates every field and fails the build on a malformed manifest; the compositor reads the catalogue through host hooks, so it stays independent of the app table. Until apps load from SANDFS the catalogue is fixed at build time.
 
 ### Window polish (ABI v4)
 

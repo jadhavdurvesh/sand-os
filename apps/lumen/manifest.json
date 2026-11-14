@@ -1,1 +1,1 @@
-{"id":"org.sand.lumen","name":"LUMEN","version":"0.1.0","vendor":"SAND","description":"Resizable live light-field using an app-owned, upscaled pixel buffer","permissions":["window.create"],"dependencies":[]}
+{"id":"org.sand.lumen","name":"LUMEN","version":"0.1.0","vendor":"SAND","description":"Resizable live light-field using an app-owned, upscaled pixel buffer","permissions":["window.create"],"dependencies":[],"launcher":{"label":"LUMEN","subtitle":"Light field","accent":"#6FC3FF","accent2":"#2A5FA8","glyph":"L","order":50}}

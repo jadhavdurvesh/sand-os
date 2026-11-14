@@ -10,8 +10,16 @@ static void h_sys(struct sand_ui_sysinfo *s) { s->ticks = 123456; s->tick_hz = 1
 static uint32_t h_pid(void) { return 7u; }
 static int h_alive(uint32_t pid) { (void)pid; return 1; }
 static int h_launch(const char *a) { (void)a; return 0; }
+static int h_lcount(void) { return 3; }
+static int h_litem(int i, struct sand_ui_launcher_item *o) {
+    static const struct sand_ui_launcher_item items[3] = {
+        { "CAIRN", "cairn", "Terminal", 0xB9A6FFu, 0x4B3C9Au, '>' }, { "LOCUS", "locus", "Files", 0x5CD6A0u, 0x1E7A66u, 'L' },
+        { "QUANTA", "quanta", "Calculator", 0xE8836Bu, 0x9C3E5Au, 'Q' } };
+    if (i < 0 || i > 2) return -1;
+    *o = items[i]; return 0;
+}
 int main(int argc, char **argv) {
-    sand_ui_host_t host = { h_alloc, h_ticks, h_clock, h_sys, h_pid, h_alive, h_launch };
+    sand_ui_host_t host = { h_alloc, h_ticks, h_clock, h_sys, h_pid, h_alive, h_launch, h_lcount, h_litem };
     static sand_ui_t ui;
     if (sand_ui_init(&ui, &host, 1024, 768)) { fprintf(stderr, "init failed\n"); return 1; }
     const char *t = "\x1b[38;2;242;201;138mSAND\x1b[0m shell \x1b[2m- type help\x1b[0m\r\n\x1b[1;36msand\x1b[0m> ls\r\nhello.txt   18\r\nnotes.md    204\r\n\x1b[1;36msand\x1b[0m> ";
