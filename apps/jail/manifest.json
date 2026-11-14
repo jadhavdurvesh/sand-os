@@ -1,0 +1,1 @@
+{"id":"org.sand.jail","name":"Jail","version":"0.1.0","vendor":"SAND","description":"Permission-enforcement probe: holds console.write only and tries every gated call","permissions":["console.write"],"dependencies":[]}

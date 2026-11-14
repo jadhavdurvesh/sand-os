@@ -97,6 +97,14 @@ class ShellTest(unittest.TestCase):
         self.assertNotIn("beta.txt", ls)
         self.cmd("rm alpha.txt")
 
+    def test_10_permissions_are_enforced(self):
+        """An app that declares only console.write is refused every gated call (SAND_E_PERM = -5)."""
+        out = self.cmd("run jail", timeout=20)
+        self.assertIn("jail: win=-5 set=-5 fsr=-5 fsw=-5 spawn=-5 read=-5 get=0", out)
+        self.assertIn("exited with status 0", out)
+        self.assertNotIn("jail.txt", self.cmd("ls"))                 # the refused write really did not happen
+        self.assertIn("accent=0", self.cmd("settings"))              # nor did the settings write
+
     def test_09_system_settings_and_persistence(self):
         """ABI v5 settings: validated by the kernel, readable back, persisted to system.cfg on SANDFS."""
         out = self.vm.run_command("settings")
