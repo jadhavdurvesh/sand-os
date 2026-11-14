@@ -8,7 +8,7 @@
  *
  * Calling convention (x86-32): int 0x80, number in EAX, arguments in
  * EBX, ECX, EDX, result in EAX. Negative results are errors. */
-#define SAND_ABI_VERSION 4u
+#define SAND_ABI_VERSION 5u
 
 enum sand_syscall_number {
     SAND_SYS_EXIT = 1,        /* exit(status)                         */
@@ -36,7 +36,9 @@ enum sand_syscall_number {
     SAND_SYS_WIN_EVENT = 20,  /* win_event(id, sand_event*) -> 1 event, 0 none, <0 window gone */
     SAND_SYS_WIN_CLOSE = 21,  /* win_close(id) -> 0                              */
     SAND_SYS_WIN_BLIT = 22,   /* win_blit(id, sand_blit*) -> 0: copy an app-owned pixel buffer */
-    SAND_SYS_WIN_RESIZABLE = 23 /* win_resizable(id, (min_w<<16)|min_h) -> 0: opt in to user resizing */
+    SAND_SYS_WIN_RESIZABLE = 23, /* win_resizable(id, (min_w<<16)|min_h) -> 0: opt in to user resizing */
+    SAND_SYS_SETTING_GET = 24,   /* setting_get(key) -> value >= 0, or SAND_E_FAIL for an unknown key   */
+    SAND_SYS_SETTING_SET = 25    /* setting_set(key, value) -> 0, or SAND_E_FAIL for a bad key/value; persisted to system.cfg */
 };
 
 #define SAND_E_FAIL   (-1)    /* generic failure / bad argument */
@@ -84,6 +86,12 @@ struct sand_event { uint32_t type; int32_t x, y; uint32_t key; uint32_t buttons;
  * rectangle into the window surface at (x,y), clipped to the surface. w*h <= surface area.
  * scale (0 or 1..4): every source pixel becomes scale x scale surface pixels, so an app
  * with a small memory image can still fill a whole window. */
+/* System appearance settings (KEYSTONE). Values are validated by the kernel. */
+enum { SAND_SET_ACCENT = 1,          /* 0 champagne, 1 glacier, 2 violet, 3 jade, 4 ember */
+       SAND_SET_REDUCED_MOTION = 2,  /* 0/1: skip window open/close animation */
+       SAND_SET_CLOCK_24H = 3 };     /* 0/1: menu-bar clock format */
+#define SAND_ACCENT_COUNT 5u
+
 struct sand_blit { const uint32_t *pixels; int32_t x, y, w, h, scale; };
 
 #define SAND_NAME_MAX 24u
