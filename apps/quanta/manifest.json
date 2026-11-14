@@ -1,0 +1,1 @@
+{"id":"org.sand.quanta","name":"QUANTA","version":"0.1.0","vendor":"SAND","description":"Calculator on the SAND window service (fixed-point, 2 decimals)","permissions":["window.create"],"dependencies":[]}

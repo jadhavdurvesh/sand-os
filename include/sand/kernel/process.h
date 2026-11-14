@@ -22,6 +22,7 @@ void process_launch(sand_pid_t pid);
 
 /* M7: processes that run as scheduler-controlled ring-3 threads. */
 int process_spawn_sapp(const char *name, const void *image, uint32_t image_size, sand_pid_t *pid_out);
+int process_spawn_detached(const char *name, const void *image, uint32_t image_size, sand_pid_t *pid_out);
 void process_scheduler_hook(uint32_t thread_id);
 uint32_t process_exit_current(int32_t exit_code, uint32_t saved_stack);
 uint32_t process_fault_current(uint32_t vector, uint32_t saved_stack);

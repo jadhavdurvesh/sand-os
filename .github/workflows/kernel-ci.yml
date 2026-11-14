@@ -28,6 +28,7 @@ jobs:
           python3 -m unittest discover -s sdk/sapp/tests -v
           cc -std=c11 -Wall -Wextra -Werror -Iinclude tests/veyra/abi_test.c -o build/veyra-abi-test
           ./build/veyra-abi-test
+          make host-test
           test "$(stat -c%s build/sand-boot.bin)" -eq 512
           test "$(od -An -tx1 -j510 -N2 build/sand-boot.bin | tr -d ' \n')" = "55aa"
           test "$(stat -c%s build/sand-stage2.bin)" -eq 8192
@@ -81,6 +82,7 @@ jobs:
           grep -q 'SAND_TEST:BLOCK_WAKE_PASS' build/debug.log
           grep -q 'SAND_TEST:MUTEX_COUNTER_PASS' build/debug.log
           grep -q 'SAND_TEST:REUSE_PASS' build/debug.log
+          grep -q 'SAND_TEST:STCI_ED25519_KAT_PASS' build/debug.log
           grep -q 'SAND_TEST:M5_PROCESS_INIT' build/debug.log
           grep -q 'SAND_TEST:M5_TWO_ADDRESS_SPACES_PASS' build/debug.log
           grep -q 'SAND_TEST:M7_ELF_REJECT_INVALID_PASS' build/debug.log

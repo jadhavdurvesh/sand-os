@@ -8,7 +8,7 @@
  *
  * Calling convention (x86-32): int 0x80, number in EAX, arguments in
  * EBX, ECX, EDX, result in EAX. Negative results are errors. */
-#define SAND_ABI_VERSION 3u
+#define SAND_ABI_VERSION 4u
 
 enum sand_syscall_number {
     SAND_SYS_EXIT = 1,        /* exit(status)                         */
@@ -34,7 +34,9 @@ enum sand_syscall_number {
     SAND_SYS_WIN_CREATE = 18, /* win_create(title, (w<<16)|h) -> window id (>0) */
     SAND_SYS_WIN_DRAW = 19,   /* win_draw(id, sand_draw*, count<=64) -> 0       */
     SAND_SYS_WIN_EVENT = 20,  /* win_event(id, sand_event*) -> 1 event, 0 none, <0 window gone */
-    SAND_SYS_WIN_CLOSE = 21   /* win_close(id) -> 0                              */
+    SAND_SYS_WIN_CLOSE = 21,  /* win_close(id) -> 0                              */
+    SAND_SYS_WIN_BLIT = 22,   /* win_blit(id, sand_blit*) -> 0: copy an app-owned pixel buffer */
+    SAND_SYS_WIN_RESIZABLE = 23 /* win_resizable(id, (min_w<<16)|min_h) -> 0: opt in to user resizing */
 };
 
 #define SAND_E_FAIL   (-1)    /* generic failure / bad argument */
@@ -67,7 +69,8 @@ struct sand_draw {
     uint32_t color, color2;
     char text[40];
 };
-enum { SAND_EV_KEY = 1, SAND_EV_MOUSE_DOWN, SAND_EV_MOUSE_UP, SAND_EV_MOUSE_MOVE };
+enum { SAND_EV_KEY = 1, SAND_EV_MOUSE_DOWN, SAND_EV_MOUSE_UP, SAND_EV_MOUSE_MOVE,
+       SAND_EV_RESIZE /* x = new client width, y = new client height; surface was cleared, redraw it */ };
 #ifndef SAND_KEY_UP
 #define SAND_KEY_UP 0x80u
 #define SAND_KEY_DOWN 0x81u
@@ -76,6 +79,12 @@ enum { SAND_EV_KEY = 1, SAND_EV_MOUSE_DOWN, SAND_EV_MOUSE_UP, SAND_EV_MOUSE_MOVE
 #endif
 /* Pointer coordinates are relative to the window's surface origin. */
 struct sand_event { uint32_t type; int32_t x, y; uint32_t key; uint32_t buttons; };
+
+/* App-owned pixels: 0x00RRGGBB, tightly packed rows (stride = w). The kernel copies the
+ * rectangle into the window surface at (x,y), clipped to the surface. w*h <= surface area.
+ * scale (0 or 1..4): every source pixel becomes scale x scale surface pixels, so an app
+ * with a small memory image can still fill a whole window. */
+struct sand_blit { const uint32_t *pixels; int32_t x, y, w, h, scale; };
 
 #define SAND_NAME_MAX 24u
 struct sand_dirent { char name[SAND_NAME_MAX]; uint32_t length; };

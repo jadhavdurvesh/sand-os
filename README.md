@@ -16,15 +16,15 @@ SAND is beyond a boot-sector-only prototype. The repository contains a working 3
 | CPU / interrupts | GDT, IDT, exception stubs, PIC and PIT | Early x86 implementation; no SMP/APIC support |
 | Memory | E820 discovery, bounded physical-frame allocator, 32-bit paging, per-process page-directory creation, small kernel heap | First 16 MiB identity-mapped; no demand paging, swap or mature VM subsystem |
 | Kernel threads | Timer-driven round-robin kernel-thread scheduler, blocking/wakeup, semaphore and mutex prototypes; user processes run as scheduler threads | Fixed thread/stack pools (10 threads, 8 KiB stacks); single CPU |
-| User mode / syscalls | Ring-3 entry, TSS kernel stack, DPL-3 `int 0x80` gate, 21 syscalls (ABI v3 in `sdk/sapp/include/sand/abi.h`) with user-pointer validation | Development ABI; not yet declared stable |
+| User mode / syscalls | Ring-3 entry, TSS kernel stack, DPL-3 `int 0x80` gate, 23 syscalls (ABI v4 in `sdk/sapp/include/sand/abi.h`) with user-pointer validation | Development ABI; not yet declared stable |
 | Processes | Separate address spaces, ELF32/SAPP v1 loading, activation, termination, exit status and wait primitives | **M7 complete:** scheduler-owned process contexts, per-process kernel stacks, CR3/TSS switching, exit/wait/spawn, ring-3 fault containment (exit status `-256-vector`), orphan reaping, up to 6 processes |
 | Drivers | Device registry, 16550 serial, IRQ-driven PS/2 keyboard and mouse, generic IRQ routing, 4-position PATA ATA PIO, CMOS RTC (**M8**) | Emulator-tested only; no USB, AHCI or APIC |
 | Storage | Block-device abstraction, ATA PIO and SANDFS v1 (volume at LBA 1024) format/mount/read/write/list/remove | Experimental one-sector-per-file filesystem; not suitable for important data |
-| Native apps | `locus` (windowed file explorer, sand-apps catalogue), `locusc` (console variant) plus `hello`, `abitest`, `spin`, `crash`; embedded in the kernel image | Not loaded from disk; other sand-apps (CAIRN, QUANTA, ...) are still host-side prototypes |
+| Native apps | Windowed `locus` (files), `quanta` (calculator), `chronos` (stopwatch), the `cairn` terminal window (sand-apps catalogue), a `lumen` pixel-buffer demo, console `locusc`, plus `hello`, `abitest`, `spin`, `crash`; embedded in the kernel image | Not loaded from disk; other sand-apps (KEYSTONE, ...) are still host-side prototypes; start windowed apps from the dock launcher or with `open <app>` in the shell |
 | Shell | Native ring-3 `sandsh` (line editing, ls/cat/write/rm, run/ps/mem/devices, app launcher), supervised and restarted by the kernel (**M9**) | Runs over serial and in the desktop console window; no pipes, scripting or job control |
-| Graphics | **SAND Dusk** desktop with a **window service** (**M11**): original stroke typeface *SAND Sans*, anti-aliased shape/shadow renderer, procedural twilight-dune wallpaper, menu bar with RTC clock, floating dock, frosted-glass windows (blurred-wallpaper title bars, dune-ridge title line, capsule controls, focus glow), dynamic dock, pointer, focus-aware keyboard routing, system-console window, About panel, and a window service: apps create a surface and paint it with SAND draw commands (ABI v3, syscalls 18-21; up to 3 app windows, 520x380 max) | Kernel-side draw-command renderer, not a general pixel/GPU API; no resize, no per-window pixel buffers owned by apps, no wheel input; app windows are not permission-gated yet; 1024x768 VBE only |
+| Graphics | **SAND Dusk** desktop with a **window service** (**M11**): original stroke typeface *SAND Sans*, anti-aliased shape/shadow renderer, procedural twilight-dune wallpaper, menu bar with RTC clock, floating dock, frosted-glass windows (blurred-wallpaper title bars, dune-ridge title line, original "horizon" controls - ripple/rising-sun/setting-sun glyphs with hover bloom - and focus glow), dock with a sun-ray app launcher, pointer, focus-aware keyboard routing, system-console window, About panel, and a window service: apps create a surface and paint it with SAND draw commands (ABI v4, syscalls 18-23; up to 3 app windows, 520x380 max), with 160 ms fade-and-rise open/close animation, opt-in drag-to-resize (dune-grip handle, `SAND_EV_RESIZE`) and app-owned pixel buffers (`win_blit`, optional 1-4x upscale; demo app LUMEN) | Draw-command renderer plus pixel blits, not a GPU API; no maximise, no wheel input, animations only for app windows; app windows are not permission-gated yet; 1024x768 VBE only |
 | Applications | SAPP SDK and development package loader | Current kernel loader accepts unsigned SAPP v1; no native STCI/Ed25519 enforcement yet |
-| Security / trust | Veyra ABI and STCI contracts, trust-model documentation and Ed25519 known-answer fixture | Contract and design work only; kernel verifier, protected trust store and fail-closed SAPP v2 launch gate are not implemented |
+| Security / trust | Veyra ABI and STCI contracts, trust-model documentation and Ed25519 known-answer fixture | Native in-house SHA-512 + Ed25519 verifier and SAPP v2 transcript check pass the STCI known-answer vector (host tests, cross-check, boot self-test). Still NOT implemented: certificate-chain validation, protected trust store and the fail-closed SAPP v2 launch gate — the kernel does not yet block unsigned apps |
 
 Implementation claims are tied to source and automated test evidence. A documented interface, test fixture, roadmap item, or host-side tool is not by itself a working kernel feature.
 
@@ -32,11 +32,12 @@ Implementation claims are tied to source and automated test evidence. A document
 
 M7-M9 are complete and M11's window service is in: apps can open windows, paint them, and receive routed keyboard and pointer events (`tests/qemu/test_desktop.py`). Next:
 
-- Port more sand-apps (CAIRN terminal as a window, QUANTA, KEYSTONE) onto the window service.
+- Port more sand-apps (KEYSTONE) onto the window service; QUANTA, CHRONOS and the CAIRN terminal window are done.
+- Launcher catalogue is a fixed list in the kernel; it should come from app manifests once apps load from SANDFS.
 - Resizable windows and app-owned pixel surfaces (shared memory) for richer apps.
 - Load apps from SANDFS instead of embedding them in the kernel image.
 
-Native STCI/Ed25519 verification remains a later milestone, after Veyra contracts; unsigned SAPP v1 packages are still development-only.
+The native Ed25519 primitive and SAPP v2 transcript check exist (`kernel/crypto`, `kernel/security/stci.c`); the certificate chain, trust store and launch gate remain to do. Unsigned SAPP v1 packages are still development-only.
 
 ## In-house DMJ technology strategy
 

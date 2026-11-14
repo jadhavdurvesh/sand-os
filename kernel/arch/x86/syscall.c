@@ -155,6 +155,14 @@ uint32_t syscall_dispatch(uint32_t frame) {
         result=sand_desktop_win_event((int32_t)a,&ev);
         if(result==1) (void)copy_out(b,&ev,sizeof(ev));
         break; }
+    case SAND_SYS_WIN_BLIT: {
+        struct sand_blit bl;
+        if(copy_in(&bl,b,sizeof(bl))!=0) { result=SAND_E_FAULT; break; }
+        if(bl.scale<0 || bl.scale>4) { result=SAND_E_FAIL; break; }
+        if(bl.w<=0 || bl.h<=0 || bl.w>SAND_WIN_MAX_W || bl.h>SAND_WIN_MAX_H) { result=SAND_E_FAIL; break; }
+        if(!user_ok((uint32_t)bl.pixels,(uint32_t)(bl.w*bl.h)*4u,0)) { result=SAND_E_FAULT; break; }
+        result=sand_desktop_win_blit((int32_t)a,&bl,bl.pixels); break; }
+    case SAND_SYS_WIN_RESIZABLE: result=sand_desktop_win_resizable((int32_t)a,(int32_t)(b>>16),(int32_t)(b&0xFFFFu)); break;
     case SAND_SYS_WIN_CLOSE: result=sand_desktop_win_close((int32_t)a); break;
     case SAND_SYS_SYSINFO: {
         struct sand_sysinfo info;

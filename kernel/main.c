@@ -19,6 +19,7 @@
 #include "sand/drivers/drivers.h"
 #include "sand/proc/apps.h"
 #include "sand/drivers/device.h"
+int sand_stci_selftest(void);
 void pic_init_masked(void);
 int userland_selftest(void);
 extern uint8_t sapp_test_image[174];
@@ -174,6 +175,7 @@ void kernel_main(void) {
     write_at("Producer events:",14,5,0x0F); write_hex(producer_count,14,24,0x0F);
     write_at("Consumer events:",16,5,0x0F); write_hex(consumer_count,16,24,0x0F);
     write_at("Boot context now provides scheduler idle fallback.",18,5,0x07);
+    if(sand_stci_selftest()==0) debug_text("SAND_TEST:STCI_ED25519_KAT_PASS\n"); else { debug_text("SAND_TEST:STCI_ED25519_KAT_FAIL\n"); ++test_failures; }
     debug_text("SAND_TEST:M5_PROCESS_INIT\n");
     gdt_init();
     syscall_init();

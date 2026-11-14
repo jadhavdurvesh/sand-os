@@ -19,6 +19,7 @@ typedef struct {
     void (*sysinfo)(struct sand_ui_sysinfo *out);
     uint32_t (*current_pid)(void);                              /* caller of a window syscall */
     int (*pid_alive)(uint32_t pid);                             /* 0 when the owner has exited */
+    int (*launch)(const char *app);                             /* start an app for the desktop; <0 on failure */
 } sand_ui_host_t;
 
 #define SAND_UI_TERM_COLS 80
@@ -34,6 +35,7 @@ struct sand_ui_window {
     /* window service (kind 2) */
     uint8_t alive, qh, qt; uint32_t owner, gen, seen_gen;
     uint32_t *surf; int32_t sw, sh; char title_buf[32];
+    uint8_t resizable, anim; int32_t minw, minh; uint32_t anim_t0, anim_a;   /* anim: 0 none, 1 opening, 2 closing; anim_a 0..255 */
     struct sand_event q[SAND_UI_EVENTS];
 };
 typedef struct sand_ui {
@@ -45,9 +47,12 @@ typedef struct sand_ui {
     struct sand_ui_window win[SAND_UI_WINDOWS];
     uint8_t order[SAND_UI_WINDOWS];                    /* z-order, back to front */
     int32_t px, py; uint8_t buttons;
-    int32_t drag_win, drag_dx, drag_dy, press_win;
+    int32_t resize_win, rs_px, rs_py, rs_w0, rs_h0;
+    uint32_t *scratch;                                 /* lazily allocated: backdrop copy for window fades */
+    int32_t drag_win, drag_dx, drag_dy, press_win, hover_ctrl;   /* hover_ctrl = window*4 + control, -1 none */
     uint32_t *blur; int32_t bw, bh;                   /* 1/4-resolution frosted wallpaper */
     uint32_t liveness_seen;
+    int launcher_open, launcher_hover;
     int32_t hover_dock;
     struct sand_ui_rect dirty, cursor_box;
     int cursor_moved;
@@ -71,6 +76,8 @@ int sand_ui_win_create(sand_ui_t *ui, uint32_t owner, const char *title, int32_t
 int sand_ui_win_draw(sand_ui_t *ui, int id, uint32_t owner, const struct sand_draw *cmds, uint32_t count);
 int sand_ui_win_event(sand_ui_t *ui, int id, uint32_t owner, struct sand_event *out);
 int sand_ui_win_close(sand_ui_t *ui, int id, uint32_t owner);
+int sand_ui_win_blit(sand_ui_t *ui, int id, uint32_t owner, const struct sand_blit *b, const uint32_t *pixels);
+int sand_ui_win_resizable(sand_ui_t *ui, int id, uint32_t owner, int32_t min_w, int32_t min_h);
 /* Keyboard routing: returns 1 when the focused window is an app window and took the key. */
 int sand_ui_key(sand_ui_t *ui, uint8_t ascii);
 /* Renders whatever changed into the back buffer; returns 1 and the screen rectangle to present. */

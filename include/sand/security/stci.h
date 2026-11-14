@@ -6,9 +6,11 @@
 /*
  * SAND Trust & Code Integrity (STCI).
  *
- * This header defines the kernel-facing verification contract only.
- * It deliberately contains no cryptographic implementation and MUST NOT
- * be treated as enabling signed application execution.
+ * This header defines the kernel-facing verification contract. The Ed25519
+ * signature primitive and the SAPP v2 transcript check are implemented in
+ * kernel/security/stci.c on top of kernel/crypto. Certificate-chain
+ * validation, the trust store and the launch gate are NOT implemented yet,
+ * so this MUST NOT be treated as enabling signed application execution.
  */
 
 #define SAND_STCI_ABI_MAJOR 1u
@@ -77,7 +79,7 @@ struct sand_stci_policy {
  * the provisioned trust store and verify the exact transcript documented in
  * sand-apps/FORMAT.md. It must not trust a root carried by the image.
  *
- * Current status: declaration only. No implementation is linked into SAND.
+ * Current status: declaration only (needs certificate chain + trust store).
  */
 int sand_stci_verify_sapp_v2(
     const void *image,
@@ -86,14 +88,32 @@ int sand_stci_verify_sapp_v2(
     const struct sand_stci_policy *policy,
     uint8_t image_digest_out[SAND_STCI_SHA256_SIZE]);
 
-/* Constant-time Ed25519 verification primitive required by the verifier.
+/* Ed25519 verification primitive (in-house, kernel/crypto/ed25519.c).
  * Signature is 64 bytes; public_key is 32 bytes. Returns 1 only on success.
- * A freestanding, reviewed implementation is not yet selected or linked.
+ * Public data only: no secret-dependent timing property is claimed.
  */
 int sand_stci_ed25519_verify(
     const uint8_t public_key[SAND_STCI_ED25519_PUBLIC_KEY_SIZE],
     const uint8_t *message,
     uint32_t message_size,
+    const uint8_t signature[SAND_STCI_ED25519_SIGNATURE_SIZE]);
+
+/* Largest image the transcript verifier accepts (fail closed above this). */
+#define SAND_STCI_MAX_IMAGE_SIZE (16u * 1024u * 1024u)
+
+/*
+ * Verify the SAPP v2 Ed25519 signature of an image against ONE already
+ * trusted public key (the publisher key from a verified certificate).
+ * Transcript: "SAND-SAPP-V2-ED25519\0" || image[0, signature_offset).
+ * Returns SAND_STCI_OK only on a valid signature; null arguments give
+ * ERR_ARGUMENT, signature_offset == 0 / > image_size / oversize images give
+ * ERR_FORMAT, and a bad signature gives ERR_SIGNATURE (fail closed).
+ */
+int sand_stci_verify_sapp_v2_signature(
+    const uint8_t public_key[SAND_STCI_ED25519_PUBLIC_KEY_SIZE],
+    const void *image,
+    uint32_t image_size,
+    uint32_t signature_offset,
     const uint8_t signature[SAND_STCI_ED25519_SIGNATURE_SIZE]);
 
 #endif
