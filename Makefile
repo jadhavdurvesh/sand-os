@@ -17,7 +17,7 @@ APPS := sandsh hello abitest spin crash locus locusc quanta chronos lumen cairn
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
 APP_OBJECTS := $(foreach a,$(APPS),$(APP_BUILD)/$(a)-image.o)
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/sandfs.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(BUILD)/apps.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(APP_OBJECTS)
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/sandfs.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(BUILD)/apps.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
 .PHONY: all clean kernel disk run check apps test ui-preview
 apps: $(foreach a,$(APPS),$(APP_BUILD)/$(a).sapp)
 $(APP_BUILD):
@@ -135,17 +135,31 @@ $(BUILD)/sha512.o: kernel/crypto/sha512.c kernel/crypto/crypto_consts.h include/
 	$(CC) $(CFLAGS) -Ikernel/crypto -c $< -o $@
 $(BUILD)/ed25519.o: kernel/crypto/ed25519.c kernel/crypto/crypto_consts.h include/sand/crypto/ed25519.h include/sand/crypto/sha512.h | $(BUILD)
 	$(CC) $(CFLAGS) -Ikernel/crypto -c $< -o $@
-$(BUILD)/stci.o: kernel/security/stci.c include/sand/security/stci.h include/sand/crypto/ed25519.h | $(BUILD)
+$(BUILD)/stci.o: kernel/security/stci.c include/sand/security/stci.h include/sand/crypto/ed25519.h include/sand/crypto/sha256.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/stci-kat.o: kernel/selftest/stci_kat.c include/sand/security/stci.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/sha256.o: kernel/crypto/sha256.c include/sand/crypto/sha256.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/launch-gate.o: kernel/security/launch_gate.c include/sand/security/launch_gate.h include/sand/security/stci.h include/sand/arch/x86/rtc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/stci-gate.o: kernel/selftest/stci_gate.c include/sand/security/launch_gate.h include/sand/security/stci.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+# Throw-away test root + publisher, generated per build (never committed, never in the default trust store).
+STCI_FIX := $(BUILD)/stci
+$(STCI_FIX)/signed.sapp $(STCI_FIX)/stci-fixture.bin: $(APP_BUILD)/hello.sapp tools/stci_fixtures.py
+	$(PYTHON) tools/stci_fixtures.py kernel $(STCI_FIX) $(APP_BUILD)/hello.sapp
+$(BUILD)/stci-fixture-signed.o: $(STCI_FIX)/signed.sapp
+	cd $(STCI_FIX) && $(OBJCOPY) -I binary -O elf32-i386 -B i386 signed.sapp ../stci-fixture-signed.o
+$(BUILD)/stci-fixture-bin.o: $(STCI_FIX)/stci-fixture.bin
+	cd $(STCI_FIX) && $(OBJCOPY) -I binary -O elf32-i386 -B i386 stci-fixture.bin ../stci-fixture-bin.o
 $(BUILD)/userland-test.o: kernel/selftest/userland.c $(ABI_H) include/sand/kernel/process.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
-	test $$(stat -c%s $@) -le 393216
+	test $$(stat -c%s $@) -le 458752
 kernel: $(KERNEL_BIN)
 disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN)
 	dd if=/dev/zero of=$(DISK) bs=512 count=4096 status=none
@@ -157,11 +171,12 @@ run: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M
 check: disk
 	@echo "SAND boot, memory, paging, heap, PIT, preemptive scheduler and synchronization built."
-host-test:
+host-test: apps
 	mkdir -p $(BUILD)
-	cc -std=c11 -Wall -Wextra -Werror -Iinclude -Ikernel/crypto -o $(BUILD)/ed25519-kat tests/veyra/ed25519_kat_test.c kernel/crypto/sha512.c kernel/crypto/ed25519.c kernel/security/stci.c
+	cc -std=c11 -Wall -Wextra -Werror -Iinclude -Ikernel/crypto -o $(BUILD)/ed25519-kat tests/veyra/ed25519_kat_test.c kernel/crypto/sha512.c kernel/crypto/ed25519.c kernel/crypto/sha256.c kernel/security/stci.c
 	./$(BUILD)/ed25519-kat
 	$(PYTHON) tests/veyra/ed25519_crosscheck.py
+	$(PYTHON) tests/veyra/stci_chain_test.py
 test: disk host-test
 	$(PYTHON) tests/qemu/test_shell.py
 	$(PYTHON) tests/qemu/test_desktop.py

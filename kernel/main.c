@@ -20,6 +20,7 @@
 #include "sand/proc/apps.h"
 #include "sand/drivers/device.h"
 int sand_stci_selftest(void);
+int sand_stci_gate_selftest(void);
 void pic_init_masked(void);
 int userland_selftest(void);
 extern uint8_t sapp_test_image[174];
@@ -199,6 +200,7 @@ void kernel_main(void) {
         debug_text("SAND_TEST:M7_INVALID_ELF_ACCEPTED\n"); for(;;) __asm__ volatile("cli; hlt");
     }
     debug_text("SAND_TEST:M7_ELF_REJECT_INVALID_PASS\n");
+    { int gate_rc=sand_stci_gate_selftest(); if(gate_rc==0) debug_text("SAND_TEST:STCI_LAUNCH_GATE_PASS\n"); else { debug_text("SAND_TEST:STCI_LAUNCH_GATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); } }
     if(process_activate(second)!=0 || process_current()!=second) {
         debug_text("SAND_TEST:M5_ACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
     }
