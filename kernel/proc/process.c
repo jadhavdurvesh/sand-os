@@ -5,6 +5,7 @@
 #include "sand/mm/frame.h"
 #include "sand/kernel/scheduler.h"
 #include "sand/abi.h"
+#include "sand/proc/apps.h"
 #define USER_CODE_BASE 0x40000000u
 #define USER_STACK_TOP 0xBFFFE000u
 #define USER_CODE_FLAGS 0x005u
@@ -68,7 +69,7 @@ struct __attribute__((packed)) elf32_program {
 };
 static struct process_slot *allocate_slot(void) {
     for(uint32_t i=0;i<SAND_PROCESS_LIMIT;++i)
-        if(slots[i].info.state==SAND_PROCESS_UNUSED) return &slots[i];
+        if(slots[i].info.state==SAND_PROCESS_UNUSED) { slots[i].info.permissions=0u; return &slots[i]; }
     return 0;
 }
 static void set_process_name(struct process_slot *slot,const char *name) {
@@ -144,7 +145,7 @@ int process_create_elf(const char *name,const void *image,uint32_t image_size,sa
     if(next_pid==0u) next_pid=1u;
     slot->info.pid=pid; slot->info.parent_pid=active_pid; slot->info.parent_thread_id=scheduler_current_id(); slot->info.state=SAND_PROCESS_READY; slot->info.page_directory=directory; slot->thread_id=NO_THREAD; slot->sleep_deadline=0u;
     slot->info.entry=eh->entry; slot->info.user_stack=USER_STACK_TOP;
-    set_process_name(slot,name); *pid_out=pid; return 0;
+    set_process_name(slot,name); slot->info.permissions=0u; *pid_out=pid; return 0;
 }
 static int sapp_range_ok(uint32_t offset,uint32_t length,uint32_t total) {
     return offset<=total && length<=total-offset;
@@ -259,7 +260,7 @@ int process_create_sapp(const char *name,const void *image,uint32_t image_size,s
     slot->thread_id=NO_THREAD; slot->sleep_deadline=0u;
     slot->info.parent_thread_id=scheduler_current_id(); slot->info.state=SAND_PROCESS_READY;
     slot->info.page_directory=directory; slot->info.entry=h->entry;
-    slot->info.user_stack=USER_STACK_TOP; set_process_name(slot,name); *pid_out=pid;
+    slot->info.user_stack=USER_STACK_TOP; set_process_name(slot,name); slot->info.permissions=apps_permissions(name); *pid_out=pid;
     return 0;
 }
 int process_create_test(const char *name,sand_pid_t *pid_out) {
@@ -329,6 +330,7 @@ int process_destroy(sand_pid_t pid) {
 }
 int process_get_info(sand_pid_t pid,struct sand_process_info *out) { struct process_slot *slot=find_slot(pid); if(slot==0 || out==0) return -1; *out=slot->info; return 0; }
 sand_pid_t process_current(void) { return active_pid; }
+uint32_t process_permissions(sand_pid_t pid) { struct process_slot *slot=find_slot(pid); return slot?slot->info.permissions:0u; }
 
 /* ---- M7: scheduler-controlled user processes ------------------------- */
 static uint32_t proc_irq_save(void) { uint32_t f; __asm__ volatile("pushfl; popl %0; cli":"=r"(f)::"memory"); return f; }

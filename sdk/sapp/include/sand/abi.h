@@ -45,6 +45,7 @@ enum sand_syscall_number {
 #define SAND_E_FAULT  (-2)    /* user pointer rejected by kernel */
 #define SAND_E_NOENT  (-3)    /* no such file, app or process    */
 #define SAND_E_NOSYS  (-4)    /* unknown system call             */
+#define SAND_E_PERM   (-5)    /* the app's manifest does not grant this capability */
 
 /* Exit status given to a process killed by a CPU fault:
  * SAND_EXIT_FAULT_BASE - vector (page fault 14 -> -270). */
