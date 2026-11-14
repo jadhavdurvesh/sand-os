@@ -14,7 +14,7 @@
  */
 
 #define SAND_STCI_ABI_MAJOR 1u
-#define SAND_STCI_ABI_MINOR 0u
+#define SAND_STCI_ABI_MINOR 1u
 #define SAND_STCI_MAX_ROOTS 8u
 #define SAND_STCI_ED25519_PUBLIC_KEY_SIZE 32u
 #define SAND_STCI_ED25519_SIGNATURE_SIZE 64u
@@ -52,19 +52,33 @@ struct sand_stci_root {
     uint32_t flags;
 };
 
+#define SAND_STCI_ROOT_REVOKED 0x00000001u   /* root.flags: root is withdrawn */
+
 struct sand_stci_trust_store {
     uint32_t abi_major;
-    uint32_t struct_size;
+    uint32_t struct_size;                    /* sizeof(struct sand_stci_trust_store) */
     uint32_t root_count;
     uint32_t generation;
     const struct sand_stci_root *roots;
+    const uint8_t (*revoked_key_ids)[SAND_STCI_SHA256_SIZE];  /* revoked publisher key IDs */
+    uint32_t revoked_count;
 };
 
 struct sand_stci_policy {
     uint32_t abi_major;
-    uint32_t struct_size;
+    uint32_t struct_size;                    /* sizeof(struct sand_stci_policy) */
     uint32_t flags;
     uint32_t reserved;
+    /* "YYYY-MM-DDTHH:MM:SS" in UTC from the platform clock. NULL fails closed
+     * (certificate validity cannot be established). The clock is only as
+     * trustworthy as its source: the PC RTC is NOT a trusted time source. */
+    const char *now_utc;
+};
+
+/* Optional detail about a successful verification, for the audit log. */
+struct sand_stci_result {
+    uint8_t publisher_key_id[SAND_STCI_SHA256_SIZE];
+    uint8_t root_key_id[SAND_STCI_SHA256_SIZE];
 };
 
 /*
@@ -79,7 +93,8 @@ struct sand_stci_policy {
  * the provisioned trust store and verify the exact transcript documented in
  * sand-apps/FORMAT.md. It must not trust a root carried by the image.
  *
- * Current status: declaration only (needs certificate chain + trust store).
+ * Implemented in kernel/security/stci.c (strict canonical-JSON parsing, root
+ * match, issuer and publisher Ed25519 checks, validity window, revocation).
  */
 int sand_stci_verify_sapp_v2(
     const void *image,
@@ -87,6 +102,15 @@ int sand_stci_verify_sapp_v2(
     const struct sand_stci_trust_store *trust_store,
     const struct sand_stci_policy *policy,
     uint8_t image_digest_out[SAND_STCI_SHA256_SIZE]);
+
+/* Same, with the publisher/root key IDs on success (result may be NULL). */
+int sand_stci_verify_sapp_v2_ex(
+    const void *image,
+    uint32_t image_size,
+    const struct sand_stci_trust_store *trust_store,
+    const struct sand_stci_policy *policy,
+    uint8_t image_digest_out[SAND_STCI_SHA256_SIZE],
+    struct sand_stci_result *result);
 
 /* Ed25519 verification primitive (in-house, kernel/crypto/ed25519.c).
  * Signature is 64 bytes; public_key is 32 bytes. Returns 1 only on success.

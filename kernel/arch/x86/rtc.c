@@ -23,3 +23,20 @@ int rtc_read_time(int *hour, int *minute, int *second) {
     *hour = h; *minute = m; if (second) *second = s;
     return 0;
 }
+
+static uint8_t bcd_fix(uint8_t v, uint8_t b) { return (b & 4u) ? v : (uint8_t)((v & 15u) + (v >> 4) * 10u); }
+int rtc_read_iso(char out[20]) {
+    int hh, mm, ss;
+    if (rtc_read_time(&hh, &mm, &ss) != 0) return -1;
+    for (uint32_t guard = 0; guard < 100000u && updating(); ++guard) { }
+    uint8_t b = cmos(0x0B);
+    uint32_t day = bcd_fix(cmos(7), b), mon = bcd_fix(cmos(8), b), yr = bcd_fix(cmos(9), b), cen = bcd_fix(cmos(0x32), b);
+    uint32_t year = (cen >= 19u && cen <= 30u ? cen : 20u) * 100u + yr;
+    if (mon < 1u || mon > 12u || day < 1u || day > 31u) return -1;
+    uint32_t v[6] = { year, mon, day, (uint32_t)hh, (uint32_t)mm, (uint32_t)ss };
+    static const uint8_t width[6] = { 4, 2, 2, 2, 2, 2 }; static const char sep[6] = { '-', '-', 'T', ':', ':', 0 };
+    int o = 0;
+    for (int i = 0; i < 6; ++i) { for (int d = width[i] - 1; d >= 0; --d) { uint32_t p = 1; for (int k = 0; k < d; ++k) p *= 10u; out[o++] = (char)('0' + (v[i] / p) % 10u); } if (sep[i]) out[o++] = sep[i]; }
+    out[o] = 0;
+    return 0;
+}
