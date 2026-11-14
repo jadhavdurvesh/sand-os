@@ -119,6 +119,7 @@ def main():
               '        uint32_t j=0u; while(name[j] && perms[i].name[j]==name[j]) ++j;',
               "        if(name[j]=='\\0' && perms[i].name[j]=='\\0') return perms[i].perms;",
               '    }', '    return 0u;', '}',
+              'uint32_t apps_count(void) { return (uint32_t)APP_COUNT; }',
               'uint32_t apps_launcher_count(void) { return LAUNCHER_COUNT; }',
               'int apps_launcher_at(uint32_t index,struct sand_app_launcher_info *out) {',
               '    if(index>=LAUNCHER_COUNT || out==0) return -1;', '    *out=launchers[index]; return 0;', '}', '']

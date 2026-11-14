@@ -330,6 +330,7 @@ int process_destroy(sand_pid_t pid) {
 }
 int process_get_info(sand_pid_t pid,struct sand_process_info *out) { struct process_slot *slot=find_slot(pid); if(slot==0 || out==0) return -1; *out=slot->info; return 0; }
 sand_pid_t process_current(void) { return active_pid; }
+int process_set_permissions(sand_pid_t pid,uint32_t permissions) { struct process_slot *slot=find_slot(pid); if(slot==0) return -1; slot->info.permissions=permissions; return 0; }
 uint32_t process_permissions(sand_pid_t pid) { struct process_slot *slot=find_slot(pid); return slot?slot->info.permissions:0u; }
 
 /* ---- M7: scheduler-controlled user processes ------------------------- */
