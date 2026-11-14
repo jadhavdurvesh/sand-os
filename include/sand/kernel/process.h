@@ -18,6 +18,8 @@ int process_wait(sand_pid_t pid, int32_t *exit_code);
 int process_destroy(sand_pid_t pid);
 /* Permission bits (sand/kernel/perms.h) of a process; 0 when the pid is unknown. */
 uint32_t process_permissions(sand_pid_t pid);
+/* Kernel-internal: replace a process's permission bits (used for disk apps, whose bits come from their manifest). */
+int process_set_permissions(sand_pid_t pid, uint32_t permissions);
 int process_get_info(sand_pid_t pid, struct sand_process_info *out);
 sand_pid_t process_current(void);
 void process_launch(sand_pid_t pid);
