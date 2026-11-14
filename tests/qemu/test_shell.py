@@ -1,6 +1,8 @@
+import time
 #!/usr/bin/env python3
 """M9 acceptance: drive the native ring-3 shell over the serial console."""
 import os
+import shutil
 import sys
 import unittest
 
@@ -94,6 +96,30 @@ class ShellTest(unittest.TestCase):
         self.assertIn("alpha.txt", ls)
         self.assertNotIn("beta.txt", ls)
         self.cmd("rm alpha.txt")
+
+    def test_09_system_settings_and_persistence(self):
+        """ABI v5 settings: validated by the kernel, readable back, persisted to system.cfg on SANDFS."""
+        out = self.vm.run_command("settings")
+        self.assertRegex(out, r"accent=0\s+motion=0\s+clock24=1")
+        self.vm.run_command("settings accent 2")
+        self.vm.run_command("settings clock24 0")
+        self.assertRegex(self.vm.run_command("settings"), r"accent=2\s+motion=0\s+clock24=0")
+        self.assertIn("rejected", self.vm.run_command("settings accent 9"))           # out of range
+        self.assertIn("rejected", self.vm.run_command("settings motion 2"))
+        self.assertRegex(self.vm.run_command("settings"), r"accent=2")                 # unchanged by rejected writes
+        time.sleep(1.5)                                                                # debounced write to system.cfg
+        self.assertIn("accent=2", self.vm.run_command("cat system.cfg"))
+        # a fresh boot from a copy of the disk restores the saved settings
+        copy = os.path.join(self.vm.dir, "persist.img"); shutil.copyfile(IMAGE, copy)
+        vm2 = SandVM(copy).start()
+        try:
+            self.assertTrue(vm2.wait_marker("SAND_TEST:M9_SHELL_STARTED", 40), vm2.debug_log()[-400:])
+            vm2.expect(r"type 'help'", 10)
+            self.assertRegex(vm2.run_command("settings"), r"accent=2\s+motion=0\s+clock24=0")
+        finally:
+            vm2.stop()
+        self.vm.run_command("settings accent 0"); self.vm.run_command("settings clock24 1")
+        time.sleep(1.2)
 
 
 if __name__ == "__main__":

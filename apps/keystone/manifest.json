@@ -1,0 +1,1 @@
+{"id":"org.sand.keystone","name":"KEYSTONE","version":"0.2.0","vendor":"SAND","description":"System appearance settings: accent colour, reduced motion, clock format","permissions":["window.create","settings.write"],"dependencies":[],"launcher":{"label":"KEYSTONE","subtitle":"Settings","accent":"#74D6AA","accent2":"#2C6E8F","glyph":"K","order":60}}

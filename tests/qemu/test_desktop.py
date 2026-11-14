@@ -147,7 +147,7 @@ class DesktopTest(unittest.TestCase):
         time.sleep(1.0)
         panel = self.shot("desktop-launcher.ppm")
         self.assertGreater(sum(1 for x in range(420, 680) for y in range(420, 640) if sum(pixel(panel, x, y)) > 500), 200)   # panel text and icons
-        self.move_to(501, 465)                               # LOCUS row (panel now lists four apps)
+        self.move_to(501, 413)                              # LOCUS row (panel lists five apps; rows grow upward from the dock)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(2.5)
         win = self.shot("desktop-launched.ppm")
@@ -207,6 +207,30 @@ class DesktopTest(unittest.TestCase):
         time.sleep(2.0)
         self.vm.run_command("ps")
         self.assertNotIn("cairn", self.vm.run_command("ps"))
+
+    def test_10_keystone_changes_the_system(self):
+        """KEYSTONE writes real system settings: choosing Jade recolours the desktop accent itself."""
+        self.vm.run_command("open keystone")
+        time.sleep(2.0)
+        before = self.shot("desktop-keystone-a.ppm")
+        self.assertEqual(pixel(before, 17, 17), (0xF2, 0xC9, 0x8A))                      # menu-bar sun: champagne
+        DesktopTest._ptr = (None, None)                                                  # earlier tests moved the pointer by raw deltas; re-home it
+        self.move_to(404, 272)                                                           # the Jade swatch (surface 274,150)
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(1.0)
+        after = self.shot("desktop-keystone-b.ppm")
+        r, g, b = pixel(after, 17, 17)
+        self.assertLess(abs(r - 0x74) + abs(g - 0xD6) + abs(b - 0xAA), 12)               # menu-bar sun is now jade
+        self.assertIn("accent=3", self.vm.run_command("settings"))
+        self.vm.sendkey("m")                                                             # keyboard: reduced motion on
+        time.sleep(0.5)
+        self.assertIn("motion=1", self.vm.run_command("settings"))
+        self.vm.sendkey("1"); self.vm.sendkey("m")                                       # restore defaults
+        time.sleep(0.5)
+        self.assertRegex(self.vm.run_command("settings"), r"accent=0\s+motion=0")
+        self.vm.sendkey("q")
+        time.sleep(1.5)
+        self.assertNotRegex(self.vm.run_command("ps"), r"(running|ready|blocked)\s+keystone")   # exited is fine
 
 
 if __name__ == "__main__":

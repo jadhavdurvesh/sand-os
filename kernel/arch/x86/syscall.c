@@ -163,6 +163,8 @@ uint32_t syscall_dispatch(uint32_t frame) {
         if(!user_ok((uint32_t)bl.pixels,(uint32_t)(bl.w*bl.h)*4u,0)) { result=SAND_E_FAULT; break; }
         result=sand_desktop_win_blit((int32_t)a,&bl,bl.pixels); break; }
     case SAND_SYS_WIN_RESIZABLE: result=sand_desktop_win_resizable((int32_t)a,(int32_t)(b>>16),(int32_t)(b&0xFFFFu)); break;
+    case SAND_SYS_SETTING_GET: result=sand_desktop_setting_get(a); break;
+    case SAND_SYS_SETTING_SET: result=sand_desktop_setting_set(a,b); break;
     case SAND_SYS_WIN_CLOSE: result=sand_desktop_win_close((int32_t)a); break;
     case SAND_SYS_SYSINFO: {
         struct sand_sysinfo info;
