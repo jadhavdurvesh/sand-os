@@ -1,0 +1,1 @@
+{"id":"org.sand.prism","name":"PRISM","version":"0.1.0","vendor":"SAND","description":"Resizable live light-field using an app-owned, upscaled pixel buffer","permissions":["window.create"],"dependencies":[]}

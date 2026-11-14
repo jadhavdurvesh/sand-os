@@ -13,7 +13,7 @@ LDFLAGS := -m elf_i386 -z noexecstack -nostdlib -z max-page-size=0x1000 -T linke
 ABI_H := sdk/sapp/include/sand/abi.h
 PYTHON ?= python3
 SAPP := sdk/sapp
-APPS := sandsh hello abitest spin crash locus locusc quanta chronos
+APPS := sandsh hello abitest spin crash locus locusc quanta chronos prism
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
 APP_OBJECTS := $(foreach a,$(APPS),$(APP_BUILD)/$(a)-image.o)
