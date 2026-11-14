@@ -82,8 +82,11 @@ class ShellTest(unittest.TestCase):
         self.vm.send("run locusc\r")
         self.assertIsNotNone(self.vm.expect(r"LOCUS.*alpha\.txt", 10, start=mark), self.vm.serial_text[mark:][-400:])
         mark = len(self.vm.serial_text)
-        self.vm.send("j")                      # m6-test.txt is first; move to alpha.txt
-        self.assertIsNotNone(self.vm.expect(r"first-file-body", 10, start=mark), self.vm.serial_text[mark:][-400:])
+        for _ in range(6):                     # disk apps and m6-test.txt come first; walk down to alpha.txt
+            self.vm.send("j")
+            if self.vm.expect(r"first-file-body", 2, start=mark) is not None:
+                break
+        self.assertIsNotNone(self.vm.expect(r"first-file-body", 5, start=mark), self.vm.serial_text[mark:][-400:])
         mark = len(self.vm.serial_text)
         self.vm.send("nbeta.txt\rsecond body\r")
         self.assertIsNotNone(self.vm.expect(r"beta\.txt.*second body", 10, start=mark), self.vm.serial_text[mark:][-400:])
@@ -96,6 +99,19 @@ class ShellTest(unittest.TestCase):
         self.assertIn("alpha.txt", ls)
         self.assertNotIn("beta.txt", ls)
         self.cmd("rm alpha.txt")
+
+    def test_11_apps_load_from_sandfs(self):
+        """jail and lumen are not in the kernel image: they live in SANDFS (multi-sector files) and are
+        loaded on demand, with their permissions taken from the manifest inside the image."""
+        apps = self.cmd("apps")
+        for name in ("hello", "jail", "lumen"):
+            self.assertIn(name, apps)
+        ls = self.cmd("ls")
+        self.assertRegex(ls, r"jail\.sapp.*?\d{4,} bytes")  # a multi-sector file (more than 512 bytes)
+        out = self.cmd("run jail", timeout=20)
+        self.assertIn("jail: win=-5 set=-5 fsr=-5 fsw=-5 spawn=-5 read=-5 get=0", out)   # manifest said console.write only
+        self.assertIn("cannot start", self.cmd("run nosuchapp"))
+        self.assertIn("exited with status 0", out)
 
     def test_10_permissions_are_enforced(self):
         """An app that declares only console.write is refused every gated call (SAND_E_PERM = -5)."""
