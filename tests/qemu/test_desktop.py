@@ -146,8 +146,8 @@ class DesktopTest(unittest.TestCase):
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(1.0)
         panel = self.shot("desktop-launcher.ppm")
-        self.assertGreater(sum(1 for x in range(420, 680) for y in range(470, 640) if sum(pixel(panel, x, y)) > 500), 200)   # panel text and icons
-        self.move_to(501, 517)                               # LOCUS row
+        self.assertGreater(sum(1 for x in range(420, 680) for y in range(420, 640) if sum(pixel(panel, x, y)) > 500), 200)   # panel text and icons
+        self.move_to(501, 465)                               # LOCUS row (panel now lists four apps)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(2.5)
         win = self.shot("desktop-launched.ppm")
@@ -157,6 +157,34 @@ class DesktopTest(unittest.TestCase):
         time.sleep(1.5)
         ps = self.vm.run_command("ps")
         self.assertNotIn("locus", ps)
+
+    def test_08_resize_and_pixel_buffer(self):
+        """PRISM owns a pixel buffer; dragging its dune-grip resizes the window and the app redraws."""
+        self.vm.run_command("open prism")
+        time.sleep(2.0)
+        before = self.shot("desktop-prism-a.ppm")
+        # client area (130,122)-(550,422) is filled by app-owned, upscaled pixels (many distinct colours)
+        colours = {pixel(before, x, y) for x in range(150, 530, 7) for y in range(140, 400, 7)}
+        self.assertGreater(len(colours), 40)
+        self.assertEqual(pixel(before, 600, 300), pixel(self.shot("desktop-prism-a2.ppm"), 600, 300))   # outside is wallpaper
+        self.move_to(540, 412)                               # grip at the bottom-right corner
+        self.vm.mouse_button(1)
+        for _ in range(8):
+            self.vm.mouse_move(10, 5)
+        self.vm.mouse_button(0)
+        time.sleep(1.5)
+        after = self.shot("desktop-prism-b.ppm")
+        self.move_to(620, 450)
+        grown = sum(1 for x in range(560, 600) for y in range(160, 400, 3) if pixel(before, x, y) != pixel(after, x, y))
+        self.assertGreater(grown, 150)                       # the window now covers area that used to be wallpaper
+        colours = {pixel(after, x, y) for x in range(560, 600, 3) for y in range(160, 400, 7)}
+        self.assertGreater(len(colours), 10)                 # ...and the app redrew it at the new size
+        self.vm.sendkey("q")
+        time.sleep(1.5)
+        self.vm.run_command("ps")
+        self.assertNotIn("prism", self.vm.run_command("ps"))
+        gone = self.shot("desktop-prism-closed.ppm")
+        self.assertEqual(pixel(gone, 300, 300), pixel(self.shot("desktop-prism-closed2.ppm"), 300, 300))
 
 
 if __name__ == "__main__":

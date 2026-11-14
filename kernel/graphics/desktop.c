@@ -77,4 +77,6 @@ uint32_t sand_desktop_frames(void) { return frames_presented; }
 int sand_desktop_win_create(const char *title, int32_t w, int32_t h) { return desktop_ready ? sand_ui_win_create(&ui, process_current(), title, w, h) : SAND_E_NOSYS; }
 int sand_desktop_win_draw(int32_t id, const struct sand_draw *cmds, uint32_t count) { return desktop_ready ? sand_ui_win_draw(&ui, id, process_current(), cmds, count) : SAND_E_NOSYS; }
 int sand_desktop_win_event(int32_t id, struct sand_event *out) { return desktop_ready ? sand_ui_win_event(&ui, id, process_current(), out) : SAND_E_NOSYS; }
+int sand_desktop_win_blit(int32_t id, const struct sand_blit *b, const uint32_t *pixels) { return desktop_ready ? sand_ui_win_blit(&ui, id, process_current(), b, pixels) : SAND_E_NOSYS; }
+int sand_desktop_win_resizable(int32_t id, int32_t min_w, int32_t min_h) { return desktop_ready ? sand_ui_win_resizable(&ui, id, process_current(), min_w, min_h) : SAND_E_NOSYS; }
 int sand_desktop_win_close(int32_t id) { return desktop_ready ? sand_ui_win_close(&ui, id, process_current()) : SAND_E_NOSYS; }
