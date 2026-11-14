@@ -1,5 +1,5 @@
 #include "sand/libsand.h"
-/* PRISM: a resizable live light-field. It owns its pixel buffer (small, 4x upscaled by the
+/* LUMEN: a resizable live light-field. It owns its pixel buffer (small, 4x upscaled by the
  * window service via sand_win_blit) and re-renders at the new size on SAND_EV_RESIZE. */
 #define SC 4
 #define BW (SAND_WIN_MAX_W / SC)
@@ -32,8 +32,8 @@ static void render(uint32_t t) {
     sand_win_blit(win, &b);
 }
 void _start(void) {
-    win = sand_win_create("PRISM", cw, ch);
-    if (win < 0) { sand_puts("prism: no window service available\n"); sand_exit(1); }
+    win = sand_win_create("LUMEN", cw, ch);
+    if (win < 0) { sand_puts("lumen: no window service available\n"); sand_exit(1); }
     sand_win_resizable(win, 240, 160);
     uint32_t last = 0;
     for (;;) {

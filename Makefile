@@ -13,7 +13,7 @@ LDFLAGS := -m elf_i386 -z noexecstack -nostdlib -z max-page-size=0x1000 -T linke
 ABI_H := sdk/sapp/include/sand/abi.h
 PYTHON ?= python3
 SAPP := sdk/sapp
-APPS := sandsh hello abitest spin crash locus locusc quanta chronos prism
+APPS := sandsh hello abitest spin crash locus locusc quanta chronos lumen cairn
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
 APP_OBJECTS := $(foreach a,$(APPS),$(APP_BUILD)/$(a)-image.o)
@@ -24,7 +24,7 @@ $(APP_BUILD):
 	mkdir -p $(APP_BUILD)
 $(APP_BUILD)/libsand.o: $(SAPP)/lib/libsand.c $(SAPP)/include/sand/libsand.h $(SAPP)/include/sand/app.h $(SAPP)/include/sand/abi.h | $(APP_BUILD)
 	$(CC) $(APP_CFLAGS) -c $< -o $@
-$(APP_BUILD)/%.o: apps/%/main.c $(SAPP)/include/sand/libsand.h $(SAPP)/include/sand/app.h $(SAPP)/include/sand/abi.h | $(APP_BUILD)
+$(APP_BUILD)/%.o: apps/%/main.c apps/sandsh/shell_core.h $(SAPP)/include/sand/libsand.h $(SAPP)/include/sand/app.h $(SAPP)/include/sand/abi.h | $(APP_BUILD)
 	$(CC) $(APP_CFLAGS) -c $< -o $@
 $(APP_BUILD)/%.elf: $(APP_BUILD)/%.o $(APP_BUILD)/libsand.o $(SAPP)/linker/sapp-i386.ld
 	$(LD) -m elf_i386 -z max-page-size=0x1000 -T $(SAPP)/linker/sapp-i386.ld -nostdlib $< $(APP_BUILD)/libsand.o -o $@
