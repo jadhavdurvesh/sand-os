@@ -159,21 +159,21 @@ class DesktopTest(unittest.TestCase):
         self.assertNotIn("locus", ps)
 
     def test_08_resize_and_pixel_buffer(self):
-        """PRISM owns a pixel buffer; dragging its dune-grip resizes the window and the app redraws."""
-        self.vm.run_command("open prism")
+        """LUMEN owns a pixel buffer; dragging its dune-grip resizes the window and the app redraws."""
+        self.vm.run_command("open lumen")
         time.sleep(2.0)
-        before = self.shot("desktop-prism-a.ppm")
+        before = self.shot("desktop-lumen-a.ppm")
         # client area (130,122)-(550,422) is filled by app-owned, upscaled pixels (many distinct colours)
         colours = {pixel(before, x, y) for x in range(150, 530, 7) for y in range(140, 400, 7)}
         self.assertGreater(len(colours), 40)
-        self.assertEqual(pixel(before, 600, 300), pixel(self.shot("desktop-prism-a2.ppm"), 600, 300))   # outside is wallpaper
+        self.assertEqual(pixel(before, 600, 300), pixel(self.shot("desktop-lumen-a2.ppm"), 600, 300))   # outside is wallpaper
         self.move_to(540, 412)                               # grip at the bottom-right corner
         self.vm.mouse_button(1)
         for _ in range(8):
             self.vm.mouse_move(10, 5)
         self.vm.mouse_button(0)
         time.sleep(1.5)
-        after = self.shot("desktop-prism-b.ppm")
+        after = self.shot("desktop-lumen-b.ppm")
         self.move_to(620, 450)
         grown = sum(1 for x in range(560, 600) for y in range(160, 400, 3) if pixel(before, x, y) != pixel(after, x, y))
         self.assertGreater(grown, 150)                       # the window now covers area that used to be wallpaper
@@ -182,9 +182,31 @@ class DesktopTest(unittest.TestCase):
         self.vm.sendkey("q")
         time.sleep(1.5)
         self.vm.run_command("ps")
-        self.assertNotIn("prism", self.vm.run_command("ps"))
-        gone = self.shot("desktop-prism-closed.ppm")
-        self.assertEqual(pixel(gone, 300, 300), pixel(self.shot("desktop-prism-closed2.ppm"), 300, 300))
+        self.assertNotIn("lumen", self.vm.run_command("ps"))
+        gone = self.shot("desktop-lumen-closed.ppm")
+        self.assertEqual(pixel(gone, 300, 300), pixel(self.shot("desktop-lumen-closed2.ppm"), 300, 300))
+
+    def type_keys(self, text):
+        names = {" ": "spc", "\n": "ret", "-": "minus", ".": "dot"}
+        for ch in text:
+            self.vm.sendkey(names.get(ch, ch))
+
+    def test_09_cairn_terminal_window(self):
+        """CAIRN is a real window: keys typed into it run shell commands whose output it renders."""
+        self.vm.run_command("open cairn")
+        time.sleep(2.0)
+        before = self.shot("desktop-cairn-a.ppm")
+        self.type_keys("help\n")
+        time.sleep(1.5)
+        after = self.shot("desktop-cairn-b.ppm")
+        diff = sum(1 for x in range(150, 640, 2) for y in range(130, 480, 2) if pixel(before, x, y) != pixel(after, x, y))
+        self.assertGreater(diff, 400)                         # command list rendered in the window
+        self.type_keys("ps\n")
+        time.sleep(1.0)
+        self.type_keys("exit\n")                              # the shell ends and the window closes
+        time.sleep(2.0)
+        self.vm.run_command("ps")
+        self.assertNotIn("cairn", self.vm.run_command("ps"))
 
 
 if __name__ == "__main__":

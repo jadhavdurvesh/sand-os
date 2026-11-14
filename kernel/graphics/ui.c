@@ -320,10 +320,11 @@ static void draw_dock(sand_ui_t *ui) {
 /* ---- launcher: a glass panel above the dock ---- */
 struct launcher_app { const char *label, *app, *desc; uint32_t top, bottom; char glyph; };
 static const struct launcher_app launcher_apps[] = {
+    { "CAIRN", "cairn", "Terminal", 0xB9A6FFu, 0x4B3C9Au, '>' },
     { "LOCUS", "locus", "Files", 0x5CD6A0u, 0x1E7A66u, 'L' },
     { "QUANTA", "quanta", "Calculator", 0xE8836Bu, 0x9C3E5Au, 'Q' },
     { "CHRONOS", "chronos", "Stopwatch", 0xB48CFFu, 0x5A3AA0u, 'C' },
-    { "PRISM", "prism", "Light field", 0x6FC3FFu, 0x2A5FA8u, 'P' },
+    { "LUMEN", "lumen", "Light field", 0x6FC3FFu, 0x2A5FA8u, 'L' },
 };
 #define LAUNCHER_COUNT ((int)(sizeof(launcher_apps) / sizeof(launcher_apps[0])))
 #define LAUNCHER_W 280
