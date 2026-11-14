@@ -12,6 +12,7 @@
 struct sand_ui_sysinfo {
     uint32_t ticks, tick_hz, free_frames, total_frames, heap_used, heap_total, switches, processes;
 };
+struct sand_ui_launcher_item { char label[16], app[17], subtitle[24]; uint32_t accent, accent2; char glyph; };
 typedef struct {
     void *(*alloc)(uint32_t size);
     uint32_t (*ticks)(void);
@@ -20,6 +21,8 @@ typedef struct {
     uint32_t (*current_pid)(void);                              /* caller of a window syscall */
     int (*pid_alive)(uint32_t pid);                             /* 0 when the owner has exited */
     int (*launch)(const char *app);                             /* start an app for the desktop; <0 on failure */
+    int (*launcher_count)(void);                                /* launcher catalogue (from app manifests) */
+    int (*launcher_item)(int index, struct sand_ui_launcher_item *out);
 } sand_ui_host_t;
 
 #define SAND_UI_TERM_COLS 80
