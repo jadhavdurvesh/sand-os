@@ -97,6 +97,16 @@ Current limitations: ATA support is primary-master PATA/IDE only, polling only, 
 
 `font` (SAND Sans stroke typeface, rasterised once into coverage bitmaps) → `gfx` (anti-aliased rects, rounded rects, circles, lines, shadows, text; every primitive honours a clip) → `ui` (wallpaper cache, windows, dock, menu bar, pointer, console surface; dirty-rectangle repaint into a 32-bit back buffer) → `desktop` (kernel thread: polls PS/2 pointer events, presents the damaged rectangle to the 24/32-bpp VBE framebuffer). `ui` takes all system data through a small host-hook struct, so it also builds natively for previews. User applications do not draw here yet; a window service is the next M11 step.
 
-### Window service (ABI v3)
+### Window service (ABI v4)
 
 `SAND_SYS_WIN_CREATE/DRAW/EVENT/CLOSE` (18-21). A window is a kernel-owned surface (pool of 3, up to 520x380) that the owning process paints by submitting batches of up to 64 fixed-size draw commands (clear, rect, rounded rect with optional gradient, ring, circle, line, shadow, text in the SAND typeface). The desktop thread composites the surface into frosted-glass chrome and routes pointer and keyboard events to the focused window through a 16-entry per-window queue (mouse-move events coalesce). Ownership is checked by pid on every call; a window is destroyed when its owner exits or the user closes it, after which calls return `SAND_E_NOENT`. Keyboard routing moved out of the PS/2 IRQ path: the desktop decides whether a key goes to the console or to the focused app window.
+
+Window controls are SAND's own "horizon" set, drawn as vector glyphs on the right of the title bar: a dune ripple (minimise to the dock), a rising sun (centre the window), a setting sun (close). They are bare strokes at rest and bloom into a tinted halo on hover; the left of the title bar carries a small accent "sun" that identifies the window. "Centre" is deliberate: shell windows and app surfaces have fixed sizes, so there is no maximise yet.
+
+The dock starts with a launcher tile (a sun with eight rays). It opens a glass panel listing the windowed apps; choosing one asks the kernel to start it via `process_spawn_detached`, which gives the child no parent so it is reaped automatically when it exits. The panel's app list is a fixed table in `ui.c` today.
+
+### Window polish (ABI v4)
+
+- **Animation:** app windows fade in and rise 14 px over 160 ms (ease-out) and fade out on close. The compositor snapshots the backdrop under the window into a lazily allocated scratch buffer and blends the freshly drawn window against it; a closing window stays allocated until the fade finishes and is already invisible to its owner (`WIN_*` return NOENT).
+- **Resizing:** an app opts in with `WIN_RESIZABLE(id, min_w<<16|min_h)`. A dune-grip appears at the bottom-right corner; dragging it resizes the surface within [min, 520x380], clears it, and queues `SAND_EV_RESIZE` (x,y = new client size) so the app redraws. Apps that do not opt in keep a fixed size.
+- **App-owned pixels:** `WIN_BLIT(id, struct sand_blit*)` copies an app-held 0x00RRGGBB buffer (w*h <= 520*380) into the surface, clipped, with optional integer upscale 1-4x so small SAPP images (64-page limit) can fill a whole window. The kernel validates the user range before copying.

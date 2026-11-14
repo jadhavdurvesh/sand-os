@@ -1,0 +1,1 @@
+{"id":"org.sand.chronos","name":"CHRONOS","version":"0.1.0","vendor":"SAND","description":"Stopwatch with laps on the SAND window service","permissions":["window.create"],"dependencies":[]}

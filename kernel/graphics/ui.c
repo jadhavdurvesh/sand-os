@@ -23,6 +23,9 @@ void sand_ui_paint_wallpaper(gfx_t *g);
 #define CELL_W 8
 #define CELL_H 17
 #define TERM_PAD 12
+#define ANIM_TICKS 16u                       /* open/close fade: 160 ms at 100 Hz */
+#define ANIM_SCRATCH_W 640
+#define ANIM_SCRATCH_H 560
 
 /* ---- small helpers ---- */
 static int32_t imin(int32_t a, int32_t b) { return a < b ? a : b; }
@@ -168,8 +171,8 @@ int sand_ui_init(sand_ui_t *ui, const sand_ui_host_t *host, int32_t w, int32_t h
     ui->win[1] = (struct sand_ui_window){ .x = w - 304, .y = 118, .w = 280, .h = 330, .title = "About SAND", .kind = 1, .visible = 1, .alive = 1 };
     if (ui->win[1].x < 80) ui->win[1].x = 80;
     ui->order[0] = 2; ui->order[1] = 3; ui->order[2] = 4; ui->order[3] = 1; ui->order[4] = 0;
-    ui->press_win = -1; ui->liveness_seen = 0;
-    ui->px = w / 2; ui->py = h / 2; ui->buttons = 0; ui->drag_win = -1; ui->hover_dock = -1;
+    ui->press_win = -1; ui->hover_ctrl = -1; ui->launcher_open = 0; ui->launcher_hover = -1; ui->liveness_seen = 0;
+    ui->px = w / 2; ui->py = h / 2; ui->buttons = 0; ui->drag_win = -1; ui->hover_dock = -1; ui->resize_win = -1; ui->scratch = 0;
     ui->dirty = (struct sand_ui_rect){ 0, 0, 0, 0 };
     ui->cursor_box = (struct sand_ui_rect){ 0, 0, 0, 0 };
     ui->term_fg = C_TEXT; ui->term_gen = 1; ui->term_seen = 0;
@@ -255,11 +258,12 @@ void sand_ui_term_write(sand_ui_t *ui, const char *data, uint32_t length) {
 /* ---- layout ---- */
 static int dock_items(const sand_ui_t *ui, int *items) {
     int n = 0;
+    items[n++] = -1;                                      /* launcher */
     for (int i = 0; i < SAND_UI_WINDOWS; ++i) if (i < SAND_UI_SHELL_WINDOWS || ui->win[i].alive) items[n++] = i;
     return n;
 }
 static void dock_rect(const sand_ui_t *ui, int32_t *x, int32_t *y, int32_t *w, int32_t *h) {
-    int items[SAND_UI_WINDOWS]; int n = dock_items(ui, items);
+    int items[SAND_UI_WINDOWS + 1]; int n = dock_items(ui, items);
     *w = n * DOCK_ICON + (n - 1) * DOCK_GAP + 2 * DOCK_PAD + 8;
     *h = DOCK_ICON + 2 * DOCK_PAD - 2; *x = (ui->w - *w) / 2; *y = ui->h - *h - 14;
 }
@@ -277,7 +281,7 @@ static int top_window(const sand_ui_t *ui) {
 static void draw_dock(sand_ui_t *ui) {
     gfx_t *g = &ui->g; int32_t dx, dy, dw, dh; dock_rect(ui, &dx, &dy, &dw, &dh);
     if (!gfx_visible(g, dx - 40, dy - 40, dw + 80, dh + 80)) return;
-    int items[SAND_UI_WINDOWS]; int n = dock_items(ui, items);
+    int items[SAND_UI_WINDOWS + 1]; int n = dock_items(ui, items);
     gfx_shadow(g, dx, dy, dw, dh, 24, 26, 10, 0x000000u, 120u);
     glass(ui, dx, dy, dw, dh, 24, dy, dy + dh, 0x1B1740u, 150u);
     gfx_rrect_ring(g, dx, dy, dw, dh, 24, 1, C_LINE, 44u);
@@ -287,7 +291,13 @@ static void draw_dock(sand_ui_t *ui) {
     for (int k = 0; k < n; ++k) {
         int i = items[k]; int32_t x, y; dock_icon_pos(ui, k, &x, &y); int32_t c = DOCK_ICON;
         gfx_shadow(g, x, y, c, c, 14, 10, 4, 0x000000u, 90u);
-        if (i == 0) {                                   /* System Console: dusk tile, chevron + caret */
+        if (i < 0) {                                    /* launcher: a sun with eight rays */
+            gfx_rrect_gradient(g, x, y, c, c, 14, 0x2A2560u, 0x100D27u, 255u);
+            gfx_circle(g, x + 27, y + 27, 6, C_CHAMP, 255u);
+            static const int8_t ray[8][4] = { {0,-11,0,-16}, {8,-8,11,-11}, {11,0,16,0}, {8,8,11,11}, {0,11,0,16}, {-8,8,-11,11}, {-11,0,-16,0}, {-8,-8,-11,-11} };
+            for (int q = 0; q < 8; ++q) gfx_line(g, x + 27 + ray[q][0], y + 27 + ray[q][1], x + 27 + ray[q][2], y + 27 + ray[q][3], 26, 0xFFE2B0u, ui->launcher_open ? 255u : 190u);
+            if (ui->launcher_open) gfx_rrect_ring(g, x, y, c, c, 14, 2, C_CHAMP, 200u);
+        } else if (i == 0) {                                   /* System Console: dusk tile, chevron + caret */
             gfx_rrect_gradient(g, x, y, c, c, 14, 0x3A2F6Eu, 0x15112Fu, 255u);
             gfx_line(g, x + 15, y + 17, x + 25, y + 27, 40, C_CHAMP, 255u);
             gfx_line(g, x + 25, y + 27, x + 15, y + 37, 40, C_CHAMP, 255u);
@@ -303,8 +313,53 @@ static void draw_dock(sand_ui_t *ui) {
             gfx_text_center(g, &ui->large, x + c / 2, y + 38, l, 0xFFFFFFu, 245u);
         }
         gfx_rect(g, x + 8, y + 1, c - 16, 1, C_LINE, 90u);
-        gfx_rrect_ring(g, x, y, c, c, 14, 1, C_LINE, 60u);
-        if (ui->win[i].visible) gfx_circle(g, x + c / 2, dy + dh - 8, 2, C_CHAMP, 230u);
+        if (i >= 0) gfx_rrect_ring(g, x, y, c, c, 14, 1, C_LINE, 60u);
+        if (i >= 0 && ui->win[i].visible) gfx_circle(g, x + c / 2, dy + dh - 8, 2, C_CHAMP, 230u);
+    }
+}
+/* ---- launcher: a glass panel above the dock ---- */
+struct launcher_app { const char *label, *app, *desc; uint32_t top, bottom; char glyph; };
+static const struct launcher_app launcher_apps[] = {
+    { "CAIRN", "cairn", "Terminal", 0xB9A6FFu, 0x4B3C9Au, '>' },
+    { "LOCUS", "locus", "Files", 0x5CD6A0u, 0x1E7A66u, 'L' },
+    { "QUANTA", "quanta", "Calculator", 0xE8836Bu, 0x9C3E5Au, 'Q' },
+    { "CHRONOS", "chronos", "Stopwatch", 0xB48CFFu, 0x5A3AA0u, 'C' },
+    { "LUMEN", "lumen", "Light field", 0x6FC3FFu, 0x2A5FA8u, 'L' },
+};
+#define LAUNCHER_COUNT ((int)(sizeof(launcher_apps) / sizeof(launcher_apps[0])))
+#define LAUNCHER_W 280
+#define LAUNCHER_ROW 52
+static void launcher_rect(const sand_ui_t *ui, int32_t *x, int32_t *y, int32_t *w, int32_t *h) {
+    int32_t dx, dy, dw, dh; dock_rect(ui, &dx, &dy, &dw, &dh);
+    *w = LAUNCHER_W; *h = 40 + LAUNCHER_COUNT * LAUNCHER_ROW + 10; *x = dx; *y = dy - *h - 14;
+    if (*x + *w > ui->w - 10) *x = ui->w - 10 - *w;
+}
+static int launcher_row(const sand_ui_t *ui, int32_t px, int32_t py) {
+    if (!ui->launcher_open) return -1;
+    int32_t x, y, w, h; launcher_rect(ui, &x, &y, &w, &h);
+    if (px < x + 8 || px >= x + w - 8 || py < y + 36) return -1;
+    int row = (py - y - 36) / LAUNCHER_ROW;
+    return (row >= 0 && row < LAUNCHER_COUNT) ? row : -1;
+}
+static void mark_launcher(sand_ui_t *ui) { int32_t x, y, w, h; launcher_rect(ui, &x, &y, &w, &h); mark(ui, x - 50, y - 50, x + w + 50, y + h + 50); mark_dock(ui); }
+static void draw_launcher(sand_ui_t *ui) {
+    if (!ui->launcher_open) return;
+    gfx_t *g = &ui->g; int32_t x, y, w, h; launcher_rect(ui, &x, &y, &w, &h);
+    if (!gfx_visible(g, x - 50, y - 50, w + 100, h + 100)) return;
+    gfx_shadow(g, x, y, w, h, 20, 34, 14, 0x000000u, 150u);
+    glass(ui, x, y, w, h, 20, y, y + h, 0x17133Au, 165u);
+    gfx_rrect_ring(g, x, y, w, h, 20, 1, C_LINE, 50u);
+    gfx_rect(g, x + 20, y + 1, w - 40, 1, C_LINE, 60u);
+    gfx_text(g, &ui->sans_small, x + 20, y + 26, "APPLICATIONS", C_MUTED, 255u, 120);
+    for (int i = 0; i < LAUNCHER_COUNT; ++i) {
+        const struct launcher_app *a = &launcher_apps[i]; int32_t ry = y + 36 + i * LAUNCHER_ROW;
+        if (ui->launcher_hover == i) { gfx_rrect(g, x + 8, ry, w - 16, LAUNCHER_ROW - 6, 12, 0x3A3578u, 200u); gfx_rrect_ring(g, x + 8, ry, w - 16, LAUNCHER_ROW - 6, 12, 1, C_CHAMP, 90u); }
+        gfx_rrect_gradient(g, x + 18, ry + 5, 36, 36, 11, a->top, a->bottom, 255u);
+        char l[2] = { a->glyph, 0 };
+        gfx_text_center(g, &ui->large, x + 36, ry + 32, l, 0xFFFFFFu, 245u);
+        gfx_rrect_ring(g, x + 18, ry + 5, 36, 36, 11, 1, C_LINE, 60u);
+        gfx_text(g, &ui->sans_medium, x + 66, ry + 20, a->label, C_TEXT, 255u, 60);
+        gfx_text(g, &ui->sans_small, x + 66, ry + 36, a->desc, C_MUTED, 255u, 0);
     }
 }
 static void draw_menubar(sand_ui_t *ui) {
@@ -322,6 +377,45 @@ static void draw_menubar(sand_ui_t *ui) {
     else { uint32_t s = ui->host.ticks() / 100u; p = put_2(p, (s / 60u) % 100u); *p++ = ':'; p = put_2(p, s % 60u); *p = 0; }
     gfx_text_right(g, &ui->sans_medium, ui->w - 16, 20, t, C_TEXT, 255u);
 }
+/* "Horizon" window controls (SAND's own): minimise = a dune ripple, centre = a rising sun,
+ * close = a setting sun. They sit on the right, are bare glyphs at rest, and bloom into a
+ * tinted halo on hover. Window identity is a small accent sun on the left of the title bar. */
+#define CTRL_MIN 0
+#define CTRL_CENTER 1
+#define CTRL_CLOSE 2
+static int32_t ctrl_cx(const struct sand_ui_window *w, int c) { return w->x + w->w - 78 + c * 28 + (c == CTRL_CLOSE ? 0 : 0); }
+static void half_disc(gfx_t *g, int32_t cx, int32_t base_y, int32_t r, uint32_t col, uint32_t a) {
+    for (int32_t dy = 0; dy < r; ++dy) {
+        int32_t half = (int32_t)sand_isqrt((uint32_t)(r * r - dy * dy));
+        gfx_rect(g, cx - half, base_y - dy, half * 2 + 1, 1, col, a);
+    }
+}
+static void draw_controls(sand_ui_t *ui, int i, int focused) {
+    gfx_t *g = &ui->g; struct sand_ui_window *w = &ui->win[i];
+    static const uint32_t hue[3] = { 0x7FD6B0u, 0xF2C98Au, 0xFF7E73u };
+    int32_t cy = w->y + 18;
+    uint32_t accent = i == 0 ? C_CHAMP : (i == 1 ? C_CORAL : 0x8FA8FFu);
+    gfx_circle(g, w->x + 20, cy, 6, accent, focused ? 255u : 120u);          /* identity sun */
+    gfx_circle(g, w->x + 22, cy - 2, 3, 0xFFFFFFu, focused ? 110u : 50u);
+    for (int c = 0; c < 3; ++c) {
+        int32_t cx = ctrl_cx(w, c);
+        int hot = ui->hover_ctrl == i * 4 + c;
+        uint32_t col = hot ? hue[c] : (focused ? 0xB9B3D6u : 0x6E6890u), a = hot ? 255u : 230u;
+        if (hot) { gfx_circle(g, cx, cy, 12, hue[c], 46u); gfx_rrect_ring(g, cx - 12, cy - 12, 24, 24, 12, 1, hue[c], 120u); }
+        if (c == CTRL_MIN) {                                                  /* dune ripple */
+            gfx_line(g, cx - 7, cy + 1, cx - 3, cy - 2, 26, col, a); gfx_line(g, cx - 3, cy - 2, cx + 1, cy + 2, 26, col, a);
+            gfx_line(g, cx + 1, cy + 2, cx + 5, cy - 1, 26, col, a); gfx_line(g, cx + 5, cy - 1, cx + 8, cy + 1, 26, col, a);
+        } else if (c == CTRL_CENTER) {                                        /* rising sun, hollow */
+            gfx_line(g, cx - 8, cy + 4, cx + 8, cy + 4, 24, col, a);
+            gfx_line(g, cx - 5, cy + 4, cx - 4, cy, 24, col, a); gfx_line(g, cx - 4, cy, cx - 1, cy - 3, 24, col, a);
+            gfx_line(g, cx - 1, cy - 3, cx + 2, cy - 3, 24, col, a); gfx_line(g, cx + 2, cy - 3, cx + 4, cy, 24, col, a);
+            gfx_line(g, cx + 4, cy, cx + 5, cy + 4, 24, col, a);
+        } else {                                                              /* setting sun, filled */
+            half_disc(g, cx, cy + 4, 6, col, a);
+            gfx_line(g, cx - 9, cy + 5, cx + 9, cy + 5, 24, col, a);
+        }
+    }
+}
 /* "Dune glass" window chrome: frosted title bar and body, a dune-ridge title line, a
  * capsule control pod, and a champagne glow on the focused window. */
 static void draw_frame(sand_ui_t *ui, int i, int focused) {
@@ -338,10 +432,7 @@ static void draw_frame(sand_ui_t *ui, int i, int focused) {
         int32_t yy = w->y + TITLE_H - 2 + ((sand_ui_sin((uint32_t)xx * 7u) * 3) >> 13);
         gfx_rect(g, w->x + xx, yy, 1, 1, C_CHAMP, (uint32_t)(focused ? 90 : 34) * (uint32_t)edge / 40u);
     }
-    gfx_rrect(g, w->x + 14, w->y + 10, 62, 16, 8, 0x06051Au, focused ? 160u : 110u);   /* control capsule */
-    gfx_rrect_ring(g, w->x + 14, w->y + 10, 62, 16, 8, 1, C_LINE, 26u);
-    uint32_t cc[3] = { C_CLOSE, C_WARN, C_OK };
-    for (int k = 0; k < 3; ++k) gfx_circle(g, w->x + 27 + k * 18, w->y + 18, 5, focused ? cc[k] : 0x4A4570u, 255u);
+    draw_controls(ui, i, focused);
     gfx_text_center(g, &ui->title_face, w->x + w->w / 2, w->y + 23, w->title, focused ? C_TEXT : C_MUTED, 255u);
     gfx_rrect_ring(g, w->x, w->y, w->w, w->h, 12, 1, focused ? C_CHAMP : C_LINE, focused ? 84u : 30u);
 }
@@ -429,13 +520,20 @@ static void push_event(struct sand_ui_window *w, const struct sand_event *e) {
 static struct sand_ui_window *app_window(sand_ui_t *ui, int id, uint32_t owner) {
     if (id < 1 || id > SAND_UI_APP_WINDOWS) return 0;
     struct sand_ui_window *w = &ui->win[SAND_UI_SHELL_WINDOWS + id - 1];
-    return (w->alive && w->owner == owner) ? w : 0;
+    return (w->alive && w->anim != 2 && w->owner == owner) ? w : 0;
 }
 static void destroy_app_window(sand_ui_t *ui, int index) {
     struct sand_ui_window *w = &ui->win[index];
     if (!w->alive) return;
     mark_window(ui, index); w->visible = 0; w->alive = 0; w->qh = w->qt = 0;
     mark(ui, 0, 0, ui->w, MENU_H + 1); mark_dock(ui);
+}
+static void begin_close(sand_ui_t *ui, int index) {
+    struct sand_ui_window *w = &ui->win[index];
+    if (!w->alive || w->anim == 2) return;
+    w->anim = 2; w->anim_t0 = ui->host.ticks(); w->anim_a = 255u;
+    if (ui->press_win == index) ui->press_win = -1;
+    mark_window(ui, index);
 }
 int sand_ui_win_create(sand_ui_t *ui, uint32_t owner, const char *title, int32_t w, int32_t h) {
     if (w < 200 || w > SAND_WIN_MAX_W || h < 120 || h > SAND_WIN_MAX_H) return -1;
@@ -450,6 +548,7 @@ int sand_ui_win_create(sand_ui_t *ui, uint32_t owner, const char *title, int32_t
         win->title = win->title_buf; win->kind = 2; win->owner = owner; win->gen = win->seen_gen = 0; win->qh = win->qt = 0;
         win->w = w; win->h = h + TITLE_H;
         win->x = imin(130 + 38 * s, ui->w - w - 10); win->y = imin(86 + 32 * s, ui->h - win->h - 100); if (win->y < MENU_H + 6) win->y = MENU_H + 6;
+        win->resizable = 0; win->minw = w; win->minh = h; win->anim = 1; win->anim_t0 = ui->host.ticks(); win->anim_a = 0;
         win->visible = 1; win->alive = 1;
         { int pos = 0; while (ui->order[pos] != idx) ++pos;
           for (; pos < SAND_UI_WINDOWS - 1; ++pos) ui->order[pos] = ui->order[pos + 1];
@@ -499,7 +598,28 @@ int sand_ui_win_event(sand_ui_t *ui, int id, uint32_t owner, struct sand_event *
 int sand_ui_win_close(sand_ui_t *ui, int id, uint32_t owner) {
     struct sand_ui_window *w = app_window(ui, id, owner);
     if (!w) return SAND_E_NOENT;
-    destroy_app_window(ui, SAND_UI_SHELL_WINDOWS + id - 1);
+    begin_close(ui, SAND_UI_SHELL_WINDOWS + id - 1);
+    return 0;
+}
+int sand_ui_win_blit(sand_ui_t *ui, int id, uint32_t owner, const struct sand_blit *b, const uint32_t *pixels) {
+    struct sand_ui_window *w = app_window(ui, id, owner);
+    if (!w) return SAND_E_NOENT;
+    int32_t sc = b->scale <= 0 ? 1 : b->scale;
+    if (!pixels || b->w <= 0 || b->h <= 0 || sc > 4) return SAND_E_FAIL;
+    for (int32_t dy = imax(0, b->y); dy < imin(w->sh, b->y + b->h * sc); ++dy) {
+        const uint32_t *src = pixels + ((dy - b->y) / sc) * b->w;
+        for (int32_t dx = imax(0, b->x); dx < imin(w->sw, b->x + b->w * sc); ++dx)
+            w->surf[dy * w->sw + dx] = src[(dx - b->x) / sc] & 0xFFFFFFu;
+    }
+    ++w->gen;
+    return 0;
+}
+int sand_ui_win_resizable(sand_ui_t *ui, int id, uint32_t owner, int32_t min_w, int32_t min_h) {
+    struct sand_ui_window *w = app_window(ui, id, owner);
+    if (!w) return SAND_E_NOENT;
+    if (min_w < 200 || min_w > SAND_WIN_MAX_W || min_h < 120 || min_h > SAND_WIN_MAX_H) return SAND_E_FAIL;
+    w->resizable = 1; w->minw = min_w; w->minh = min_h;
+    mark_window(ui, SAND_UI_SHELL_WINDOWS + id - 1);
     return 0;
 }
 int sand_ui_key(sand_ui_t *ui, uint8_t ascii) {
@@ -514,7 +634,7 @@ int sand_ui_key(sand_ui_t *ui, uint8_t ascii) {
 static int hit_window(const sand_ui_t *ui, int32_t x, int32_t y) {
     for (int k = SAND_UI_WINDOWS - 1; k >= 0; --k) {
         const struct sand_ui_window *w = &ui->win[ui->order[k]];
-        if (w->visible && x >= w->x && x < w->x + w->w && y >= w->y && y < w->y + w->h) return ui->order[k];
+        if (w->visible && w->anim != 2 && x >= w->x && x < w->x + w->w && y >= w->y && y < w->y + w->h) return ui->order[k];
     }
     return -1;
 }
@@ -526,7 +646,7 @@ static void raise_window(sand_ui_t *ui, int idx) {
 }
 static int dock_hit(const sand_ui_t *ui, int32_t x, int32_t y) {
     int32_t dx, dy, dw, dh; dock_rect(ui, &dx, &dy, &dw, &dh);
-    int items[SAND_UI_WINDOWS]; int n = dock_items(ui, items);
+    int items[SAND_UI_WINDOWS + 1]; int n = dock_items(ui, items);
     if (x < dx || x >= dx + dw || y < dy - 10 || y >= dy + dh) return -1;
     for (int k = 0; k < n; ++k) {
         int32_t ix, iy; dock_icon_pos(ui, k, &ix, &iy);
@@ -541,6 +661,21 @@ void sand_ui_pointer(sand_ui_t *ui, int32_t dx, int32_t dy, uint8_t buttons) {
     if (moved) ui->cursor_moved = 1;
     int hd = dock_hit(ui, ui->px, ui->py);
     if (hd != ui->hover_dock) { ui->hover_dock = hd; mark_dock(ui); }
+    { int hc = -1; int th = top_window(ui);
+      for (int k = SAND_UI_WINDOWS - 1; k >= 0 && hc < 0; --k) {
+          int wi = ui->order[k]; const struct sand_ui_window *hw = &ui->win[wi];
+          if (!hw->visible) continue;
+          if (ui->px >= hw->x && ui->px < hw->x + hw->w && ui->py >= hw->y && ui->py < hw->y + hw->h) {
+              for (int c = 0; c < 3; ++c) { int32_t ex = ui->px - ctrl_cx(hw, c), ey = ui->py - (hw->y + 18); if (ex * ex + ey * ey <= 144 && ui->py < hw->y + TITLE_H) hc = wi * 4 + c; }
+              break;
+          }
+      }
+      (void)th;
+      if (hc != ui->hover_ctrl) {
+          int old = ui->hover_ctrl; ui->hover_ctrl = hc;
+          if (old >= 0) mark(ui, ui->win[old / 4].x, ui->win[old / 4].y, ui->win[old / 4].x + ui->win[old / 4].w, ui->win[old / 4].y + TITLE_H);
+          if (hc >= 0) mark(ui, ui->win[hc / 4].x, ui->win[hc / 4].y, ui->win[hc / 4].x + ui->win[hc / 4].w, ui->win[hc / 4].y + TITLE_H);
+      } }
     int pressed = (buttons & 1u) && !(ui->buttons & 1u), released = !(buttons & 1u) && (ui->buttons & 1u);
     if (ui->drag_win >= 0 && (buttons & 1u)) {
         struct sand_ui_window *w = &ui->win[ui->drag_win];
@@ -549,12 +684,37 @@ void sand_ui_pointer(sand_ui_t *ui, int32_t dx, int32_t dy, uint8_t buttons) {
         w->x = imax(-w->w + 80, imin(ui->w - 80, w->x)); w->y = imin(ui->h - 40, w->y);
         mark_window(ui, ui->drag_win);
     }
-    if (!(buttons & 1u)) ui->drag_win = -1;
-    if (pressed) {
+    if (ui->resize_win >= 0 && (buttons & 1u)) {
+        int ri = ui->resize_win; struct sand_ui_window *w = &ui->win[ri];
+        if (!w->alive || w->anim == 2) ui->resize_win = -1;
+        else {
+            int32_t nw = imax(w->minw, imin(SAND_WIN_MAX_W, ui->rs_w0 + (ui->px - ui->rs_px)));
+            int32_t nh = imax(w->minh, imin(SAND_WIN_MAX_H, ui->rs_h0 + (ui->py - ui->rs_py)));
+            if (nw != w->sw || nh != w->sh) {
+                mark_window(ui, ri);
+                w->sw = nw; w->sh = nh; w->w = nw; w->h = nh + TITLE_H;
+                for (int32_t i = 0; i < nw * nh; ++i) w->surf[i] = 0x15122Fu;
+                struct sand_event e = { SAND_EV_RESIZE, nw, nh, 0, buttons }; push_event(w, &e);
+                ++w->gen; mark_window(ui, ri);
+            }
+        }
+    }
+    if (!(buttons & 1u)) { ui->drag_win = -1; ui->resize_win = -1; }
+    { int hr = launcher_row(ui, ui->px, ui->py); if (hr != ui->launcher_hover) { ui->launcher_hover = hr; if (ui->launcher_open) mark_launcher(ui); } }
+    int consumed = 0;
+    if (pressed && ui->launcher_open) {
+        int row = launcher_row(ui, ui->px, ui->py); int dd = dock_hit(ui, ui->px, ui->py);
+        int litems[SAND_UI_WINDOWS + 1]; (void)dock_items(ui, litems);
+        if (row >= 0 && ui->host.launch) { (void)ui->host.launch(launcher_apps[row].app); consumed = 1; }
+        else if (dd >= 0 && litems[dd] < 0) consumed = 1;
+        mark_launcher(ui); ui->launcher_open = 0;
+    }
+    if (pressed && !consumed) {
         int d = dock_hit(ui, ui->px, ui->py);
         if (d >= 0) {
-            int items[SAND_UI_WINDOWS]; (void)dock_items(ui, items); int wi = items[d];
-            if (ui->win[wi].visible && top_window(ui) == wi) { ui->win[wi].visible = 0; mark_window(ui, wi); }
+            int items[SAND_UI_WINDOWS + 1]; (void)dock_items(ui, items); int wi = items[d];
+            if (wi < 0) { ui->launcher_open = 1; ui->launcher_hover = -1; mark_launcher(ui); }
+            else if (ui->win[wi].visible && top_window(ui) == wi) { ui->win[wi].visible = 0; mark_window(ui, wi); }
             else { ui->win[wi].visible = 1; raise_window(ui, wi); }
             mark_dock(ui);
         } else {
@@ -565,12 +725,18 @@ void sand_ui_pointer(sand_ui_t *ui, int32_t dx, int32_t dy, uint8_t buttons) {
                 if (top_window(ui) != wi) raise_window(ui, wi);
                 if (ly < TITLE_H) {
                     int k = -1;
-                    for (int c = 0; c < 3; ++c) if (lx >= 27 + c * 18 - 8 && lx <= 27 + c * 18 + 8 && ly >= 8 && ly <= 28) k = c;
-                    if (k == 0 || k == 1) {
-                        if (k == 0 && w->kind == 2) destroy_app_window(ui, wi);
+                    for (int c = 0; c < 3; ++c) { int32_t dxc = ui->px - ctrl_cx(w, c), dyc = ui->py - (w->y + 18); if (dxc * dxc + dyc * dyc <= 144) k = c; }
+                    if (k == CTRL_CLOSE || k == CTRL_MIN) {
+                        if (k == CTRL_CLOSE && w->kind == 2) begin_close(ui, wi);
                         else { w->visible = 0; mark_window(ui, wi); mark(ui, 0, 0, ui->w, MENU_H + 1); }
-                        mark_dock(ui);
-                    } else if (k < 0) { ui->drag_win = wi; ui->drag_dx = lx; ui->drag_dy = ly; }
+                        ui->hover_ctrl = -1; mark_dock(ui);
+                    } else if (k == CTRL_CENTER) {
+                        mark_window(ui, wi);
+                        w->x = (ui->w - w->w) / 2; w->y = imax(MENU_H + 8, (ui->h - 90 - w->h) / 2);
+                        mark_window(ui, wi);
+                    } else { ui->drag_win = wi; ui->drag_dx = lx; ui->drag_dy = ly; }
+                } else if (w->kind == 2 && w->resizable && lx >= w->w - 24 && ly >= w->h - 24) {
+                    ui->resize_win = wi; ui->rs_px = ui->px; ui->rs_py = ui->py; ui->rs_w0 = w->sw; ui->rs_h0 = w->sh;
                 } else if (w->kind == 2) {
                     struct sand_event e = { SAND_EV_MOUSE_DOWN, lx, ly - TITLE_H, 0, buttons };
                     push_event(w, &e); ui->press_win = wi;
@@ -603,6 +769,15 @@ int sand_ui_frame(sand_ui_t *ui, struct sand_ui_rect *out) {
         for (int i = SAND_UI_SHELL_WINDOWS; i < SAND_UI_WINDOWS; ++i)
             if (ui->win[i].alive && ui->host.pid_alive && !ui->host.pid_alive(ui->win[i].owner)) destroy_app_window(ui, i);
     }
+    for (int i = SAND_UI_SHELL_WINDOWS; i < SAND_UI_WINDOWS; ++i) {      /* open / close animation clock */
+        struct sand_ui_window *w = &ui->win[i];
+        if (!w->alive || !w->anim) continue;
+        uint32_t dt = t - w->anim_t0; uint32_t lin = dt >= ANIM_TICKS ? 255u : dt * 255u / ANIM_TICKS;
+        uint32_t e = lin * (510u - lin) / 255u;                           /* ease-out */
+        if (w->anim == 1) { w->anim_a = e; if (dt >= ANIM_TICKS) { w->anim = 0; w->anim_a = 255u; } }
+        else { w->anim_a = 255u - e; if (dt >= ANIM_TICKS) { destroy_app_window(ui, i); continue; } }
+        mark_window(ui, i);
+    }
     for (int i = SAND_UI_SHELL_WINDOWS; i < SAND_UI_WINDOWS; ++i) {
         struct sand_ui_window *w = &ui->win[i];
         if (w->alive && w->visible && w->gen != w->seen_gen) { w->seen_gen = w->gen; mark(ui, w->x, w->y + TITLE_H, w->x + w->w, w->y + w->h); }
@@ -622,14 +797,39 @@ int sand_ui_frame(sand_ui_t *ui, struct sand_ui_rect *out) {
     for (int k = 0; k < SAND_UI_WINDOWS; ++k) {
         int i = ui->order[k]; if (!ui->win[i].visible) continue;
         int focused = (i == top);
+        struct sand_ui_window *aw = &ui->win[i];
+        int fading = aw->kind == 2 && aw->anim && aw->anim_a < 255u;
+        struct sand_ui_rect fr = { 0, 0, 0, 0 }; int32_t off = 0;
+        if (fading) {
+            off = (int32_t)((255u - aw->anim_a) * 14u / 255u);
+            if (!ui->scratch) ui->scratch = ui->host.alloc((uint32_t)(ANIM_SCRATCH_W * ANIM_SCRATCH_H) * 4u);
+            fr.x0 = imax(d.x0, aw->x - 56); fr.y0 = imax(d.y0, aw->y - 56); fr.x1 = imin(d.x1, aw->x + aw->w + 56); fr.y1 = imin(d.y1, aw->y + aw->h + 72);
+            if (!ui->scratch || fr.x1 <= fr.x0 || fr.y1 <= fr.y0 || (fr.x1 - fr.x0) > ANIM_SCRATCH_W || (fr.y1 - fr.y0) > ANIM_SCRATCH_H) fading = 0;
+            else {
+                for (int32_t yy = fr.y0; yy < fr.y1; ++yy) for (int32_t xx = fr.x0; xx < fr.x1; ++xx) ui->scratch[(yy - fr.y0) * (fr.x1 - fr.x0) + (xx - fr.x0)] = ui->back[yy * ui->w + xx];
+                aw->y += off;
+            }
+        }
         draw_frame(ui, i, focused);
         gfx_set_clip(&ui->g, imax(d.x0, ui->win[i].x), imax(d.y0, ui->win[i].y + TITLE_H), imin(d.x1, ui->win[i].x + ui->win[i].w) - imax(d.x0, ui->win[i].x),
                      imin(d.y1, ui->win[i].y + ui->win[i].h) - imax(d.y0, ui->win[i].y + TITLE_H));
         if (i == 0) draw_console(ui, focused); else if (i == 1) draw_about(ui); else blit_surface(ui, i);
+        if (aw->kind == 2 && aw->resizable) {                                  /* dune-grip resize handle */
+            int32_t cx = aw->x + aw->w - 7, cy = aw->y + aw->h - 7;
+            for (int k = 0; k < 3; ++k) { int32_t o = 5 + k * 5; gfx_line(&ui->g, cx - o, cy, cx, cy - o, 24, C_CHAMP, focused ? 150u : 70u); }
+        }
         gfx_set_clip(&ui->g, d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0);
+        if (fading) {
+            aw->y -= off;
+            for (int32_t yy = fr.y0; yy < fr.y1; ++yy) for (int32_t xx = fr.x0; xx < fr.x1; ++xx) {
+                uint32_t *px = &ui->back[yy * ui->w + xx];
+                *px = gfx_mix(ui->scratch[(yy - fr.y0) * (fr.x1 - fr.x0) + (xx - fr.x0)], *px, aw->anim_a);
+            }
+        }
     }
     draw_menubar(ui);
     draw_dock(ui);
+    draw_launcher(ui);
     gfx_set_clip(&ui->g, 0, 0, ui->w, ui->h);
     ++ui->frames;
     *out = present;

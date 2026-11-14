@@ -104,6 +104,110 @@ class DesktopTest(unittest.TestCase):
         self.assertIn("note-1.txt", out)
         self.vm.run_command("rm note-1.txt")
 
+    def test_06_multiple_app_windows_and_calculator(self):
+        """Background apps: several windows at once, keyboard goes to the focused one."""
+        self.vm.run_command("open chronos")
+        self.vm.run_command("open quanta")
+        time.sleep(2.0)
+        before = self.shot("desktop-apps-before.ppm")
+        for key in ("7", "asterisk", "6", "equal"):
+            self.vm.sendkey(key)
+        time.sleep(1.0)
+        after = self.shot("desktop-apps.ppm")
+        # QUANTA's display panel (surface 12,12 -> window at 168,118 + 36 title) changes after 7*6.
+        region = [(x, y) for x in range(330, 450) for y in range(190, 230)]
+        diff = sum(1 for (x, y) in region if pixel(before, x, y) != pixel(after, x, y))
+        self.assertGreater(diff, 60)
+        self.vm.sendkey("q")                                  # quanta (focused) exits
+        time.sleep(0.8)
+        self.vm.sendkey("q")                                  # then chronos
+        time.sleep(1.5)
+        self.vm.run_command("ps")                             # prompt reaps the finished background apps
+        ps = self.vm.run_command("ps")
+        self.assertNotIn("quanta", ps)
+        self.assertNotIn("chronos", ps)
+
+    def move_to(self, x, y):
+        """Pointer starts wherever earlier tests left it; steer relative to the tracked position."""
+        cx, cy = getattr(self, "_ptr", (None, None))
+        if cx is None:
+            for _ in range(12):                      # clamp to the top-left corner first (deltas are per-packet limited)
+                self.vm.mouse_move(-100, -100)
+            cx, cy = 0, 0
+        dx, dy = x - cx, y - cy
+        while dx or dy:
+            sx = max(-100, min(100, dx)); sy = max(-100, min(100, dy))
+            self.vm.mouse_move(sx, sy); dx -= sx; dy -= sy
+        DesktopTest._ptr = (x, y)
+
+    def test_07_dock_launcher_starts_an_app(self):
+        """Click the launcher tile, pick LOCUS from the panel: the app starts and opens a window."""
+        self.move_to(444, 716)                               # launcher tile in the dock
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(1.0)
+        panel = self.shot("desktop-launcher.ppm")
+        self.assertGreater(sum(1 for x in range(420, 680) for y in range(420, 640) if sum(pixel(panel, x, y)) > 500), 200)   # panel text and icons
+        self.move_to(501, 465)                               # LOCUS row (panel now lists four apps)
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(2.5)
+        win = self.shot("desktop-launched.ppm")
+        ps = self.vm.run_command("ps")
+        self.assertIn("locus", ps)
+        self.vm.sendkey("q")                                  # focused app exits; detached child is reaped by the kernel
+        time.sleep(1.5)
+        ps = self.vm.run_command("ps")
+        self.assertNotIn("locus", ps)
+
+    def test_08_resize_and_pixel_buffer(self):
+        """LUMEN owns a pixel buffer; dragging its dune-grip resizes the window and the app redraws."""
+        self.vm.run_command("open lumen")
+        time.sleep(2.0)
+        before = self.shot("desktop-lumen-a.ppm")
+        # client area (130,122)-(550,422) is filled by app-owned, upscaled pixels (many distinct colours)
+        colours = {pixel(before, x, y) for x in range(150, 530, 7) for y in range(140, 400, 7)}
+        self.assertGreater(len(colours), 40)
+        self.assertEqual(pixel(before, 600, 300), pixel(self.shot("desktop-lumen-a2.ppm"), 600, 300))   # outside is wallpaper
+        self.move_to(540, 412)                               # grip at the bottom-right corner
+        self.vm.mouse_button(1)
+        for _ in range(8):
+            self.vm.mouse_move(10, 5)
+        self.vm.mouse_button(0)
+        time.sleep(1.5)
+        after = self.shot("desktop-lumen-b.ppm")
+        self.move_to(620, 450)
+        grown = sum(1 for x in range(560, 600) for y in range(160, 400, 3) if pixel(before, x, y) != pixel(after, x, y))
+        self.assertGreater(grown, 150)                       # the window now covers area that used to be wallpaper
+        colours = {pixel(after, x, y) for x in range(560, 600, 3) for y in range(160, 400, 7)}
+        self.assertGreater(len(colours), 10)                 # ...and the app redrew it at the new size
+        self.vm.sendkey("q")
+        time.sleep(1.5)
+        self.vm.run_command("ps")
+        self.assertNotIn("lumen", self.vm.run_command("ps"))
+        gone = self.shot("desktop-lumen-closed.ppm")
+        self.assertEqual(pixel(gone, 300, 300), pixel(self.shot("desktop-lumen-closed2.ppm"), 300, 300))
+
+    def type_keys(self, text):
+        names = {" ": "spc", "\n": "ret", "-": "minus", ".": "dot"}
+        for ch in text:
+            self.vm.sendkey(names.get(ch, ch))
+
+    def test_09_cairn_terminal_window(self):
+        """CAIRN is a real window: keys typed into it run shell commands whose output it renders."""
+        self.vm.run_command("open cairn")
+        time.sleep(2.0)
+        before = self.shot("desktop-cairn-a.ppm")
+        self.type_keys("help\n")
+        time.sleep(1.5)
+        after = self.shot("desktop-cairn-b.ppm")
+        diff = sum(1 for x in range(150, 640, 2) for y in range(130, 480, 2) if pixel(before, x, y) != pixel(after, x, y))
+        self.assertGreater(diff, 400)                         # command list rendered in the window
+        self.type_keys("ps\n")
+        time.sleep(1.0)
+        self.type_keys("exit\n")                              # the shell ends and the window closes
+        time.sleep(2.0)
+        self.vm.run_command("ps")
+        self.assertNotIn("cairn", self.vm.run_command("ps"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,4 +12,6 @@ int sand_desktop_win_create(const char *title, int32_t w, int32_t h);
 int sand_desktop_win_draw(int32_t id, const struct sand_draw *cmds, uint32_t count);
 int sand_desktop_win_event(int32_t id, struct sand_event *out);
 int sand_desktop_win_close(int32_t id);
+int sand_desktop_win_blit(int32_t id, const struct sand_blit *b, const uint32_t *pixels);
+int sand_desktop_win_resizable(int32_t id, int32_t min_w, int32_t min_h);
 #endif

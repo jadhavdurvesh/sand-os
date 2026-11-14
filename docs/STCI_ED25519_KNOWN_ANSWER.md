@@ -32,3 +32,7 @@ The native verifier must run this fixture in host tests and in the freestanding 
 ## Reproduction
 
 The vector was generated with OpenSSL 3.x Ed25519 using the RFC 8032 test seed and the transcript above. The seed is intentionally not stored in this repository.
+
+## Implementation status
+
+The in-house verifier (`kernel/crypto/sha512.c`, `ed25519.c`; `kernel/security/stci.c`) runs this fixture in `tests/veyra/ed25519_kat_test.c` (all six required tests plus non-canonical S/key rejection, every single-bit flip, and split-message equivalence), in `tests/veyra/ed25519_crosscheck.py` (450 cases against an independent implementation) and as a kernel boot self-test (`SAND_TEST:STCI_ED25519_KAT_PASS`). Constants are derived by `tools/gen_crypto_consts.py`. This is a primitive only: certificate-chain checks, the trust store and the loader launch gate are still unimplemented, and verification is not claimed constant-time (public data only).
