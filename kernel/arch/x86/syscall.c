@@ -11,6 +11,7 @@
 #include "sand/mm/frame.h"
 #include "sand/mm/heap.h"
 #include "sand/proc/apps.h"
+#include "sand/proc/diskapps.h"
 #include "sand/abi.h"
 #include "sand/kernel/perms.h"
 #include "sand/security/launch_gate.h"
@@ -159,8 +160,14 @@ uint32_t syscall_dispatch(uint32_t frame) {
     case SAND_SYS_SPAWN: {
         const uint8_t *image; uint32_t size; sand_pid_t pid=0u;
         if(copy_name(a)!=0) { result=SAND_E_FAULT; break; }
-        if(apps_find(name_buffer,&image,&size)!=0) { result=SAND_E_NOENT; break; }
-        result=process_spawn_sapp(name_buffer,image,size,&pid)==0?(int32_t)pid:SAND_E_FAIL; break; }
+        if(apps_find(name_buffer,&image,&size)==0) {
+            result=process_spawn_sapp(name_buffer,image,size,&pid)==0?(int32_t)pid:SAND_E_FAIL; break; }
+        /* Not built in: try SANDFS. Its permissions come from the image's own metadata; the spawn runs with
+         * IRQs off, so the child cannot execute a syscall before they are applied. */
+        if(diskapps_find(name_buffer,&image,&size)!=0) { result=SAND_E_NOENT; break; }
+        if(process_spawn_sapp(name_buffer,image,size,&pid)!=0) { result=SAND_E_FAIL; break; }
+        (void)process_set_permissions(pid,diskapps_manifest_permissions(image,size));
+        result=(int32_t)pid; break; }
     case SAND_SYS_WAIT: {
         int32_t status=0;
         if(b!=0u && !user_ok(b,sizeof(int32_t),1)) { result=SAND_E_FAULT; break; }
@@ -211,7 +218,10 @@ uint32_t syscall_dispatch(uint32_t frame) {
     case SAND_SYS_APP_LIST: {
         struct sand_dirent entry; const char *name;
         if(!user_ok(b,sizeof(entry),1)) { result=SAND_E_FAULT; break; }
-        if(apps_name_at(a,&name)!=0) { result=SAND_E_NOENT; break; }
+        char disk_name[SAND_NAME_MAX]; uint32_t built_in=apps_count();
+        if(a<built_in) { if(apps_name_at(a,&name)!=0) { result=SAND_E_NOENT; break; } }
+        else if(diskapps_name_at(a-built_in,disk_name,sizeof(disk_name))==0) name=disk_name;
+        else { result=SAND_E_NOENT; break; }
         uint32_t i=0u; while(name[i] && i<SAND_NAME_MAX-1u) { entry.name[i]=name[i]; ++i; }
         while(i<SAND_NAME_MAX) entry.name[i++]='\0';
         entry.length=0u; (void)copy_out(b,&entry,sizeof(entry)); result=0; break; }

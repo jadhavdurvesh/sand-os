@@ -142,12 +142,13 @@ class DesktopTest(unittest.TestCase):
 
     def test_07_dock_launcher_starts_an_app(self):
         """Click the launcher tile, pick LOCUS from the panel: the app starts and opens a window."""
+        DesktopTest._ptr = (None, None)                      # re-home: clamp to the corner, then steer from a known position
         self.move_to(444, 716)                               # launcher tile in the dock
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(1.0)
         panel = self.shot("desktop-launcher.ppm")
         self.assertGreater(sum(1 for x in range(420, 680) for y in range(420, 640) if sum(pixel(panel, x, y)) > 500), 200)   # panel text and icons
-        self.move_to(501, 413)                              # LOCUS row (panel lists five apps; rows grow upward from the dock)
+        self.move_to(501, 465)                              # LOCUS row (second of five: CAIRN, LOCUS, QUANTA, CHRONOS, KEYSTONE)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(2.5)
         win = self.shot("desktop-launched.ppm")

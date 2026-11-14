@@ -13,11 +13,17 @@ LDFLAGS := -m elf_i386 -z noexecstack -nostdlib -z max-page-size=0x1000 -T linke
 ABI_H := sdk/sapp/include/sand/abi.h
 PYTHON ?= python3
 SAPP := sdk/sapp
-APPS := sandsh hello jail abitest spin crash locus locusc quanta chronos lumen cairn keystone
+# Built into the kernel image (launcher + boot-time needs) ...
+EMBEDDED_APPS := sandsh hello abitest spin crash locus locusc quanta chronos cairn keystone
+# ... and apps stored only in SANDFS inside the disk image (loaded by diskapps.c, permissions from their manifest).
+DISK_APPS := jail lumen
+APPS := $(EMBEDDED_APPS) $(DISK_APPS)
+SANDFS_LBA := 1024
+SANDFS_SECTORS := 2048
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
-APP_OBJECTS := $(foreach a,$(APPS),$(APP_BUILD)/$(a)-image.o)
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/sandfs.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
+APP_OBJECTS := $(foreach a,$(EMBEDDED_APPS),$(APP_BUILD)/$(a)-image.o)
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/sandfs.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
 .PHONY: all clean kernel disk run check apps test ui-preview
 apps: $(foreach a,$(APPS),$(APP_BUILD)/$(a).sapp)
 $(APP_BUILD):
@@ -90,11 +96,13 @@ $(BUILD)/user-asm.o: kernel/arch/x86/user.S | $(BUILD)
 	$(AS) --32 $< -o $@
 $(BUILD)/user-space.o: kernel/user/user_space.c include/sand/kernel/user.h include/sand/arch/x86/gdt.h include/sand/arch/x86/paging.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
-$(BUILD)/process.o: kernel/proc/process.c include/sand/kernel/process.h include/sand/arch/x86/paging.h include/sand/arch/x86/gdt.h $(ABI_H) | $(BUILD)
+$(BUILD)/process.o: kernel/proc/process.c include/sand/kernel/process.h include/sand/kernel/perms.h include/sand/arch/x86/paging.h include/sand/arch/x86/gdt.h $(ABI_H) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/block.o: kernel/storage/block.c include/sand/storage/block.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/ata-pio.o: kernel/arch/x86/ata_pio.c include/sand/arch/x86/ata_pio.h include/sand/storage/block.h include/sand/drivers/device.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/diskapps.o: kernel/proc/diskapps.c include/sand/proc/diskapps.h include/sand/kernel/perms.h include/sand/fs/sandfs.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/sandfs.o: kernel/fs/sandfs.c include/sand/fs/sandfs.h include/sand/storage/block.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -130,8 +138,8 @@ $(BUILD)/serial.o: kernel/drivers/serial.c include/sand/drivers/serial.h include
 $(BUILD)/drivers.o: kernel/drivers/drivers.c include/sand/drivers/drivers.h include/sand/drivers/device.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 # Built-in app table + launcher catalogue are generated from apps/<name>/manifest.json.
-$(APP_BUILD)/apps_table.c: tools/gen_app_table.py $(foreach a,$(APPS),apps/$(a)/manifest.json) Makefile | $(APP_BUILD)
-	$(PYTHON) tools/gen_app_table.py $@ apps $(APPS)
+$(APP_BUILD)/apps_table.c: tools/gen_app_table.py $(foreach a,$(EMBEDDED_APPS),apps/$(a)/manifest.json) Makefile | $(APP_BUILD)
+	$(PYTHON) tools/gen_app_table.py $@ apps $(EMBEDDED_APPS)
 $(APP_BUILD)/apps_table.o: $(APP_BUILD)/apps_table.c include/sand/proc/apps.h
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/sha512.o: kernel/crypto/sha512.c kernel/crypto/crypto_consts.h include/sand/crypto/sha512.h | $(BUILD)
@@ -164,11 +172,12 @@ $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
 	test $$(stat -c%s $@) -le 458752
 kernel: $(KERNEL_BIN)
-disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN)
+disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUILD)/$(a).sapp) tools/mksandfs.py
 	dd if=/dev/zero of=$(DISK) bs=512 count=4096 status=none
 	dd if=$(BOOT_SECTOR) of=$(DISK) conv=notrunc status=none
 	dd if=$(STAGE2) of=$(DISK) bs=512 seek=1 conv=notrunc status=none
 	dd if=$(KERNEL_BIN) of=$(DISK) bs=512 seek=17 conv=notrunc status=none
+	$(PYTHON) tools/mksandfs.py $(DISK) $(SANDFS_LBA) $(SANDFS_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(APP_BUILD)/$(a).sapp)
 	test $$(stat -c%s $(DISK)) -eq 2097152
 run: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M
@@ -180,6 +189,8 @@ host-test: apps
 	./$(BUILD)/ed25519-kat
 	$(PYTHON) tests/veyra/ed25519_crosscheck.py
 	$(PYTHON) tests/veyra/stci_chain_test.py
+	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude -o $(BUILD)/diskapps-perm tests/veyra/diskapps_perm_test.c kernel/proc/diskapps.c
+	./$(BUILD)/diskapps-perm $(APP_BUILD)/jail.sapp 0x01 $(APP_BUILD)/lumen.sapp 0x20 $(APP_BUILD)/locus.sapp 0x2C $(APP_BUILD)/keystone.sapp 0x60
 	$(PYTHON) tests/tools/test_gen_app_table.py
 test: disk host-test
 	$(PYTHON) tests/qemu/test_shell.py

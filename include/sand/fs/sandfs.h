@@ -2,6 +2,7 @@
 #define SAND_FS_SANDFS_H
 #include <stdint.h>
 #define SANDFS_NAME_MAX 24u
+#define SANDFS_FILE_MAX 65536u   /* contiguous extent of up to 128 sectors; 16 files per volume */
 int sandfs_format(uint32_t device_index,uint32_t start_lba,uint32_t sector_count);
 int sandfs_mount(uint32_t device_index,uint32_t start_lba);
 int sandfs_write(const char *name,const void *data,uint32_t length);
