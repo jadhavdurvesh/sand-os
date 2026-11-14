@@ -1,4 +1,5 @@
 #include "sand/kernel/process.h"
+#include "sand/security/launch_gate.h"
 #include "sand/arch/x86/paging.h"
 #include "sand/arch/x86/gdt.h"
 #include "sand/mm/frame.h"
@@ -153,22 +154,30 @@ static int sapp_ranges_overlap(uint32_t a,uint32_t alen,uint32_t b,uint32_t blen
 }
 int process_create_sapp(const char *name,const void *image,uint32_t image_size,sand_pid_t *pid_out) {
     if(name==0 || image==0 || pid_out==0 || image_size<SAPP_HEADER_SIZE) return -1;
+    if(sand_launch_gate(name,image,image_size)!=0) return -1;       /* nothing is parsed, mapped or run before the gate allows it */
     const uint8_t *bytes=(const uint8_t *)image;
     const struct sapp_header *h=(const struct sapp_header *)bytes;
+    /* v2: the signature block (already verified by the gate) sits after every payload; v1: no signature fields */
+    uint32_t body=image_size;
+    if(h->version==2u) {
+        if(h->signature_offset<SAPP_HEADER_SIZE || h->signature_size==0u || h->signature_offset>image_size ||
+           h->signature_size!=image_size-h->signature_offset) return -1;
+        body=h->signature_offset;
+    }
     if(h->magic[0]!='S' || h->magic[1]!='A' || h->magic[2]!='P' || h->magic[3]!='P' ||
-       h->version!=1u || h->architecture!=SAPP_ARCH_X86_32 ||
+       (h->version!=1u && h->version!=2u) || h->architecture!=SAPP_ARCH_X86_32 ||
        h->header_size!=SAPP_HEADER_SIZE || h->flags!=0u || h->file_size!=image_size ||
        h->reserved[0] || h->reserved[1] || h->reserved[2] || h->reserved[3] ||
        h->reserved[4] || h->reserved[5] || h->reserved[6] || h->reserved[7] ||
        h->segment_count==0u || h->segment_count>8u ||
-       h->signature_offset!=0u || h->signature_size!=0u ||
-       !sapp_range_ok(h->segment_offset,h->segment_count*SAPP_SEGMENT_SIZE,image_size) ||
-       !sapp_range_ok(h->metadata_offset,h->metadata_size,image_size) ||
+       (h->version==1u && (h->signature_offset!=0u || h->signature_size!=0u)) ||
+       !sapp_range_ok(h->segment_offset,h->segment_count*SAPP_SEGMENT_SIZE,body) ||
+       !sapp_range_ok(h->metadata_offset,h->metadata_size,body) ||
        h->segment_offset<SAPP_HEADER_SIZE ||
        h->metadata_offset<h->segment_offset+h->segment_count*SAPP_SEGMENT_SIZE ||
        h->metadata_size==0u || h->metadata_size>4096u ||
        h->relocation_count>256u ||
-       (h->relocation_count && (!sapp_range_ok(h->relocation_offset,h->relocation_count*SAPP_RELOC_SIZE,image_size) ||
+       (h->relocation_count && (!sapp_range_ok(h->relocation_offset,h->relocation_count*SAPP_RELOC_SIZE,body) ||
           h->relocation_offset<h->metadata_offset+h->metadata_size)) ||
        (!h->relocation_count && h->relocation_offset!=0u)) return -1;
     const struct sapp_segment *segments=(const struct sapp_segment *)(bytes+h->segment_offset);
@@ -178,7 +187,7 @@ int process_create_sapp(const char *name,const void *image,uint32_t image_size,s
         const struct sapp_segment *s=&segments[i];
         if(s->memsz==0u || s->file_size>s->memsz || s->vaddr<USER_MIN_ADDRESS ||
            s->vaddr>=USER_MAX_ADDRESS || s->memsz>USER_MAX_ADDRESS-s->vaddr ||
-           !sapp_range_ok(s->file_offset,s->file_size,image_size) ||
+           !sapp_range_ok(s->file_offset,s->file_size,body) ||
            s->file_offset<(h->relocation_count ? h->relocation_offset+h->relocation_count*SAPP_RELOC_SIZE : h->metadata_offset+h->metadata_size) ||
            (s->permissions&~7u)!=0u || (s->permissions&1u)==0u ||
            (s->permissions&6u)==6u || s->alignment<SAND_PAGE_SIZE ||
@@ -199,7 +208,7 @@ int process_create_sapp(const char *name,const void *image,uint32_t image_size,s
     for(uint32_t r=0;r<h->relocation_count;++r) {
         const struct sapp_relocation *rel=&relocs[r];
         uint32_t found=0u;
-        if(rel->type!=SAPP_RELOC_ABS32 || !sapp_range_ok(h->relocation_offset+r*SAPP_RELOC_SIZE,SAPP_RELOC_SIZE,image_size)) return -1;
+        if(rel->type!=SAPP_RELOC_ABS32 || !sapp_range_ok(h->relocation_offset+r*SAPP_RELOC_SIZE,SAPP_RELOC_SIZE,body)) return -1;
         for(uint32_t i=0;i<h->segment_count;++i)
             if((segments[i].permissions&2u) && rel->target>=segments[i].vaddr &&
                rel->target<=segments[i].vaddr+segments[i].memsz-4u) found=1u;
