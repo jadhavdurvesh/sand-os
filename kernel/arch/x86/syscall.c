@@ -12,6 +12,8 @@
 #include "sand/mm/heap.h"
 #include "sand/proc/apps.h"
 #include "sand/abi.h"
+#include "sand/kernel/perms.h"
+#include "sand/security/launch_gate.h"
 
 /* Layout of the frame built by x86_syscall_entry: PUSHAL then the CPU's
  * ring-3 interrupt frame. */
@@ -68,11 +70,36 @@ static uint32_t retry_yield(uint32_t *r,uint32_t frame) {
     return scheduler_reschedule(frame);
 }
 
+/* Capability needed for a syscall (0 = none). Reads of public state (ticks, pid, sysinfo, lists, events,
+ * setting_get, close) stay open; creating windows, writing settings, files, spawning and the console are gated. */
+static uint32_t required_permission(uint32_t number,uint32_t a) {
+    (void)a;
+    switch(number) {
+    case SAND_SYS_WRITE: return SAND_PERM_CONSOLE_WRITE;
+    case SAND_SYS_READ: return SAND_PERM_CONSOLE_READ;
+    case SAND_SYS_FS_READ: case SAND_SYS_FS_LIST: return SAND_PERM_FS_READ;
+    case SAND_SYS_FS_WRITE: case SAND_SYS_FS_REMOVE: return SAND_PERM_FS_WRITE;
+    case SAND_SYS_SPAWN: return SAND_PERM_SPAWN;
+    case SAND_SYS_WIN_CREATE: return SAND_PERM_WINDOW;
+    case SAND_SYS_SETTING_SET: return SAND_PERM_SETTINGS;
+    default: return 0u;
+    }
+}
+static void audit_denied(uint32_t number) {
+    char line[48]="PERMISSION_DENIED syscall="; uint32_t n=0u; while(line[n]) ++n;
+    char digits[11]; uint32_t d=0u; do { digits[d++]=(char)('0'+number%10u); number/=10u; } while(number && d<10u);
+    while(d) line[n++]=digits[--d];
+    line[n]='\0'; sand_audit(line);
+}
+
 uint32_t syscall_dispatch(uint32_t frame) {
     uint32_t *r=(uint32_t *)frame;
     if((r[R_CS]&3u)!=3u || process_current()==0u) { r[R_EAX]=(uint32_t)SAND_E_FAIL; return frame; }
     uint32_t a=r[R_EBX], b=r[R_ECX], c=r[R_EDX];
     int32_t result=SAND_E_NOSYS;
+    { uint32_t need=required_permission(r[R_EAX],a);
+      if(need!=0u && (process_permissions(process_current())&need)!=need) {
+          result=SAND_E_PERM; audit_denied(r[R_EAX]); r[R_EAX]=(uint32_t)result; return frame; } }
     switch(r[R_EAX]) {
     case SAND_SYS_EXIT:
         if(a==SAND_ABI_TOKEN) {

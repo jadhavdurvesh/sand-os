@@ -10,6 +10,7 @@ Any malformed manifest fails the build (no silent fallbacks)."""
 import json, re, sys
 from pathlib import Path
 
+PERMISSIONS = {}
 HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
@@ -20,6 +21,24 @@ def die(msg):
 
 def cstr(s):
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+PERMS = {"console.write": 0x01, "console.read": 0x02, "fs.read": 0x04, "fs.write": 0x08, "process.spawn": 0x10,
+         "window.create": 0x20, "settings.write": 0x40}
+PERM_ALIASES = {"console.rw": ("console.read", "console.write"), "fs.rw": ("fs.read", "fs.write")}
+
+
+def perm_mask(path, m):
+    perms = m.get("permissions", [])
+    if not isinstance(perms, list) or not all(isinstance(p, str) for p in perms):
+        die(f"{path}: 'permissions' must be a list of strings")
+    mask = 0
+    for p in perms:
+        for q in PERM_ALIASES.get(p, (p,)):
+            if q not in PERMS:
+                die(f"{path}: unknown permission '{p}' (known: {', '.join(sorted(list(PERMS) + list(PERM_ALIASES)))})")
+            mask |= PERMS[q]
+    return mask
 
 
 def load(apps_dir, name):
@@ -33,6 +52,7 @@ def load(apps_dir, name):
             die(f"{path}: missing '{key}'")
     if not re.fullmatch(r"[a-z][a-z0-9]{0,15}", name):
         die(f"{name}: app directory name must be lowercase alphanumeric (<=16)")
+    PERMISSIONS[name] = perm_mask(path, m)
     launcher = m.get("launcher")
     if launcher is None:
         return None
@@ -90,6 +110,15 @@ def main():
               '    }', '    return -1;', '}',
               'int apps_name_at(uint32_t index,const char **name) {',
               '    if(index>=APP_COUNT || name==0) return -1;', '    *name=table[index].name; return 0;', '}',
+              'uint32_t apps_permissions(const char *name) {',
+              '    if(name==0) return 0u;',
+              '    static const struct { const char *name; uint32_t perms; } perms[] = {',
+              *[f'        {{ {cstr(n)}, 0x{PERMISSIONS[n]:02X}u }},' for n in names],
+              '    };',
+              '    for(uint32_t i=0;i<APP_COUNT;++i) {',
+              '        uint32_t j=0u; while(name[j] && perms[i].name[j]==name[j]) ++j;',
+              "        if(name[j]=='\\0' && perms[i].name[j]=='\\0') return perms[i].perms;",
+              '    }', '    return 0u;', '}',
               'uint32_t apps_launcher_count(void) { return LAUNCHER_COUNT; }',
               'int apps_launcher_at(uint32_t index,struct sand_app_launcher_info *out) {',
               '    if(index>=LAUNCHER_COUNT || out==0) return -1;', '    *out=launchers[index]; return 0;', '}', '']

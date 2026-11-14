@@ -5,6 +5,8 @@
  * build (see Makefile). A future package manager will replace this with
  * images read from SANDFS. */
 int apps_find(const char *name, const uint8_t **image, uint32_t *size);
+/* Permission bits for a built-in app (sand/kernel/perms.h); 0 for an unknown name. */
+uint32_t apps_permissions(const char *name);
 int apps_name_at(uint32_t index, const char **name);
 
 /* Launcher catalogue, generated from apps/<name>/manifest.json ("launcher" object) by

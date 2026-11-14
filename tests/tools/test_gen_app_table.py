@@ -33,6 +33,21 @@ class GenTest(unittest.TestCase):
         self.assertNotIn('"plain", "', c.split("launchers[]")[1])       # apps without a launcher object are not listed
         self.assertIn("#define LAUNCHER_COUNT 2u", c)
 
+    def test_permission_masks(self):
+        base = {"id": "org.test.p", "name": "P", "version": "1"}
+        rc, c, _ = self.run_gen({"a": dict(base, permissions=["fs.rw", "window.create"]), "b": dict(base), "c": dict(base, permissions=["console.rw", "process.spawn", "settings.write"])})
+        self.assertEqual(rc, 0)
+        self.assertIn('{ "a", 0x2Cu }', c)      # fs.read|fs.write|window.create
+        self.assertIn('{ "b", 0x00u }', c)      # no permissions declared: nothing granted
+        self.assertIn('{ "c", 0x53u }', c)      # console.read|console.write|process.spawn|settings.write
+
+    def test_rejects_unknown_permission(self):
+        base = {"id": "org.test.p", "name": "P", "version": "1"}
+        for bad in (["window.creat"], "window.create", [1]):
+            rc, _, err = self.run_gen({"a": dict(base, permissions=bad)})
+            self.assertNotEqual(rc, 0, bad)
+            self.assertIn("permission", err)
+
     def test_rejects_bad_manifests(self):
         for bad in (dict(self.good, accent="red"), dict(self.good, accent2="#12345"), dict(self.good, glyph="AB"), dict(self.good, glyph=" "),
                     dict(self.good, label=""), dict(self.good, label="x" * 16), dict(self.good, subtitle="y" * 24), dict(self.good, order=-1),
