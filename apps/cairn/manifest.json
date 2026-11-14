@@ -1,1 +1,1 @@
-{"id":"org.sand.cairn","name":"CAIRN","version":"0.8.0","vendor":"SAND","description":"SAND terminal in a window: the sandsh command set with truecolor output, cursor and history","permissions":["window.create"],"dependencies":[]}
+{"id":"org.sand.cairn","name":"CAIRN","version":"0.8.0","vendor":"SAND","description":"SAND terminal in a window: the sandsh command set with truecolor output, cursor and history","permissions":["window.create"],"dependencies":[],"launcher":{"label":"CAIRN","subtitle":"Terminal","accent":"#B9A6FF","accent2":"#4B3C9A","glyph":">","order":10}}

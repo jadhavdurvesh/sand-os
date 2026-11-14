@@ -32,6 +32,16 @@ static int host_launch(const char *app) {
     if (flags & 0x200u) __asm__ volatile("sti" : : : "memory");
     return rc;
 }
+static int host_launcher_count(void) { return (int)apps_launcher_count(); }
+static int host_launcher_item(int index, struct sand_ui_launcher_item *out) {
+    struct sand_app_launcher_info info;
+    if (index < 0 || apps_launcher_at((uint32_t)index, &info) != 0) return -1;
+    for (int i = 0; i < 16; ++i) out->label[i] = info.label[i];
+    for (int i = 0; i < 17; ++i) out->app[i] = info.app[i];
+    for (int i = 0; i < 24; ++i) out->subtitle[i] = info.subtitle[i];
+    out->accent = info.accent; out->accent2 = info.accent2; out->glyph = info.glyph;
+    return 0;
+}
 static void console_to_ui(const char *data, uint32_t length) { sand_ui_term_write(&ui, data, length); }
 
 static void present_frame(void) {
@@ -63,7 +73,7 @@ static void desktop_thread(void *arg) {
 int sand_desktop_start(const sand_framebuffer_t *framebuffer) {
     if (!graphics_framebuffer_valid(framebuffer) || (framebuffer->bits_per_pixel != 24u && framebuffer->bits_per_pixel != 32u)) return -1;
     fb = *framebuffer;
-    sand_ui_host_t host = { kmalloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive, host_launch };
+    sand_ui_host_t host = { kmalloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive, host_launch, host_launcher_count, host_launcher_item };
     if (sand_ui_init(&ui, &host, (int32_t)fb.width, (int32_t)fb.height) != 0) return -2;
     present_frame();
     if (console_add_sink(console_to_ui) < 0) return -3;

@@ -1,1 +1,1 @@
-{"id":"org.sand.locus","name":"LOCUS","version":"0.3.0","vendor":"SAND","description":"Windowed file explorer for SANDFS","permissions":["window.create","fs.read","fs.write"],"dependencies":[]}
+{"id":"org.sand.locus","name":"LOCUS","version":"0.3.0","vendor":"SAND","description":"Windowed file explorer for SANDFS","permissions":["window.create","fs.read","fs.write"],"dependencies":[],"launcher":{"label":"LOCUS","subtitle":"Files","accent":"#5CD6A0","accent2":"#1E7A66","glyph":"L","order":20}}
