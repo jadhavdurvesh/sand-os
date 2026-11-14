@@ -318,20 +318,16 @@ static void draw_dock(sand_ui_t *ui) {
     }
 }
 /* ---- launcher: a glass panel above the dock ---- */
-struct launcher_app { const char *label, *app, *desc; uint32_t top, bottom; char glyph; };
-static const struct launcher_app launcher_apps[] = {
-    { "CAIRN", "cairn", "Terminal", 0xB9A6FFu, 0x4B3C9Au, '>' },
-    { "LOCUS", "locus", "Files", 0x5CD6A0u, 0x1E7A66u, 'L' },
-    { "QUANTA", "quanta", "Calculator", 0xE8836Bu, 0x9C3E5Au, 'Q' },
-    { "CHRONOS", "chronos", "Stopwatch", 0xB48CFFu, 0x5A3AA0u, 'C' },
-    { "LUMEN", "lumen", "Light field", 0x6FC3FFu, 0x2A5FA8u, 'L' },
-};
-#define LAUNCHER_COUNT ((int)(sizeof(launcher_apps) / sizeof(launcher_apps[0])))
+#define LAUNCHER_MAX 9
+static int launcher_count(const sand_ui_t *ui) {
+    int n = ui->host.launcher_count ? ui->host.launcher_count() : 0;
+    return n < 0 ? 0 : (n > LAUNCHER_MAX ? LAUNCHER_MAX : n);
+}
 #define LAUNCHER_W 280
 #define LAUNCHER_ROW 52
 static void launcher_rect(const sand_ui_t *ui, int32_t *x, int32_t *y, int32_t *w, int32_t *h) {
     int32_t dx, dy, dw, dh; dock_rect(ui, &dx, &dy, &dw, &dh);
-    *w = LAUNCHER_W; *h = 40 + LAUNCHER_COUNT * LAUNCHER_ROW + 10; *x = dx; *y = dy - *h - 14;
+    *w = LAUNCHER_W; *h = 40 + launcher_count(ui) * LAUNCHER_ROW + 10; *x = dx; *y = dy - *h - 14;
     if (*x + *w > ui->w - 10) *x = ui->w - 10 - *w;
 }
 static int launcher_row(const sand_ui_t *ui, int32_t px, int32_t py) {
@@ -339,7 +335,7 @@ static int launcher_row(const sand_ui_t *ui, int32_t px, int32_t py) {
     int32_t x, y, w, h; launcher_rect(ui, &x, &y, &w, &h);
     if (px < x + 8 || px >= x + w - 8 || py < y + 36) return -1;
     int row = (py - y - 36) / LAUNCHER_ROW;
-    return (row >= 0 && row < LAUNCHER_COUNT) ? row : -1;
+    return (row >= 0 && row < launcher_count(ui)) ? row : -1;
 }
 static void mark_launcher(sand_ui_t *ui) { int32_t x, y, w, h; launcher_rect(ui, &x, &y, &w, &h); mark(ui, x - 50, y - 50, x + w + 50, y + h + 50); mark_dock(ui); }
 static void draw_launcher(sand_ui_t *ui) {
@@ -351,15 +347,17 @@ static void draw_launcher(sand_ui_t *ui) {
     gfx_rrect_ring(g, x, y, w, h, 20, 1, C_LINE, 50u);
     gfx_rect(g, x + 20, y + 1, w - 40, 1, C_LINE, 60u);
     gfx_text(g, &ui->sans_small, x + 20, y + 26, "APPLICATIONS", C_MUTED, 255u, 120);
-    for (int i = 0; i < LAUNCHER_COUNT; ++i) {
-        const struct launcher_app *a = &launcher_apps[i]; int32_t ry = y + 36 + i * LAUNCHER_ROW;
+    for (int i = 0; i < launcher_count(ui); ++i) {
+        struct sand_ui_launcher_item item; int32_t ry = y + 36 + i * LAUNCHER_ROW;
+        if (!ui->host.launcher_item || ui->host.launcher_item(i, &item) != 0) continue;
+        const struct sand_ui_launcher_item *a = &item;
         if (ui->launcher_hover == i) { gfx_rrect(g, x + 8, ry, w - 16, LAUNCHER_ROW - 6, 12, 0x3A3578u, 200u); gfx_rrect_ring(g, x + 8, ry, w - 16, LAUNCHER_ROW - 6, 12, 1, C_CHAMP, 90u); }
-        gfx_rrect_gradient(g, x + 18, ry + 5, 36, 36, 11, a->top, a->bottom, 255u);
+        gfx_rrect_gradient(g, x + 18, ry + 5, 36, 36, 11, a->accent, a->accent2, 255u);
         char l[2] = { a->glyph, 0 };
         gfx_text_center(g, &ui->large, x + 36, ry + 32, l, 0xFFFFFFu, 245u);
         gfx_rrect_ring(g, x + 18, ry + 5, 36, 36, 11, 1, C_LINE, 60u);
         gfx_text(g, &ui->sans_medium, x + 66, ry + 20, a->label, C_TEXT, 255u, 60);
-        gfx_text(g, &ui->sans_small, x + 66, ry + 36, a->desc, C_MUTED, 255u, 0);
+        gfx_text(g, &ui->sans_small, x + 66, ry + 36, a->subtitle, C_MUTED, 255u, 0);
     }
 }
 static void draw_menubar(sand_ui_t *ui) {
@@ -705,7 +703,11 @@ void sand_ui_pointer(sand_ui_t *ui, int32_t dx, int32_t dy, uint8_t buttons) {
     if (pressed && ui->launcher_open) {
         int row = launcher_row(ui, ui->px, ui->py); int dd = dock_hit(ui, ui->px, ui->py);
         int litems[SAND_UI_WINDOWS + 1]; (void)dock_items(ui, litems);
-        if (row >= 0 && ui->host.launch) { (void)ui->host.launch(launcher_apps[row].app); consumed = 1; }
+        if (row >= 0 && ui->host.launch) {
+                    struct sand_ui_launcher_item it;
+                    if (ui->host.launcher_item && ui->host.launcher_item(row, &it) == 0) (void)ui->host.launch(it.app);
+                    consumed = 1;
+                }
         else if (dd >= 0 && litems[dd] < 0) consumed = 1;
         mark_launcher(ui); ui->launcher_open = 0;
     }
