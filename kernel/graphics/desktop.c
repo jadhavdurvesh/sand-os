@@ -9,6 +9,12 @@
 #include "sand/proc/apps.h"
 #include "sand/mm/frame.h"
 #include "sand/mm/heap.h"
+#include "sand/fs/sandfs.h"
+#include "sand/abi.h"
+
+static volatile uint32_t settings_dirty_since;           /* 0 = clean; else tick of the last change (never 0) */
+static void settings_save(void);
+static void settings_load(void);
 
 static sand_ui_t ui;
 static volatile int desktop_ready;
@@ -66,6 +72,7 @@ static void desktop_thread(void *arg) {
         }
         if (moved || buttons != ui.buttons) { sand_ui_pointer(&ui, dx, dy, buttons); if (++pointer_events == 1u) debug_text("SAND_TEST:M11_POINTER_EVENT\n"); }
         present_frame();
+        if (settings_dirty_since && timer_ticks() - settings_dirty_since >= 50u) { settings_dirty_since = 0u; settings_save(); }   /* debounced write, IRQs on */
         __asm__ volatile("sti; hlt");
     }
 }
@@ -75,6 +82,7 @@ int sand_desktop_start(const sand_framebuffer_t *framebuffer) {
     fb = *framebuffer;
     sand_ui_host_t host = { kmalloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive, host_launch, host_launcher_count, host_launcher_item };
     if (sand_ui_init(&ui, &host, (int32_t)fb.width, (int32_t)fb.height) != 0) return -2;
+    settings_load();
     present_frame();
     if (console_add_sink(console_to_ui) < 0) return -3;
     ps2_input_set_console_forward(0);
@@ -89,4 +97,33 @@ int sand_desktop_win_draw(int32_t id, const struct sand_draw *cmds, uint32_t cou
 int sand_desktop_win_event(int32_t id, struct sand_event *out) { return desktop_ready ? sand_ui_win_event(&ui, id, process_current(), out) : SAND_E_NOSYS; }
 int sand_desktop_win_blit(int32_t id, const struct sand_blit *b, const uint32_t *pixels) { return desktop_ready ? sand_ui_win_blit(&ui, id, process_current(), b, pixels) : SAND_E_NOSYS; }
 int sand_desktop_win_resizable(int32_t id, int32_t min_w, int32_t min_h) { return desktop_ready ? sand_ui_win_resizable(&ui, id, process_current(), min_w, min_h) : SAND_E_NOSYS; }
+/* ---- settings persistence: tiny text file "system.cfg" in SANDFS ("accent=N\nmotion=N\nclock24=N\n") ---- */
+static void settings_load(void) {
+    char buf[64]; uint32_t len = 0;
+    if (sandfs_read("system.cfg", buf, sizeof(buf) - 1u, &len) != 0 || len == 0u || len >= sizeof(buf)) return;
+    buf[len] = 0;
+    for (char *p = buf; *p;) {
+        char *e = p; while (*e && *e != '\n') ++e;
+        uint32_t key = 0u, val = 0u; int ok = 0;
+        if (e - p >= 8 && p[0]=='a' && p[1]=='c' && p[2]=='c' && p[3]=='e' && p[4]=='n' && p[5]=='t' && p[6]=='=') { key = SAND_SET_ACCENT; val = (uint32_t)(p[7] - '0'); ok = 1; }
+        else if (e - p >= 8 && p[0]=='m' && p[1]=='o' && p[2]=='t' && p[3]=='i' && p[4]=='o' && p[5]=='n' && p[6]=='=') { key = SAND_SET_REDUCED_MOTION; val = (uint32_t)(p[7] - '0'); ok = 1; }
+        else if (e - p >= 9 && p[0]=='c' && p[1]=='l' && p[2]=='o' && p[3]=='c' && p[4]=='k' && p[5]=='2' && p[6]=='4' && p[7]=='=') { key = SAND_SET_CLOCK_24H; val = (uint32_t)(p[8] - '0'); ok = 1; }
+        if (ok && val <= 9u) (void)sand_ui_setting_set(&ui, key, val);      /* invalid values are ignored by the setter */
+        p = *e ? e + 1 : e;
+    }
+}
+static void settings_save(void) {
+    char buf[40] = "accent=0\nmotion=0\nclock24=0\n";
+    buf[7] = (char)('0' + sand_ui_setting_get(&ui, SAND_SET_ACCENT));
+    buf[16] = (char)('0' + sand_ui_setting_get(&ui, SAND_SET_REDUCED_MOTION));
+    buf[26] = (char)('0' + sand_ui_setting_get(&ui, SAND_SET_CLOCK_24H));
+    (void)sandfs_write("system.cfg", buf, 28u);
+}
+int sand_desktop_setting_get(uint32_t key) { return desktop_ready ? sand_ui_setting_get(&ui, key) : SAND_E_NOSYS; }
+int sand_desktop_setting_set(uint32_t key, uint32_t value) {
+    if (!desktop_ready) return SAND_E_NOSYS;
+    int rc = sand_ui_setting_set(&ui, key, value);
+    if (rc == 0) { uint32_t t = timer_ticks(); settings_dirty_since = t ? t : 1u; }
+    return rc;
+}
 int sand_desktop_win_close(int32_t id) { return desktop_ready ? sand_ui_win_close(&ui, id, process_current()) : SAND_E_NOSYS; }

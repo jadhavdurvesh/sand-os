@@ -48,6 +48,7 @@ static void cmd_help(void)
         {"apps", "list installed applications"},
         {"run <app>", "launch an app and wait for it"},
         {"open <app>", "launch an app in the background"},
+        {"settings [k v]", "show or change system settings"},
         {"ps", "list processes"},
         {"mem", "memory and scheduler counters"},
         {"uptime", "time since boot"},
@@ -189,6 +190,20 @@ static void reap_opened(void)          /* collect finished background apps so th
         if (!found) opened[i] = 0;
     }
 }
+static void cmd_settings(char *argv[], uint32_t argc)
+{
+    static const char *const keys[3] = { "accent", "motion", "clock24" };
+    if (argc == 3) {
+        for (uint32_t k = 0; k < 3; ++k)
+            if (!strcmp(argv[1], keys[k])) {
+                uint32_t v = 0; for (const char *p = argv[2]; *p >= '0' && *p <= '9'; ++p) v = v * 10u + (uint32_t)(*p - '0');
+                if (sand_setting_set(k + 1u, v) != 0) out(C_WARN "rejected: bad value" C_RESET "\n");
+                return;
+            }
+        out(C_WARN "usage: settings [accent|motion|clock24 <value>]" C_RESET "\n"); return;
+    }
+    for (uint32_t k = 0; k < 3; ++k) { out(keys[k]); out("="); sh_putu((uint32_t)sand_setting_get(k + 1u)); out("\n"); }
+}
 static void cmd_open(const char *app)
 {
     reap_opened();
@@ -226,6 +241,7 @@ static int execute(char *line)
         else out(C_BAD "rm: no such file: " C_RESET), out(argv[1]), out("\n");
     }
     else if (!strcmp(c, "apps")) cmd_apps();
+    else if (!strcmp(c, "settings")) cmd_settings(argv, argc);
     else if (!strcmp(c, "open")) { if (argc < 2) out(C_WARN "usage: open <app>" C_RESET "\n"); else cmd_open(argv[1]); }
     else if (!strcmp(c, "run")) { if (argc < 2) out(C_WARN "usage: run <app>" C_RESET "\n"); else cmd_run(argv[1]); }
     else if (!strcmp(c, "ps")) cmd_ps();

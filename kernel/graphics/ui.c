@@ -9,7 +9,8 @@ void sand_ui_paint_wallpaper(gfx_t *g);
 #define C_LINE     0xFFFFFFu
 #define C_TEXT     0xEDE9F7u
 #define C_MUTED    0x9A94B8u
-#define C_CHAMP    0xF2C98Au
+static uint32_t g_accent = 0xF2C98Au;                /* the active accent (setting); champagne by default */
+#define C_CHAMP    (g_accent)
 #define C_CORAL    0xE8836Bu
 #define C_CLOSE    0xFF6B6Bu
 #define C_WARN     0xF5B84Bu
@@ -172,7 +173,8 @@ int sand_ui_init(sand_ui_t *ui, const sand_ui_host_t *host, int32_t w, int32_t h
     if (ui->win[1].x < 80) ui->win[1].x = 80;
     ui->order[0] = 2; ui->order[1] = 3; ui->order[2] = 4; ui->order[3] = 1; ui->order[4] = 0;
     ui->press_win = -1; ui->hover_ctrl = -1; ui->launcher_open = 0; ui->launcher_hover = -1; ui->liveness_seen = 0;
-    ui->px = w / 2; ui->py = h / 2; ui->buttons = 0; ui->drag_win = -1; ui->hover_dock = -1; ui->resize_win = -1; ui->scratch = 0;
+    ui->px = w / 2; ui->py = h / 2; ui->buttons = 0; ui->accent = 0; ui->reduced_motion = 0; ui->clock24 = 1; g_accent = 0xF2C98Au;
+    ui->drag_win = -1; ui->hover_dock = -1; ui->resize_win = -1; ui->scratch = 0;
     ui->dirty = (struct sand_ui_rect){ 0, 0, 0, 0 };
     ui->cursor_box = (struct sand_ui_rect){ 0, 0, 0, 0 };
     ui->term_fg = C_TEXT; ui->term_gen = 1; ui->term_seen = 0;
@@ -370,8 +372,15 @@ static void draw_menubar(sand_ui_t *ui) {
     int32_t x = gfx_text(g, &ui->sans_medium, 36, 20, "SAND", C_TEXT, 255u, 160);
     int top = top_window(ui);
     if (top >= 0) gfx_text(g, &ui->sans, x + 18, 20, ui->win[top].title, C_MUTED, 255u, 0);
-    int hh, mm; char t[8], *p = t;
-    if (ui->host.wall_clock && ui->host.wall_clock(&hh, &mm) == 0) { p = put_2(p, (uint32_t)hh); *p++ = ':'; p = put_2(p, (uint32_t)mm); *p = 0; }
+    int hh, mm; char t[12], *p = t;
+    if (ui->host.wall_clock && ui->host.wall_clock(&hh, &mm) == 0) {
+        uint32_t h = (uint32_t)hh; const char *suffix = 0;
+        if (!ui->clock24) { suffix = h >= 12u ? " PM" : " AM"; h %= 12u; if (h == 0u) h = 12u; }
+        if (suffix) { if (h >= 10u) *p++ = '1'; *p++ = (char)('0' + h % 10u); } else p = put_2(p, h);
+        *p++ = ':'; p = put_2(p, (uint32_t)mm);
+        if (suffix) { for (const char *s = suffix; *s; ++s) *p++ = *s; }
+        *p = 0;
+    }
     else { uint32_t s = ui->host.ticks() / 100u; p = put_2(p, (s / 60u) % 100u); *p++ = ':'; p = put_2(p, s % 60u); *p = 0; }
     gfx_text_right(g, &ui->sans_medium, ui->w - 16, 20, t, C_TEXT, 255u);
 }
@@ -599,6 +608,25 @@ int sand_ui_win_close(sand_ui_t *ui, int id, uint32_t owner) {
     begin_close(ui, SAND_UI_SHELL_WINDOWS + id - 1);
     return 0;
 }
+static const uint32_t accents[SAND_ACCENT_COUNT] = { 0xF2C98Au, 0x83B7FFu, 0xA99BFFu, 0x74D6AAu, 0xE8836Bu };
+int sand_ui_setting_get(const sand_ui_t *ui, uint32_t key) {
+    switch (key) {
+    case SAND_SET_ACCENT: return ui->accent;
+    case SAND_SET_REDUCED_MOTION: return ui->reduced_motion;
+    case SAND_SET_CLOCK_24H: return ui->clock24;
+    default: return SAND_E_FAIL;
+    }
+}
+int sand_ui_setting_set(sand_ui_t *ui, uint32_t key, uint32_t value) {
+    switch (key) {
+    case SAND_SET_ACCENT: if (value >= SAND_ACCENT_COUNT) return SAND_E_FAIL; ui->accent = (uint8_t)value; g_accent = accents[value]; break;
+    case SAND_SET_REDUCED_MOTION: if (value > 1u) return SAND_E_FAIL; ui->reduced_motion = (uint8_t)value; break;
+    case SAND_SET_CLOCK_24H: if (value > 1u) return SAND_E_FAIL; ui->clock24 = (uint8_t)value; break;
+    default: return SAND_E_FAIL;
+    }
+    sand_ui_mark_all(ui);
+    return 0;
+}
 int sand_ui_win_blit(sand_ui_t *ui, int id, uint32_t owner, const struct sand_blit *b, const uint32_t *pixels) {
     struct sand_ui_window *w = app_window(ui, id, owner);
     if (!w) return SAND_E_NOENT;
@@ -774,7 +802,7 @@ int sand_ui_frame(sand_ui_t *ui, struct sand_ui_rect *out) {
     for (int i = SAND_UI_SHELL_WINDOWS; i < SAND_UI_WINDOWS; ++i) {      /* open / close animation clock */
         struct sand_ui_window *w = &ui->win[i];
         if (!w->alive || !w->anim) continue;
-        uint32_t dt = t - w->anim_t0; uint32_t lin = dt >= ANIM_TICKS ? 255u : dt * 255u / ANIM_TICKS;
+        uint32_t dt = ui->reduced_motion ? ANIM_TICKS : t - w->anim_t0; uint32_t lin = dt >= ANIM_TICKS ? 255u : dt * 255u / ANIM_TICKS;
         uint32_t e = lin * (510u - lin) / 255u;                           /* ease-out */
         if (w->anim == 1) { w->anim_a = e; if (dt >= ANIM_TICKS) { w->anim = 0; w->anim_a = 255u; } }
         else { w->anim_a = 255u - e; if (dt >= ANIM_TICKS) { destroy_app_window(ui, i); continue; } }
