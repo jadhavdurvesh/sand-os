@@ -8,7 +8,7 @@
  *
  * Calling convention (x86-32): int 0x80, number in EAX, arguments in
  * EBX, ECX, EDX, result in EAX. Negative results are errors. */
-#define SAND_ABI_VERSION 5u
+#define SAND_ABI_VERSION 6u
 
 enum sand_syscall_number {
     SAND_SYS_EXIT = 1,        /* exit(status)                         */
@@ -38,7 +38,9 @@ enum sand_syscall_number {
     SAND_SYS_WIN_BLIT = 22,   /* win_blit(id, sand_blit*) -> 0: copy an app-owned pixel buffer */
     SAND_SYS_WIN_RESIZABLE = 23, /* win_resizable(id, (min_w<<16)|min_h) -> 0: opt in to user resizing */
     SAND_SYS_SETTING_GET = 24,   /* setting_get(key) -> value >= 0, or SAND_E_FAIL for an unknown key   */
-    SAND_SYS_SETTING_SET = 25    /* setting_set(key, value) -> 0, or SAND_E_FAIL for a bad key/value; persisted to system.cfg */
+    SAND_SYS_SETTING_SET = 25,   /* setting_set(key, value) -> 0, or SAND_E_FAIL for a bad key/value; persisted to system.cfg */
+    SAND_SYS_INSTALL_PUT = 26,   /* install_put(offset, data, len<=512) -> staged bytes; offset 0 starts a new image, later offsets must append */
+    SAND_SYS_INSTALL_COMMIT = 27 /* install_commit(name) -> 0: gate-check the staged SAPP and store it as <name>.sapp (needs system.install) */
 };
 
 #define SAND_E_FAIL   (-1)    /* generic failure / bad argument */

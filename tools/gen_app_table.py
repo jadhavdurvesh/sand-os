@@ -24,7 +24,7 @@ def cstr(s):
 
 
 PERMS = {"console.write": 0x01, "console.read": 0x02, "fs.read": 0x04, "fs.write": 0x08, "process.spawn": 0x10,
-         "window.create": 0x20, "settings.write": 0x40}
+         "window.create": 0x20, "settings.write": 0x40, "system.install": 0x80}
 PERM_ALIASES = {"console.rw": ("console.read", "console.write"), "fs.rw": ("fs.read", "fs.write")}
 
 

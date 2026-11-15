@@ -48,7 +48,7 @@ static const struct { const char *name; uint32_t bits; } perm_names[]={
     {"console.write",SAND_PERM_CONSOLE_WRITE},{"console.read",SAND_PERM_CONSOLE_READ},
     {"console.rw",SAND_PERM_CONSOLE_WRITE|SAND_PERM_CONSOLE_READ},
     {"fs.read",SAND_PERM_FS_READ},{"fs.write",SAND_PERM_FS_WRITE},{"fs.rw",SAND_PERM_FS_READ|SAND_PERM_FS_WRITE},
-    {"process.spawn",SAND_PERM_SPAWN},{"window.create",SAND_PERM_WINDOW},{"settings.write",SAND_PERM_SETTINGS},
+    {"process.spawn",SAND_PERM_SPAWN},{"system.install",SAND_PERM_INSTALL},{"window.create",SAND_PERM_WINDOW},{"settings.write",SAND_PERM_SETTINGS},
 };
 /* Read the JSON string at p[*i]=='"' into buf (escapes rejected); advances past the closing quote. */
 static int read_string(const char *p,uint32_t end,uint32_t *i,char *buf,uint32_t cap) {

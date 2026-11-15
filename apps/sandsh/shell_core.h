@@ -42,6 +42,7 @@ static void cmd_help(void)
         {"echo <text>", "print text"},
         {"clear", "clear the screen"},
         {"ls", "list files on SANDFS"},
+        {"install", "install <name>: store an app sent as hex lines"},
         {"cat <file>", "print a file"},
         {"write <file> <text>", "create or replace a file"},
         {"rm <file>", "remove a file"},
@@ -213,7 +214,47 @@ static void cmd_open(const char *app)
     opened[slot] = pid;
     out(C_MUTED "[pid "); sh_putu((uint32_t)pid); out(" started]" C_RESET "\n");
 }
-static void prompt(void) { reap_opened(); out(C_ACCENT "sand" C_MUTED " > " C_RESET); }
+/* ---- install: receive an app image as hex lines (<=100 bytes each) and hand it to the kernel installer ---- */
+static int g_inst_active; static uint32_t g_inst_off; static char g_inst_name[17];
+static int hexval(char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1; }
+static void inst_fail(const char *why, int32_t code)
+{
+    out(C_BAD "install: "); out(why); out(" ("); sand_puti(code); out(")" C_RESET "\n");
+    g_inst_active = 0;
+}
+static void inst_line(const char *line)
+{
+    while (*line == ' ') ++line;
+    if (!strcmp(line, "abort")) { g_inst_active = 0; out(C_MUTED "install: aborted" C_RESET "\n"); return; }
+    if (!strcmp(line, "end")) {
+        int32_t rc = sand_install_commit(g_inst_name);
+        if (rc != 0) { inst_fail("the kernel refused the image (bad format, built-in name, or launch policy)", rc); return; }
+        g_inst_active = 0;
+        out(C_GOOD "installed " C_RESET); out(g_inst_name); out(" ("); sh_putu(g_inst_off); out(" bytes); run it with: run "); out(g_inst_name); out("\n");
+        return;
+    }
+    uint8_t buf[100]; uint32_t n = 0, len = strlen(line);
+    if (len == 0 || (len & 1u) || len / 2 > sizeof(buf)) { inst_fail("bad hex line", -1); return; }
+    for (uint32_t i = 0; i < len; i += 2) {
+        int hi = hexval(line[i]), lo = hexval(line[i + 1]);
+        if (hi < 0 || lo < 0) { inst_fail("bad hex digit", -1); return; }
+        buf[n++] = (uint8_t)(hi * 16 + lo);
+    }
+    int32_t rc = sand_install_put(g_inst_off, buf, n);
+    if (rc < 0) { inst_fail("could not stage the data", rc); return; }
+    g_inst_off += n; out(".");
+}
+static void cmd_install(const char *name)
+{
+    uint32_t n = strlen(name);
+    if (n == 0 || n > 16) { out(C_BAD "usage: install <name>   (then send the .sapp as hex lines, finish with 'end')" C_RESET "\n"); return; }
+    memcpy(g_inst_name, name, n + 1);
+    int32_t rc = sand_install_put(0, g_inst_name, 0);
+    if (rc < 0) { inst_fail(rc == SAND_E_PERM ? "this app may not install apps (needs system.install)" : "installer busy", rc); return; }
+    g_inst_active = 1; g_inst_off = 0;
+    out(C_MUTED "install: send hex lines (up to 200 characters each), then 'end' (or 'abort')" C_RESET "\n");
+}
+static void prompt(void) { reap_opened(); if (g_inst_active) return; out(C_ACCENT "sand" C_MUTED " > " C_RESET); }
 
 /* Returns 1 when the shell should exit. */
 static int execute(char *line)
@@ -221,6 +262,7 @@ static int execute(char *line)
     char raw[LINE_MAX + 1];
     uint32_t n = strlen(line);
     memcpy(raw, line, n + 1);
+    if (g_inst_active) { inst_line(line); return 0; }
     char *argv[ARG_MAX];
     uint32_t argc = split(line, argv, ARG_MAX);
     if (argc == 0) return 0;
@@ -233,6 +275,7 @@ static int execute(char *line)
     }
     else if (!strcmp(c, "clear")) out("\x1b[2J\x1b[H");
     else if (!strcmp(c, "ls")) cmd_ls();
+    else if (!strcmp(c, "install")) cmd_install(argc > 1 ? argv[1] : "");
     else if (!strcmp(c, "cat")) { if (argc < 2) out(C_WARN "usage: cat <file>" C_RESET "\n"); else cmd_cat(argv[1]); }
     else if (!strcmp(c, "write")) cmd_write(argv, argc, raw);
     else if (!strcmp(c, "rm")) {

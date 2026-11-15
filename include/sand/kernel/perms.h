@@ -10,4 +10,5 @@
 #define SAND_PERM_SPAWN         0x10u   /* process.spawn */
 #define SAND_PERM_WINDOW        0x20u   /* window.create */
 #define SAND_PERM_SETTINGS      0x40u   /* settings.write */
+#define SAND_PERM_INSTALL       0x80u   /* system.install: stage and store apps in SANDFS */
 #endif
