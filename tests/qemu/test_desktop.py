@@ -148,7 +148,7 @@ class DesktopTest(unittest.TestCase):
         time.sleep(1.0)
         panel = self.shot("desktop-launcher.ppm")
         self.assertGreater(sum(1 for x in range(420, 680) for y in range(420, 640) if sum(pixel(panel, x, y)) > 500), 200)   # panel text and icons
-        self.move_to(501, 465)                              # LOCUS row (second of five: CAIRN, LOCUS, QUANTA, CHRONOS, KEYSTONE)
+        self.move_to(501, 413)                              # LOCUS row (second of six: CAIRN, LOCUS, QUANTA, CHRONOS, KEYSTONE, LUMEN)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(2.5)
         win = self.shot("desktop-launched.ppm")
@@ -158,6 +158,21 @@ class DesktopTest(unittest.TestCase):
         time.sleep(1.5)
         ps = self.vm.run_command("ps")
         self.assertNotIn("locus", ps)
+
+    def test_07b_disk_app_in_the_launcher(self):
+        """LUMEN lives only in SANDFS; its manifest puts it in the launcher and the dock starts it from disk."""
+        DesktopTest._ptr = (None, None)
+        self.move_to(444, 716)
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(1.0)
+        self.move_to(501, 619)                              # sixth row: LUMEN (disk app, listed after the built-in apps)
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(2.5)
+        self.shot("desktop-disk-launch.ppm")
+        self.assertIn("lumen", self.vm.run_command("ps"))
+        self.vm.sendkey("q")
+        time.sleep(1.5)
+        self.assertNotIn("lumen", self.vm.run_command("ps"))
 
     def test_08_resize_and_pixel_buffer(self):
         """LUMEN owns a pixel buffer; dragging its dune-grip resizes the window and the app redraws."""

@@ -7,6 +7,7 @@
 #include "sand/kernel/process.h"
 #include "sand/console/console.h"
 #include "sand/proc/apps.h"
+#include "sand/proc/diskapps.h"
 #include "sand/mm/frame.h"
 #include "sand/mm/heap.h"
 #include "sand/fs/sandfs.h"
@@ -31,17 +32,28 @@ static void host_sysinfo(struct sand_ui_sysinfo *s) {
 static uint32_t host_pid(void) { return process_current(); }
 static int host_pid_alive(uint32_t pid) { struct sand_process_info info; return process_get_info(pid, &info) == 0 && info.state != SAND_PROCESS_TERMINATED; }
 static int host_launch(const char *app) {
-    const uint8_t *image; uint32_t size, flags; sand_pid_t pid;
-    if (apps_find(app, &image, &size) != 0) return -1;
+    const uint8_t *image; uint32_t size, flags; sand_pid_t pid; int disk = 0, rc;
+    /* IRQs stay off from the lookup to the spawn: the disk-app staging buffer is shared with the spawn syscall. */
     __asm__ volatile("pushf; pop %0; cli" : "=r"(flags) : : "memory");
-    int rc = process_spawn_detached(app, image, size, &pid);
+    if (apps_find(app, &image, &size) != 0) {
+        if (diskapps_find(app, &image, &size) != 0) { if (flags & 0x200u) __asm__ volatile("sti" : : : "memory"); return -1; }
+        disk = 1;
+    }
+    rc = process_spawn_detached(app, image, size, &pid);
+    if (rc == 0 && disk) (void)process_set_permissions(pid, diskapps_manifest_permissions(image, size));
     if (flags & 0x200u) __asm__ volatile("sti" : : : "memory");
     return rc;
 }
-static int host_launcher_count(void) { return (int)apps_launcher_count(); }
+/* Launcher catalogue: built-in apps first (manifest order), then disk apps that declare a "launcher" block. */
+static int host_launcher_count(void) {
+    uint32_t n = apps_launcher_count() + diskapps_launcher_count();
+    return n > 9u ? 9 : (int)n;
+}
 static int host_launcher_item(int index, struct sand_ui_launcher_item *out) {
-    struct sand_app_launcher_info info;
-    if (index < 0 || apps_launcher_at((uint32_t)index, &info) != 0) return -1;
+    struct sand_app_launcher_info info; uint32_t built_in = apps_launcher_count();
+    if (index < 0) return -1;
+    if ((uint32_t)index < built_in) { if (apps_launcher_at((uint32_t)index, &info) != 0) return -1; }
+    else if (diskapps_launcher_at((uint32_t)index - built_in, &info) != 0) return -1;
     for (int i = 0; i < 16; ++i) out->label[i] = info.label[i];
     for (int i = 0; i < 17; ++i) out->app[i] = info.app[i];
     for (int i = 0; i < 24; ++i) out->subtitle[i] = info.subtitle[i];
@@ -82,6 +94,9 @@ int sand_desktop_start(const sand_framebuffer_t *framebuffer) {
     fb = *framebuffer;
     sand_ui_host_t host = { kmalloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive, host_launch, host_launcher_count, host_launcher_item };
     if (sand_ui_init(&ui, &host, (int32_t)fb.width, (int32_t)fb.height) != 0) return -2;
+    { uint32_t flags; __asm__ volatile("pushf; pop %0; cli" : "=r"(flags) : : "memory");
+      diskapps_launcher_scan();                      /* once, before the desktop thread runs */
+      if (flags & 0x200u) __asm__ volatile("sti" : : : "memory"); }
     settings_load();
     present_frame();
     if (console_add_sink(console_to_ui) < 0) return -3;
