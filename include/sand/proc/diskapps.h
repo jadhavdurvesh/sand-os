@@ -7,4 +7,11 @@ int diskapps_find(const char *name, const uint8_t **image, uint32_t *size);   /*
 int diskapps_name_at(uint32_t index, char *name_out, uint32_t capacity);      /* name without ".sapp" */
 /* Permission bits (sand/kernel/perms.h) declared in the SAPP metadata ("permissions"); 0 on any parse problem. */
 uint32_t diskapps_manifest_permissions(const uint8_t *image, uint32_t size);
+/* Launcher entries declared by disk apps ("launcher" object in their metadata, same rules as built-in manifests).
+ * diskapps_launcher_scan() reads every .sapp once (caller must keep IRQs off or no other spawn running). */
+struct sand_app_launcher_info;
+int diskapps_manifest_launcher(const uint8_t *image, uint32_t size, const char *app, struct sand_app_launcher_info *out, uint32_t *order_out);
+void diskapps_launcher_scan(void);
+uint32_t diskapps_launcher_count(void);
+int diskapps_launcher_at(uint32_t index, struct sand_app_launcher_info *out);
 #endif
