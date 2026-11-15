@@ -11,6 +11,7 @@ int sandfs_read(const char *n, void *d, uint32_t c, uint32_t *l) { (void)n; (voi
 int sandfs_list(uint32_t o, char *n, uint32_t c, uint32_t *l) { (void)o; (void)n; (void)c; (void)l; return -1; }
 void *kmalloc(uint32_t s) { return malloc(s); }
 
+#include "sand/proc/apps.h"
 static int failures;
 #define CHECK(cond, msg) do { if (!(cond)) { printf("FAIL: %s\n", msg); ++failures; } } while (0)
 
@@ -36,6 +37,26 @@ int main(int argc, char **argv) {
     CHECK(with_meta("{\"permissions\":[1]}") == 0, "non-string element");
     CHECK(diskapps_manifest_permissions(NULL, 0) == 0, "null image");
     uint8_t tiny[40] = {0}; CHECK(diskapps_manifest_permissions(tiny, sizeof tiny) == 0, "short image");
+    {   /* launcher block */
+        static uint8_t img[4096]; struct sand_app_launcher_info li; uint32_t order = 0;
+        const char *good = "{\"launcher\":{\"accent\":\"#6FC3FF\",\"accent2\":\"#2A5FA8\",\"glyph\":\"L\",\"label\":\"LUMEN\",\"order\":50,\"subtitle\":\"Light field\"}}";
+        const char *bad[] = {
+            "{\"launcher\":{\"accent\":\"#6FC3FF\",\"accent2\":\"#2A5FA8\",\"glyph\":\"L\",\"label\":\"LUMEN\",\"subtitle\":\"x\"}}",            /* no order */
+            "{\"launcher\":{\"accent\":\"6FC3FF\",\"accent2\":\"#2A5FA8\",\"glyph\":\"L\",\"label\":\"L\",\"order\":1,\"subtitle\":\"x\"}}",              /* colour without # */
+            "{\"launcher\":{\"accent\":\"#6FC3FF\",\"accent2\":\"#2A5FA8\",\"glyph\":\"LL\",\"label\":\"L\",\"order\":1,\"subtitle\":\"x\"}}",            /* glyph too long */
+            "{\"launcher\":{\"accent\":\"#6FC3FF\",\"accent2\":\"#2A5FA8\",\"glyph\":\"L\",\"label\":\"0123456789ABCDEF\",\"order\":1,\"subtitle\":\"x\"}}", /* label 16 chars */
+            "{\"launcher\":{\"accent\":\"#6FC3FF\",\"accent2\":\"#2A5FA8\",\"glyph\":\"L\",\"label\":\"L\",\"order\":99999,\"subtitle\":\"x\"}}",         /* order range */
+            "{\"launcher\":{\"evil\":\"x\"}}", "{\"launcher\":[1]}", "{\"x\":{\"launcher\":{}}}", "{\"launcher\":{\"label\":\"L"};
+        uint32_t n = (uint32_t)strlen(good); uint32_t off = 96;
+        memset(img, 0, sizeof img); memcpy(img + 28, &off, 4); memcpy(img + 32, &n, 4); memcpy(img + off, good, n);
+        CHECK(diskapps_manifest_launcher(img, off + n, "lumen", &li, &order) == 0, "launcher parses");
+        CHECK(order == 50 && li.accent == 0x6FC3FFu && li.accent2 == 0x2A5FA8u && li.glyph == 'L' && !strcmp(li.label, "LUMEN") && !strcmp(li.subtitle, "Light field") && !strcmp(li.app, "lumen"), "launcher fields");
+        for (unsigned k = 0; k < sizeof bad / sizeof bad[0]; ++k) {
+            uint32_t m = (uint32_t)strlen(bad[k]);
+            memset(img, 0, sizeof img); memcpy(img + 28, &off, 4); memcpy(img + 32, &m, 4); memcpy(img + off, bad[k], m);
+            CHECK(diskapps_manifest_launcher(img, off + m, "lumen", &li, &order) != 0, bad[k]);
+        }
+    }
     for (int i = 1; i < argc; i += 2) {              /* <file.sapp> <expected mask> pairs from real builds */
         FILE *f = fopen(argv[i], "rb"); uint8_t *b = malloc(1 << 17); size_t n = f ? fread(b, 1, 1 << 17, f) : 0;
         if (f) fclose(f);
