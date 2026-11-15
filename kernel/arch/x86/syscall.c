@@ -12,6 +12,7 @@
 #include "sand/mm/heap.h"
 #include "sand/proc/apps.h"
 #include "sand/proc/diskapps.h"
+#include "sand/proc/appinstall.h"
 #include "sand/abi.h"
 #include "sand/kernel/perms.h"
 #include "sand/security/launch_gate.h"
@@ -83,6 +84,7 @@ static uint32_t required_permission(uint32_t number,uint32_t a) {
     case SAND_SYS_SPAWN: return SAND_PERM_SPAWN;
     case SAND_SYS_WIN_CREATE: return SAND_PERM_WINDOW;
     case SAND_SYS_SETTING_SET: return SAND_PERM_SETTINGS;
+    case SAND_SYS_INSTALL_PUT: case SAND_SYS_INSTALL_COMMIT: return SAND_PERM_INSTALL;
     default: return 0u;
     }
 }
@@ -149,6 +151,13 @@ uint32_t syscall_dispatch(uint32_t frame) {
         if(c==0u || c>sizeof(scratch)) { result=SAND_E_FAIL; break; }
         if(copy_in(scratch,b,c)!=0) { result=SAND_E_FAULT; break; }
         result=sandfs_write(name_buffer,scratch,c)==0?0:SAND_E_FAIL; break; }
+    case SAND_SYS_INSTALL_PUT: {
+        if(c>sizeof(scratch)) { result=SAND_E_FAIL; break; }
+        if(c!=0u && copy_in(scratch,b,c)!=0) { result=SAND_E_FAULT; break; }
+        result=appinstall_put(process_current(),a,scratch,c); break; }
+    case SAND_SYS_INSTALL_COMMIT:
+        if(copy_name(a)!=0) { result=SAND_E_FAULT; break; }
+        result=appinstall_commit(process_current(),name_buffer); break;
     case SAND_SYS_FS_LIST: {
         struct sand_dirent entry; uint32_t length=0u;
         if(!user_ok(b,sizeof(entry),1)) { result=SAND_E_FAULT; break; }

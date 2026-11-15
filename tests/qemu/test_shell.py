@@ -113,6 +113,43 @@ class ShellTest(unittest.TestCase):
         self.assertIn("cannot start", self.cmd("run nosuchapp"))
         self.assertIn("exited with status 0", out)
 
+    def _install(self, name, data, timeout=8):
+        """Drive the shell's install command: hex lines, one acknowledged ('.') at a time, then 'end'."""
+        mark = len(self.vm.serial_text)
+        self.vm.send("install %s\r" % name)
+        self.assertIsNotNone(self.vm.expect(r"send hex lines", 10, start=mark), self.vm.serial_text[mark:][-300:])
+        for i in range(0, len(data), 100):
+            mark = len(self.vm.serial_text)
+            self.vm.send(data[i:i + 100].hex() + "\r")
+            self.assertIsNotNone(self.vm.expect(r"\.", timeout, start=mark) or self.vm.expect(r"install: ", 1, start=mark), "no ack")
+        mark = len(self.vm.serial_text)
+        self.vm.send("end\r")
+        self.vm.expect(r"(installed|install: )[^\r\n]*[\r\n]+(sand >)?", timeout, start=mark)
+        return self.vm.serial_text[mark:]
+
+    def test_12_install_an_app_from_the_shell(self):
+        """Install a SAPP image at run time: it is stored in SANDFS, then runs with its manifest permissions."""
+        import pathlib
+        image = pathlib.Path("build/apps/hello.sapp").read_bytes()
+        out = self._install("greeter", image)
+        self.assertIn("installed", out, out[-300:])
+        self.assertIn("greeter", self.cmd("apps"))
+        self.assertIn("greeter.sapp", self.cmd("ls"))
+        run = self.cmd("run greeter", timeout=20)
+        self.assertIn("Hello from a native SAND application", run)
+        self.cmd("rm greeter.sapp")
+        self.assertNotIn("greeter", self.cmd("apps"))
+
+    def test_13_installer_refuses_bad_input(self):
+        import pathlib
+        image = pathlib.Path("build/apps/hello.sapp").read_bytes()
+        self.assertIn("refused", self._install("locus", image))               # would shadow a built-in app
+        self.assertIn("refused", self._install("junk", b"NOTASAPP" * 40))     # not a SAPP image
+        self.assertIn("refused", self._install("Bad-Name", image))            # invalid name
+        ls = self.cmd("ls")
+        for name in ("locus.sapp", "junk.sapp"):
+            self.assertNotIn(name, ls)
+
     def test_10_permissions_are_enforced(self):
         """An app that declares only console.write is refused every gated call (SAND_E_PERM = -5)."""
         out = self.cmd("run jail", timeout=20)

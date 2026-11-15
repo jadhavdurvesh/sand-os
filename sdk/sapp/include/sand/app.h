@@ -64,6 +64,8 @@ static inline int32_t sand_win_close(int32_t id) { return sand_syscall1(SAND_SYS
 static inline int32_t sand_win_blit(int32_t id, const struct sand_blit *b) { return sand_syscall2(SAND_SYS_WIN_BLIT, (uint32_t)id, (uint32_t)b); }
 static inline int32_t sand_setting_get(uint32_t key) { return sand_syscall1(SAND_SYS_SETTING_GET, key); }
 static inline int32_t sand_setting_set(uint32_t key, uint32_t value) { return sand_syscall2(SAND_SYS_SETTING_SET, key, value); }
+static inline int32_t sand_install_put(uint32_t offset, const void *data, uint32_t length) { return sand_syscall3(SAND_SYS_INSTALL_PUT, offset, (uint32_t)data, length); }
+static inline int32_t sand_install_commit(const char *name) { return sand_syscall1(SAND_SYS_INSTALL_COMMIT, (uint32_t)name); }
 static inline int32_t sand_win_resizable(int32_t id, int32_t min_w, int32_t min_h) { return sand_syscall2(SAND_SYS_WIN_RESIZABLE, (uint32_t)id, ((uint32_t)min_w << 16) | (uint32_t)min_h); }
 static inline int32_t sand_device_list(uint32_t index, struct sand_devinfo *out) { return sand_syscall2(SAND_SYS_DEVICE_LIST, index, (uint32_t)out); }
 #endif
