@@ -127,6 +127,7 @@ jobs:
         run: |
           python3 tests/qemu/test_shell.py
           python3 tests/qemu/test_desktop.py
+          python3 tests/qemu/test_install_tool.py
       - name: Upload boot image and test evidence
         if: always()
         uses: actions/upload-artifact@v4
