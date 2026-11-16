@@ -13,6 +13,7 @@
 #include "sand/proc/apps.h"
 #include "sand/proc/diskapps.h"
 #include "sand/proc/appinstall.h"
+#include "sand/arch/x86/rtc.h"
 #include "sand/abi.h"
 #include "sand/kernel/perms.h"
 #include "sand/security/launch_gate.h"
@@ -151,6 +152,13 @@ uint32_t syscall_dispatch(uint32_t frame) {
         if(c==0u || c>sizeof(scratch)) { result=SAND_E_FAIL; break; }
         if(copy_in(scratch,b,c)!=0) { result=SAND_E_FAULT; break; }
         result=sandfs_write(name_buffer,scratch,c)==0?0:SAND_E_FAIL; break; }
+    case SAND_SYS_TIME_GET: {
+        char iso[20]; struct sand_time t; uint32_t v[6]; static const uint8_t at[6]={0,5,8,11,14,17}, wd[6]={4,2,2,2,2,2};
+        if(!user_ok(a,sizeof(t),1)) { result=SAND_E_FAULT; break; }
+        if(rtc_read_iso(iso)!=0) { result=SAND_E_FAIL; break; }
+        for(uint32_t f=0;f<6u;++f) { v[f]=0u; for(uint32_t d=0;d<wd[f];++d) v[f]=v[f]*10u+(uint32_t)(iso[at[f]+d]-'0'); }
+        t.year=v[0]; t.month=v[1]; t.day=v[2]; t.hour=v[3]; t.minute=v[4]; t.second=v[5];
+        (void)copy_out(a,&t,sizeof(t)); result=0; break; }
     case SAND_SYS_INSTALL_PUT: {
         if(c>sizeof(scratch)) { result=SAND_E_FAIL; break; }
         if(c!=0u && copy_in(scratch,b,c)!=0) { result=SAND_E_FAULT; break; }

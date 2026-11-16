@@ -1,0 +1,57 @@
+CITADEL CUSTOM PROPRIETARY SOFTWARE LICENSE
+Version 1.0 — 11 November 2026
+
+Copyright (c) 2026 Durvesh Jadhav and/or the applicable DMJ rights-holding entity ("Rights Holder"). All rights reserved.
+
+NOTICE: THIS IS A RESTRICTIVE PROPRIETARY LICENSE, NOT AN OPEN-SOURCE LICENSE. PUBLIC REPOSITORY VISIBILITY DOES NOT GRANT RIGHTS BEYOND THOSE EXPRESSLY STATED HERE.
+
+1. DEFINITIONS
+"Software" means the source code, object code, binaries, documentation, specifications, interface definitions, designs, and associated materials in this repository, excluding Third-Party Materials.
+"Personal Evaluation" means inspection and execution by an individual solely to assess the Software for their own non-commercial, non-production evaluation.
+"Authorized SandOS Environment" means a SandOS distribution or system expressly authorized in writing by the Rights Holder.
+"Third-Party Materials" means material not owned by the Rights Holder and governed by separate license terms.
+
+2. LIMITED GRANT
+Subject to this License, the Rights Holder grants you a limited, revocable, non-exclusive, non-transferable, non-sublicensable permission to view publicly accessible source, download it, compile it, and execute an unmodified copy solely for Personal Evaluation. This grant does not authorize production deployment, commercial use, redistribution, sublicensing, or product integration.
+
+3. RESTRICTIONS
+Without prior express written permission from the Rights Holder, you must not:
+(a) sell, rent, lease, sublicense, publish, redistribute, mirror, host, or provide the Software or copies to another person;
+(b) use it in any commercial, revenue-generating, paid, enterprise, managed-service, or production environment;
+(c) incorporate, bundle, embed, or ship it in an OS, firmware, device, application, SDK, SaaS service, or other product, including any SandOS distribution, except within an Authorized SandOS Environment;
+(d) create, distribute, or use derivative works, modified versions, ports, forks, or adaptations outside private Personal Evaluation;
+(e) remove or alter copyright, trademark, attribution, license, security, or provenance notices;
+(f) reverse engineer, decompile, or disassemble binary distributions, except to the extent a restriction is prohibited by applicable law;
+(g) circumvent technical restrictions, permission checks, provider controls, or security mechanisms;
+(h) use the Software or its outputs to build, train, benchmark, validate, or improve a competing assistant runtime, OS assistant, command execution framework, or substantially similar product;
+(i) claim authorship, ownership, endorsement, or official affiliation with the Rights Holder or DMJ; or
+(j) use the Software unlawfully or infringe third-party rights.
+
+4. CONTRIBUTIONS
+A patch, issue attachment, pull request, or suggestion does not automatically transfer ownership. By submitting a contribution, you represent that you have the right to submit it and grant the Rights Holder a worldwide, perpetual, irrevocable, royalty-free, non-exclusive license to use, reproduce, modify, incorporate, distribute, and relicense that contribution as part of the Software. Do not submit contributions if you do not agree. A separate signed contributor agreement may supersede this section.
+
+5. OWNERSHIP
+The Software is licensed, not sold. The Rights Holder retains all rights, title, and interest not expressly granted. No patent, trademark, trade-secret, or other intellectual-property license is granted except the limited copyright permission in Section 2.
+
+6. THIRD-PARTY MATERIALS
+Third-Party Materials are not relicensed by this document. Their own license terms and notices govern and must be preserved. This License does not remove rights granted by third-party licenses.
+
+7. WARRANTY DISCLAIMER
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT, ACCURACY, AVAILABILITY, OR SECURITY.
+
+8. LIABILITY
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE RIGHTS HOLDER SHALL NOT BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES, OR LOSS OF DATA, PROFITS, REVENUE, GOODWILL, BUSINESS, OR SYSTEM AVAILABILITY, ARISING FROM THE SOFTWARE OR THIS LICENSE. NOTHING EXCLUDES LIABILITY THAT CANNOT LAWFULLY BE EXCLUDED.
+
+9. TERMINATION
+A breach automatically terminates the permissions in Section 2 to the extent permitted by law. Upon termination, stop use and delete copies under your control, except where retention is legally required. Provisions intended to survive shall survive.
+
+10. ADDITIONAL PERMISSIONS
+Broader permissions must be in a written agreement signed by the Rights Holder. Repository visibility, comments, badges, or informal statements do not amend this License.
+
+11. GOVERNING LAW; SEVERABILITY
+The parties shall seek to resolve disputes in good faith. Governing law and forum shall be determined by a separate written agreement or, absent one, by mandatory rules of the competent jurisdiction. An unenforceable provision shall be narrowed only as necessary; the remainder remains effective.
+
+12. ENTIRE AGREEMENT
+This License is the entire agreement governing the permissions it grants, subject to mandatory law and any separate signed agreement.
+
+For permission requests, contact the Rights Holder through the official GitHub profile associated with this repository.

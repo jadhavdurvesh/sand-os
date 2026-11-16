@@ -14,7 +14,7 @@ ABI_H := sdk/sapp/include/sand/abi.h
 PYTHON ?= python3
 SAPP := sdk/sapp
 # Built into the kernel image (launcher + boot-time needs) ...
-EMBEDDED_APPS := sandsh hello abitest spin crash locus locusc quanta chronos cairn keystone
+EMBEDDED_APPS := sandsh hello abitest spin crash locus locusc quanta chronos cairn keystone citadel
 # ... and apps stored only in SANDFS inside the disk image (loaded by diskapps.c, permissions from their manifest).
 DISK_APPS := jail lumen
 APPS := $(EMBEDDED_APPS) $(DISK_APPS)
@@ -34,6 +34,23 @@ $(APP_BUILD)/%.o: apps/%/main.c apps/sandsh/shell_core.h $(SAPP)/include/sand/li
 	$(CC) $(APP_CFLAGS) -c $< -o $@
 $(APP_BUILD)/%.elf: $(APP_BUILD)/%.o $(APP_BUILD)/libsand.o $(SAPP)/linker/sapp-i386.ld
 	$(LD) -m elf_i386 -z max-page-size=0x1000 -T $(SAPP)/linker/sapp-i386.ld -nostdlib $< $(APP_BUILD)/libsand.o -o $@
+# Citadel: the app plus the vendored Citadel core/adapter (third_party/citadel) and a tiny C-library shim.
+CITADEL_FLAGS := $(APP_CFLAGS) -Iapps/citadel/shim -Ithird_party/citadel/include
+$(APP_BUILD)/citadel.o: apps/citadel/main.c $(SAPP)/include/sand/libsand.h $(SAPP)/include/sand/app.h $(SAPP)/include/sand/abi.h third_party/citadel/include/citadel/citadel.h third_party/citadel/include/citadel/sandos.h | $(APP_BUILD)
+	$(CC) $(CITADEL_FLAGS) -c $< -o $@
+$(APP_BUILD)/citadel-shim.o: apps/citadel/shim.c apps/citadel/shim/string.h | $(APP_BUILD)
+	$(CC) $(CITADEL_FLAGS) -c $< -o $@
+$(APP_BUILD)/citadel-parser.o: third_party/citadel/src/core/parser.c | $(APP_BUILD)
+	$(CC) $(CITADEL_FLAGS) -c $< -o $@
+$(APP_BUILD)/citadel-registry.o: third_party/citadel/src/core/registry.c | $(APP_BUILD)
+	$(CC) $(CITADEL_FLAGS) -c $< -o $@
+$(APP_BUILD)/citadel-dispatcher.o: third_party/citadel/src/core/dispatcher.c | $(APP_BUILD)
+	$(CC) $(CITADEL_FLAGS) -c $< -o $@
+$(APP_BUILD)/citadel-sandos.o: third_party/citadel/src/adapters/sandos.c | $(APP_BUILD)
+	$(CC) $(CITADEL_FLAGS) -c $< -o $@
+CITADEL_LINK := $(APP_BUILD)/citadel.o $(APP_BUILD)/citadel-shim.o $(APP_BUILD)/citadel-parser.o $(APP_BUILD)/citadel-registry.o $(APP_BUILD)/citadel-dispatcher.o $(APP_BUILD)/citadel-sandos.o
+$(APP_BUILD)/citadel.elf: $(CITADEL_LINK) $(APP_BUILD)/libsand.o $(SAPP)/linker/sapp-i386.ld
+	$(LD) -m elf_i386 -z max-page-size=0x1000 -T $(SAPP)/linker/sapp-i386.ld -nostdlib $(CITADEL_LINK) $(APP_BUILD)/libsand.o -o $@
 $(APP_BUILD)/%.sapp: $(APP_BUILD)/%.elf apps/%/manifest.json $(SAPP)/tools/sapp.py
 	$(PYTHON) $(SAPP)/tools/sapp.py pack --input $< --manifest apps/$*/manifest.json --output $@
 	$(PYTHON) $(SAPP)/tools/sapp.py verify $@ >/dev/null
