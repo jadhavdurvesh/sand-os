@@ -1,0 +1,215 @@
+#include "sand/libsand.h"
+#include "citadel/citadel.h"
+#include "citadel/sandos.h"
+/* CITADEL: the offline command assistant, on the SAND OS window service.
+ * The assistant logic (what a request means, what needs confirmation) is the Citadel core + SandOS adapter
+ * (third_party/citadel); this file only supplies the window and the platform table that maps those requests to
+ * SAND syscalls. Settings changes are asked back ("y/n") before they run. */
+#define SW 520
+#define SH 360
+#define CW 8
+#define CH 17
+#define COLS 60
+#define ROWS 12
+#define PAD_X 16
+#define TOP_Y 92
+#define BG 0x15122Fu
+#define C_TEXT 0xEDE9F7u
+#define C_MUTED 0x9A94B8u
+#define C_USER 0xC9B3FFu
+#define C_WARN 0xE8B86Bu
+#define INPUT_MAX 120
+
+static int win;
+static struct sand_draw cmds[SAND_WIN_MAX_DRAW];
+static uint32_t ncmd;
+static const uint32_t accents[SAND_ACCENT_COUNT] = { 0xF2C98Au, 0x83B7FFu, 0xA99BFFu, 0x74D6AAu, 0xE8836Bu };
+
+/* ---- transcript ---- */
+struct row { char text[COLS + 1]; uint32_t color; };
+static struct row rows[ROWS];
+static int nrows;
+static int dirty = 1;
+static void push_row(const char *s, int n, uint32_t color)
+{
+    if (nrows == ROWS) { memcpy(&rows[0], &rows[1], sizeof(rows[0]) * (ROWS - 1)); --nrows; }
+    memset(&rows[nrows], 0, sizeof(rows[0])); memcpy(rows[nrows].text, s, (uint32_t)n); rows[nrows].color = color; ++nrows; dirty = 1;
+}
+static void say(const char *prefix, const char *s, uint32_t color)      /* word-wraps at COLS; continuation lines are indented */
+{
+    char line[COLS + 1]; int n = 0, plen = (int)strlen(prefix), first = 1;
+    memcpy(line, prefix, (uint32_t)plen); n = plen;
+    while (*s) {
+        int len = 0; while (s[len] && s[len] != ' ') ++len;
+        if (n + len > COLS && n > (first ? plen : 2)) { push_row(line, n, color); first = 0; line[0] = ' '; line[1] = ' '; n = 2; }
+        for (int i = 0; i < len && n < COLS; ++i) line[n++] = s[i];
+        s += len; while (*s == ' ') { if (n < COLS) line[n++] = ' '; ++s; }
+    }
+    while (n > 0 && line[n - 1] == ' ') --n;
+    if (n > 0) push_row(line, n, color);
+}
+
+/* ---- platform table: Citadel requests -> SAND syscalls ---- */
+#define APP_MAX 24
+static char app_names[APP_MAX][16];
+static uint32_t app_total;
+static int32_t opened[8];
+static const char *const hidden[] = { "sandsh", "abitest", "spin", "crash", "hello", "jail", "citadel", "locusc" };
+
+static void scan_apps(void)
+{
+    struct sand_dirent e; app_total = 0;
+    for (uint32_t i = 0; sand_app_list(i, &e) == 0 && app_total < APP_MAX; ++i) {
+        int skip = 0; for (uint32_t h = 0; h < sizeof(hidden) / sizeof(hidden[0]); ++h) if (!strcmp(e.name, hidden[h])) skip = 1;
+        if (skip) continue;
+        memcpy(app_names[app_total], e.name, 15); app_names[app_total][15] = 0; ++app_total;
+    }
+}
+static void reap(void)                                  /* collect finished apps we started so their slots are reusable */
+{
+    for (int i = 0; i < 8; ++i) {
+        if (opened[i] <= 0) continue;
+        struct sand_procinfo info; int found = 0;
+        for (uint32_t n = 0; sand_proc_list(n, &info) == 0; ++n)
+            if ((int32_t)info.pid == opened[i]) { found = 1; if (info.state == 3u) { int32_t st; (void)sand_wait(opened[i], &st); opened[i] = 0; } break; }
+        if (!found) opened[i] = 0;
+    }
+}
+static uint32_t p_count(void *c) { (void)c; return app_total; }
+static int p_name(void *c, uint32_t i, char *out, size_t cap) { (void)c; if (i >= app_total || strlen(app_names[i]) + 1 > cap) return -1; memcpy(out, app_names[i], strlen(app_names[i]) + 1); return 0; }
+static int p_launch(void *c, const char *app)
+{
+    (void)c; int known = 0, slot = -1;
+    for (uint32_t i = 0; i < app_total; ++i) if (!strcmp(app, app_names[i])) known = 1;
+    if (!known) return -1;                              /* only apps we list: never the shell, test or probe apps */
+    reap(); for (int i = 0; i < 8; ++i) if (opened[i] <= 0) { slot = i; break; }
+    if (slot < 0) return -1;
+    int32_t pid = sand_spawn(app); if (pid < 0) return -1;
+    opened[slot] = pid; return 0;
+}
+static int p_get(void *c, uint32_t k) { (void)c; return sand_setting_get(k); }
+static int p_set(void *c, uint32_t k, uint32_t v) { (void)c; return sand_setting_set(k, v) == 0 ? 0 : -1; }
+static int p_time(void *c, CitadelSandTime *t)
+{
+    struct sand_time n; (void)c; if (sand_time_get(&n) != 0) return -1;
+    t->year = n.year; t->month = n.month; t->day = n.day; t->hour = n.hour; t->minute = n.minute; t->second = n.second; return 0;
+}
+static int p_info(void *c, CitadelSandInfo *o)
+{
+    struct sand_sysinfo s; (void)c; if (sand_sysinfo(&s) != 0 || s.tick_hz == 0) return -1;
+    o->uptime_seconds = s.ticks / s.tick_hz; o->free_kib = s.free_frames * 4u; o->total_kib = s.total_frames * 4u; o->process_count = s.process_count; return 0;
+}
+
+/* ---- drawing ---- */
+static void flush(void) { if (ncmd) { sand_win_draw(win, cmds, ncmd); ncmd = 0; } }
+static struct sand_draw *next(uint8_t op)
+{
+    if (ncmd == SAND_WIN_MAX_DRAW) flush();
+    struct sand_draw *c = &cmds[ncmd++]; memset(c, 0, sizeof(*c)); c->op = op; return c;
+}
+static void mono(int x, int y, uint32_t col, const char *s, int n)   /* <=38 characters per draw op */
+{
+    for (int start = 0; start < n; start += 38) {
+        int len = n - start < 38 ? n - start : 38;
+        struct sand_draw *c = next(SAND_DRAW_TEXT); c->face = SAND_FACE_MONO; c->x = (int16_t)(x + start * CW); c->y = (int16_t)y; c->color = col;
+        for (int i = 0; i < len; ++i) c->text[i] = s[start + i];
+    }
+}
+static char input[INPUT_MAX + 1];
+static int input_len;
+static char pending[INPUT_MAX + 1];                    /* a request waiting for the user's yes/no */
+static int has_pending;
+
+static void draw(void)
+{
+    int accent = sand_setting_get(SAND_SET_ACCENT); if (accent < 0 || accent >= (int)SAND_ACCENT_COUNT) accent = 0;
+    uint32_t acc = accents[accent];
+    struct sand_draw *c = next(SAND_DRAW_CLEAR); c->color = BG;
+    c = next(SAND_DRAW_CIRCLE); c->x = SW - 44; c->y = 44; c->r = 20; c->color = acc; c->alpha = 255;
+    c = next(SAND_DRAW_CIRCLE); c->x = SW - 38; c->y = 38; c->r = 12; c->color = 0xFFE9C8u; c->alpha = 140;
+    c = next(SAND_DRAW_TEXT); c->face = SAND_FACE_LARGE; c->x = 24; c->y = 48; c->color = 0xFFFFFFu; memcpy(c->text, "CITADEL", 8);
+    c = next(SAND_DRAW_TEXT); c->face = SAND_FACE_SMALL; c->x = 24; c->y = 70; c->color = C_MUTED; memcpy(c->text, "OFFLINE ASSISTANT", 18);
+    for (int r = 0; r < nrows; ++r) mono(PAD_X, TOP_Y + r * CH, rows[r].color, rows[r].text, (int)strlen(rows[r].text));
+    c = next(SAND_DRAW_RRECT); c->x = 12; c->y = SH - 44; c->w = SW - 24; c->h = 32; c->r = 10; c->color = 0x24205Au; c->color2 = 0x1B1842u; c->aux = 1; c->alpha = 255;
+    c = next(SAND_DRAW_RING); c->x = 12; c->y = SH - 44; c->w = SW - 24; c->h = 32; c->r = 10; c->aux = 1; c->color = has_pending ? C_WARN : acc; c->alpha = 120;
+    const char *marker = has_pending ? "? " : "> ";
+    mono(22, SH - 33, has_pending ? C_WARN : acc, marker, 2);
+    int shown = input_len > COLS - 4 ? COLS - 4 : input_len; const char *from = input + (input_len - shown);
+    mono(22 + 2 * CW, SH - 33, C_TEXT, from, shown);
+    c = next(SAND_DRAW_RRECT); c->x = (int16_t)(22 + (2 + shown) * CW); c->y = SH - 36; c->w = CW; c->h = 16; c->r = 2; c->color = acc; c->alpha = 200;
+    flush(); dirty = 0;
+}
+
+/* ---- assistant ---- */
+static CitadelRegistry registry;
+static CitadelSandPlatform platform;
+static const CitadelPolicy policy_ask = { CITADEL_SAND_POLICY_PERMISSIONS, 0 };
+static const CitadelPolicy policy_yes = { CITADEL_SAND_POLICY_PERMISSIONS, 1 };
+
+static void answer(const char *text, uint32_t color) { say("", text, color); }
+static void run_request(const char *text, int confirmed)
+{
+    CitadelCommand cmd; CitadelResult res;
+    if (citadel_parse(text, strlen(text), &cmd) != CITADEL_OK) { answer("I did not understand that. Say 'help'.", C_WARN); return; }
+    CitadelStatus st = citadel_dispatch(&registry, &cmd, confirmed ? &policy_yes : &policy_ask, &res);
+    if (st == CITADEL_OK) answer(res.text, C_TEXT);
+    else if (st == CITADEL_ERR_NOT_FOUND && res.text[0] == 0) answer("I do not know that one yet. Say 'help'.", C_WARN);
+    else if (st == CITADEL_ERR_DENIED) answer("That is not allowed.", C_WARN);
+    else if (res.text[0]) answer(res.text, C_WARN);
+    else answer("I could not do that.", C_WARN);
+}
+static int submit(void)                                 /* returns 1 to quit */
+{
+    char text[INPUT_MAX + 1]; int n = 0, i = 0;
+    while (i < input_len && input[i] == ' ') ++i;       /* trim, lower-case: matching is exact-phrase */
+    for (; i < input_len; ++i) { char ch = input[i]; if (ch >= 'A' && ch <= 'Z') ch = (char)(ch + 32); text[n++] = ch; }
+    while (n > 0 && text[n - 1] == ' ') --n;
+    text[n] = 0; input_len = 0; input[0] = 0; dirty = 1;
+    if (n == 0) return 0;
+    say(has_pending ? "? " : "> ", text, C_USER);
+    if (has_pending) {
+        has_pending = 0;
+        if (!strcmp(text, "y") || !strcmp(text, "yes")) run_request(pending, 1); else answer("Cancelled. Nothing was changed.", C_MUTED);
+        return 0;
+    }
+    if (!strcmp(text, "exit") || !strcmp(text, "quit") || !strcmp(text, "bye")) return 1;
+    if (!strcmp(text, "clear")) { nrows = 0; return 0; }
+    CitadelCommand cmd;
+    if (citadel_parse(text, (size_t)n, &cmd) == CITADEL_OK && citadel_requires_confirmation(&registry, &cmd)) {
+        memcpy(pending, text, (uint32_t)n + 1); has_pending = 1;
+        char q[COLS + 24] = "Change the system: '"; int q0 = (int)strlen(q);
+        memcpy(q + q0, text, (uint32_t)n); memcpy(q + q0 + n, "'? Type y to confirm.", 22);
+        answer(q, C_WARN); return 0;
+    }
+    run_request(text, 0);
+    return 0;
+}
+
+void _start(void)
+{
+    win = sand_win_create("CITADEL", SW, SH);
+    if (win < 0) sand_exit(1);
+    memset(&platform, 0, sizeof(platform));
+    platform.app_count = p_count; platform.app_name = p_name; platform.launch = p_launch; platform.setting_get = p_get;
+    platform.setting_set = p_set; platform.wall_time = p_time; platform.system_info = p_info;
+    scan_apps();
+    if (citadel_registry_init(&registry) != CITADEL_OK || citadel_sandos_register(&registry, &platform) != CITADEL_OK) { sand_win_close(win); sand_exit(2); }
+    say("", "Hello, I am Citadel. I work offline and only do what I can list: say 'help'.", C_TEXT);
+    uint32_t idle = 0; int last_accent = -1;
+    for (;;) {
+        int accent = sand_setting_get(SAND_SET_ACCENT);
+        if (accent != last_accent) { last_accent = accent; dirty = 1; }   /* follow accent changes made elsewhere */
+        if (dirty) draw();
+        struct sand_event ev; int32_t got = sand_win_event(win, &ev);
+        if (got < 0) break;
+        if (got == 0) { sand_sleep_ms(15); if (++idle % 64u == 0u) reap(); continue; }
+        if (ev.type == SAND_EV_RESIZE) dirty = 1;
+        else if (ev.type == SAND_EV_KEY) {
+            if (ev.key == '\r' || ev.key == '\n') { if (submit()) break; }
+            else if (ev.key == 0x08u || ev.key == 0x7Fu) { if (input_len) { input[--input_len] = 0; dirty = 1; } }
+            else if (ev.key >= 0x20u && ev.key < 0x7Fu && input_len < INPUT_MAX) { input[input_len++] = (char)ev.key; input[input_len] = 0; dirty = 1; }
+        }
+    }
+    sand_win_close(win);
+    sand_exit(0);
+}

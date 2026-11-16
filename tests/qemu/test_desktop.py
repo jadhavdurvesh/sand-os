@@ -224,6 +224,37 @@ class DesktopTest(unittest.TestCase):
         self.vm.run_command("ps")
         self.assertNotIn("cairn", self.vm.run_command("ps"))
 
+    def test_09b_citadel_assistant(self):
+        """CITADEL: an offline assistant window. Settings changes are asked back (y/n) before they run; it opens apps."""
+        self.vm.run_command("open citadel")
+        time.sleep(2.5)
+        before = self.shot("desktop-citadel-a.ppm")
+        self.type_keys("what time is it\n")
+        time.sleep(1.0)
+        after = self.shot("desktop-citadel-b.ppm")
+        diff = sum(1 for x in range(150, 640, 2) for y in range(150, 480, 2) if pixel(before, x, y) != pixel(after, x, y))
+        self.assertGreater(diff, 300)                                      # the question and the answer were drawn
+        self.assertIn("accent=0", self.vm.run_command("settings"))
+        self.type_keys("set accent jade\n")                               # needs confirmation: nothing changes yet
+        time.sleep(1.0)
+        self.assertIn("accent=0", self.vm.run_command("settings"))
+        self.type_keys("n\n")                                             # declined
+        time.sleep(1.0)
+        self.assertIn("accent=0", self.vm.run_command("settings"))
+        self.type_keys("set accent jade\n")
+        time.sleep(0.8)
+        self.type_keys("y\n")                                             # confirmed: the kernel setting really changes
+        time.sleep(1.2)
+        self.assertIn("accent=3", self.vm.run_command("settings"))
+        self.type_keys("set accent champagne\n")
+        time.sleep(0.8)
+        self.type_keys("y\n")
+        time.sleep(1.2)
+        self.assertIn("accent=0", self.vm.run_command("settings"))
+        self.type_keys("exit\n")
+        time.sleep(2.0)
+        self.assertNotRegex(self.vm.run_command("ps"), r"(running|ready|blocked)\s+citadel")
+
     def test_10_keystone_changes_the_system(self):
         """KEYSTONE writes real system settings: choosing Jade recolours the desktop accent itself."""
         self.vm.run_command("open keystone")

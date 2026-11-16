@@ -8,7 +8,7 @@
  *
  * Calling convention (x86-32): int 0x80, number in EAX, arguments in
  * EBX, ECX, EDX, result in EAX. Negative results are errors. */
-#define SAND_ABI_VERSION 6u
+#define SAND_ABI_VERSION 7u
 
 enum sand_syscall_number {
     SAND_SYS_EXIT = 1,        /* exit(status)                         */
@@ -40,7 +40,8 @@ enum sand_syscall_number {
     SAND_SYS_SETTING_GET = 24,   /* setting_get(key) -> value >= 0, or SAND_E_FAIL for an unknown key   */
     SAND_SYS_SETTING_SET = 25,   /* setting_set(key, value) -> 0, or SAND_E_FAIL for a bad key/value; persisted to system.cfg */
     SAND_SYS_INSTALL_PUT = 26,   /* install_put(offset, data, len<=512) -> staged bytes; offset 0 starts a new image, later offsets must append */
-    SAND_SYS_INSTALL_COMMIT = 27 /* install_commit(name) -> 0: gate-check the staged SAPP and store it as <name>.sapp (needs system.install) */
+    SAND_SYS_INSTALL_COMMIT = 27,/* install_commit(name) -> 0: gate-check the staged SAPP and store it as <name>.sapp (needs system.install) */
+    SAND_SYS_TIME_GET = 28       /* time_get(sand_time*) -> 0: the machine's real-time clock (UTC as set by firmware, unsynchronised), SAND_E_FAIL if unreadable */
 };
 
 #define SAND_E_FAIL   (-1)    /* generic failure / bad argument */
@@ -104,6 +105,7 @@ struct sand_sysinfo {
     uint32_t free_frames, total_frames, heap_used;
     uint32_t context_switches, process_count;
 };
+struct sand_time { uint32_t year, month, day, hour, minute, second; };
 struct sand_devinfo { char name[16]; char kind[12]; char driver[16]; uint32_t status; };
 struct sand_procinfo { uint32_t pid, parent_pid, state; int32_t exit_code; char name[16]; };
 #endif
