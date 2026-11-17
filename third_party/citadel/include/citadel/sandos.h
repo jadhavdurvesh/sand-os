@@ -29,12 +29,24 @@ typedef struct CitadelSandPlatform {
     int (*setting_set)(void *context, uint32_t key, uint32_t value);               /* 0 ok */
     int (*wall_time)(void *context, CitadelSandTime *out);                         /* 0 ok; may be NULL */
     int (*system_info)(void *context, CitadelSandInfo *out);                       /* 0 ok; may be NULL */
+    /* Notes (short single-line texts, kept by the host; may be NULL = feature unavailable). */
+    int (*note_add)(void *context, const char *text);                              /* 0 ok, <0 storage full */
+    uint32_t (*note_count)(void *context);
+    int (*note_get)(void *context, uint32_t index, char *out, size_t capacity);    /* 0 ok */
+    int (*notes_clear)(void *context);                                             /* 0 ok */
+    /* Reminders (the host fires them when due; may be NULL = feature unavailable). */
+    int (*reminder_add)(void *context, uint32_t seconds, const char *text);        /* 0 ok, <0 none free */
+    uint32_t (*reminder_count)(void *context);
+    int (*reminder_get)(void *context, uint32_t index, uint32_t *seconds_left, char *text_out, size_t capacity);
+    int (*reminders_clear)(void *context);
 } CitadelSandPlatform;
+#define CITADEL_SAND_NOTE_MAX 60u            /* characters per note */
+#define CITADEL_SAND_REMINDER_MAX_SECONDS 86400u
 
 /* Registers capabilities and intents. The platform table must outlive the registry. */
 CitadelStatus citadel_sandos_register(CitadelRegistry *registry, const CitadelSandPlatform *platform);
 /* Policy the SAND OS assistant app grants (read system, launch apps, change settings; confirmation per command). */
-#define CITADEL_SAND_POLICY_PERMISSIONS (CITADEL_PERMISSION_READ_SYSTEM | CITADEL_PERMISSION_LAUNCH_APP | CITADEL_PERMISSION_MODIFY_SETTINGS)
+#define CITADEL_SAND_POLICY_PERMISSIONS (CITADEL_PERMISSION_READ_SYSTEM | CITADEL_PERMISSION_LAUNCH_APP | CITADEL_PERMISSION_MODIFY_SETTINGS | CITADEL_PERMISSION_FILE_ACCESS | CITADEL_PERMISSION_SCHEDULE)
 #ifdef __cplusplus
 }
 #endif

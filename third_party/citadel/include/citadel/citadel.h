@@ -25,7 +25,7 @@ typedef enum CitadelPermission {
  CITADEL_PERMISSION_NONE=0u, CITADEL_PERMISSION_READ_SYSTEM=1u<<0,
  CITADEL_PERMISSION_LAUNCH_APP=1u<<1, CITADEL_PERMISSION_MODIFY_SETTINGS=1u<<2,
  CITADEL_PERMISSION_FILE_ACCESS=1u<<3, CITADEL_PERMISSION_NETWORK=1u<<4,
- CITADEL_PERMISSION_PRIVILEGED=1u<<5
+ CITADEL_PERMISSION_PRIVILEGED=1u<<5, CITADEL_PERMISSION_SCHEDULE=1u<<6
 } CitadelPermission;
 typedef struct CitadelIntent { char id[CITADEL_ID_LENGTH]; char phrase[CITADEL_MAX_TOKEN_LENGTH]; char capability_id[CITADEL_ID_LENGTH]; } CitadelIntent;
 typedef struct CitadelCapability { char id[CITADEL_ID_LENGTH]; uint32_t required_permissions; uint8_t requires_confirmation; } CitadelCapability;

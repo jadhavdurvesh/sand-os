@@ -1,6 +1,7 @@
 #include "sand/libsand.h"
 #include "citadel/citadel.h"
 #include "citadel/sandos.h"
+#include <string.h>
 /* CITADEL: the offline command assistant, on the SAND OS window service.
  * The assistant logic (what a request means, what needs confirmation) is the Citadel core + SandOS adapter
  * (third_party/citadel); this file only supplies the window and the platform table that maps those requests to
@@ -100,6 +101,74 @@ static int p_info(void *c, CitadelSandInfo *o)
     o->uptime_seconds = s.ticks / s.tick_hz; o->free_kib = s.free_frames * 4u; o->total_kib = s.total_frames * 4u; o->process_count = s.process_count; return 0;
 }
 
+/* notes: kept in notes.txt (one per line; the FS syscalls move at most 512 bytes) */
+#define NOTE_MAX 8
+#define NOTES_BYTES 500
+static char notes[NOTE_MAX][CITADEL_SAND_NOTE_MAX + 1];
+static uint32_t nnotes;
+static void notes_load(void)
+{
+    char buf[513]; int32_t n = sand_fs_read("notes.txt", buf, 512); nnotes = 0;
+    if (n <= 0) return;
+    buf[n] = 0; char *p = buf;
+    while (*p && nnotes < NOTE_MAX) {
+        uint32_t len = 0; while (p[len] && p[len] != '\n') ++len;
+        if (len > 0 && len <= CITADEL_SAND_NOTE_MAX) { memcpy(notes[nnotes], p, len); notes[nnotes][len] = 0; ++nnotes; }
+        p += len; if (*p == '\n') ++p;
+    }
+}
+static int notes_save(void)
+{
+    char buf[512]; uint32_t n = 0;
+    for (uint32_t i = 0; i < nnotes; ++i) { uint32_t len = (uint32_t)strlen(notes[i]); memcpy(buf + n, notes[i], len); n += len; buf[n++] = '\n'; }
+    if (n == 0) { (void)sand_fs_remove("notes.txt"); return 0; }
+    return sand_fs_write("notes.txt", buf, n) == 0 ? 0 : -1;
+}
+static int p_note_add(void *c, const char *t)
+{
+    (void)c; uint32_t used = 0, len = (uint32_t)strlen(t);
+    for (uint32_t i = 0; i < nnotes; ++i) used += (uint32_t)strlen(notes[i]) + 1u;
+    if (nnotes >= NOTE_MAX || used + len + 1u > NOTES_BYTES) return -1;
+    memcpy(notes[nnotes], t, len + 1u); ++nnotes;
+    if (notes_save() != 0) { --nnotes; return -1; }
+    dirty = 1; return 0;
+}
+static uint32_t p_note_count(void *c) { (void)c; return nnotes; }
+static int p_note_get(void *c, uint32_t i, char *out, size_t cap) { (void)c; if (i >= nnotes || strlen(notes[i]) + 1 > cap) return -1; memcpy(out, notes[i], strlen(notes[i]) + 1); return 0; }
+static int p_notes_clear(void *c) { (void)c; nnotes = 0; dirty = 1; return notes_save(); }
+
+/* reminders: in memory only (they end with this window); due time is measured in kernel ticks */
+#define REM_MAX 4
+static struct { uint32_t due; char text[CITADEL_SAND_NOTE_MAX + 1]; } rem[REM_MAX];
+static uint32_t nrem;
+static uint32_t tick_hz = 100;
+static int alert;
+static int p_rem_add(void *c, uint32_t seconds, const char *t)
+{
+    (void)c; if (nrem >= REM_MAX) return -1;
+    rem[nrem].due = sand_ticks() + seconds * tick_hz; strcpy(rem[nrem].text, t); ++nrem; dirty = 1; return 0;
+}
+static uint32_t p_rem_count(void *c) { (void)c; return nrem; }
+static int p_rem_get(void *c, uint32_t i, uint32_t *left, char *out, size_t cap)
+{
+    (void)c; if (i >= nrem || strlen(rem[i].text) + 1 > cap) return -1;
+    int32_t d = (int32_t)(rem[i].due - sand_ticks()); *left = d > 0 ? ((uint32_t)d + tick_hz - 1u) / tick_hz : 0u;
+    memcpy(out, rem[i].text, strlen(rem[i].text) + 1); return 0;
+}
+static int p_rem_clear(void *c) { (void)c; nrem = 0; dirty = 1; return 0; }
+static void rem_fire(void)
+{
+    uint32_t now = sand_ticks();
+    for (uint32_t i = 0; i < nrem; ) {
+        if ((int32_t)(now - rem[i].due) >= 0) {
+            char line[CITADEL_SAND_NOTE_MAX + 16] = "Reminder: "; strcpy(line + 10, rem[i].text[0] ? rem[i].text : "time is up");
+            say("", line, C_WARN); alert = 1; dirty = 1;
+            for (uint32_t k = i + 1; k < nrem; ++k) rem[k - 1] = rem[k];
+            --nrem;
+        } else ++i;
+    }
+}
+
 /* ---- drawing ---- */
 static void flush(void) { if (ncmd) { sand_win_draw(win, cmds, ncmd); ncmd = 0; } }
 static struct sand_draw *next(uint8_t op)
@@ -129,9 +198,14 @@ static void draw(void)
     c = next(SAND_DRAW_CIRCLE); c->x = SW - 38; c->y = 38; c->r = 12; c->color = 0xFFE9C8u; c->alpha = 140;
     c = next(SAND_DRAW_TEXT); c->face = SAND_FACE_LARGE; c->x = 24; c->y = 48; c->color = 0xFFFFFFu; memcpy(c->text, "CITADEL", 8);
     c = next(SAND_DRAW_TEXT); c->face = SAND_FACE_SMALL; c->x = 24; c->y = 70; c->color = C_MUTED; memcpy(c->text, "OFFLINE ASSISTANT", 18);
+    { char cnt[40]; int n = 0; uint32_t v;
+      v = nnotes; if (v >= 10) cnt[n++] = (char)('0' + v / 10); cnt[n++] = (char)('0' + v % 10); memcpy(cnt + n, nnotes == 1 ? " note  " : " notes ", 7); n += 7;
+      v = nrem; cnt[n++] = (char)('0' + v % 10); memcpy(cnt + n, nrem == 1 ? " reminder" : " reminders", nrem == 1 ? 9 : 10); n += nrem == 1 ? 9 : 10;
+      c = next(SAND_DRAW_TEXT); c->face = SAND_FACE_SMALL; c->x = 24; c->y = 84 - 4; c->color = alert ? C_WARN : C_MUTED; c->x = 150; c->y = 70;
+      for (int i = 0; i < n; ++i) c->text[i] = cnt[i]; }
     for (int r = 0; r < nrows; ++r) mono(PAD_X, TOP_Y + r * CH, rows[r].color, rows[r].text, (int)strlen(rows[r].text));
     c = next(SAND_DRAW_RRECT); c->x = 12; c->y = SH - 44; c->w = SW - 24; c->h = 32; c->r = 10; c->color = 0x24205Au; c->color2 = 0x1B1842u; c->aux = 1; c->alpha = 255;
-    c = next(SAND_DRAW_RING); c->x = 12; c->y = SH - 44; c->w = SW - 24; c->h = 32; c->r = 10; c->aux = 1; c->color = has_pending ? C_WARN : acc; c->alpha = 120;
+    c = next(SAND_DRAW_RING); c->x = 12; c->y = SH - 44; c->w = SW - 24; c->h = 32; c->r = 10; c->aux = 1; c->color = (has_pending || alert) ? C_WARN : acc; c->alpha = alert ? 255 : 120;
     const char *marker = has_pending ? "? " : "> ";
     mono(22, SH - 33, has_pending ? C_WARN : acc, marker, 2);
     int shown = input_len > COLS - 4 ? COLS - 4 : input_len; const char *from = input + (input_len - shown);
@@ -192,6 +266,10 @@ void _start(void)
     memset(&platform, 0, sizeof(platform));
     platform.app_count = p_count; platform.app_name = p_name; platform.launch = p_launch; platform.setting_get = p_get;
     platform.setting_set = p_set; platform.wall_time = p_time; platform.system_info = p_info;
+    platform.note_add = p_note_add; platform.note_count = p_note_count; platform.note_get = p_note_get; platform.notes_clear = p_notes_clear;
+    platform.reminder_add = p_rem_add; platform.reminder_count = p_rem_count; platform.reminder_get = p_rem_get; platform.reminders_clear = p_rem_clear;
+    { struct sand_sysinfo si; if (sand_sysinfo(&si) == 0 && si.tick_hz) tick_hz = si.tick_hz; }
+    notes_load();
     scan_apps();
     if (citadel_registry_init(&registry) != CITADEL_OK || citadel_sandos_register(&registry, &platform) != CITADEL_OK) { sand_win_close(win); sand_exit(2); }
     say("", "Hello, I am Citadel. I work offline and only do what I can list: say 'help'.", C_TEXT);
@@ -199,12 +277,14 @@ void _start(void)
     for (;;) {
         int accent = sand_setting_get(SAND_SET_ACCENT);
         if (accent != last_accent) { last_accent = accent; dirty = 1; }   /* follow accent changes made elsewhere */
+        rem_fire();
         if (dirty) draw();
         struct sand_event ev; int32_t got = sand_win_event(win, &ev);
         if (got < 0) break;
         if (got == 0) { sand_sleep_ms(15); if (++idle % 64u == 0u) reap(); continue; }
         if (ev.type == SAND_EV_RESIZE) dirty = 1;
         else if (ev.type == SAND_EV_KEY) {
+            if (alert) { alert = 0; dirty = 1; }
             if (ev.key == '\r' || ev.key == '\n') { if (submit()) break; }
             else if (ev.key == 0x08u || ev.key == 0x7Fu) { if (input_len) { input[--input_len] = 0; dirty = 1; } }
             else if (ev.key >= 0x20u && ev.key < 0x7Fu && input_len < INPUT_MAX) { input[input_len++] = (char)ev.key; input[input_len] = 0; dirty = 1; }
