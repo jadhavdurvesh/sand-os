@@ -255,6 +255,35 @@ class DesktopTest(unittest.TestCase):
         time.sleep(2.0)
         self.assertNotRegex(self.vm.run_command("ps"), r"(running|ready|blocked)\s+citadel")
 
+    def test_09c_citadel_notes_and_reminders(self):
+        """CITADEL notes persist in notes.txt on SANDFS; a reminder fires inside the window; clearing notes asks first."""
+        self.vm.run_command("rm notes.txt")
+        self.vm.run_command("open citadel")
+        time.sleep(2.5)
+        self.type_keys("note buy milk\n")
+        time.sleep(0.8)
+        self.type_keys("note call mum\n")
+        time.sleep(0.8)
+        self.assertIn("buy milk", self.vm.run_command("cat notes.txt"))
+        self.assertIn("call mum", self.vm.run_command("cat notes.txt"))
+        before = self.shot("desktop-citadel-notes-a.ppm")
+        self.type_keys("remind me in 3 seconds to stretch\n")
+        time.sleep(1.0)
+        quiet = self.shot("desktop-citadel-notes-b.ppm")
+        time.sleep(4.5)                                                   # the reminder fires and the input ring turns bright
+        fired = self.shot("desktop-citadel-notes-c.ppm")
+        diff = sum(1 for x in range(150, 640, 2) for y in range(150, 480, 2) if pixel(quiet, x, y) != pixel(fired, x, y))
+        self.assertGreater(diff, 100)
+        self.type_keys("clear notes\n")                                  # asks first: nothing is deleted yet
+        time.sleep(0.8)
+        self.assertIn("buy milk", self.vm.run_command("cat notes.txt"))
+        self.type_keys("y\n")
+        time.sleep(1.0)
+        self.assertNotIn("buy milk", self.vm.run_command("cat notes.txt"))
+        self.type_keys("exit\n")
+        time.sleep(2.0)
+        self.assertNotRegex(self.vm.run_command("ps"), r"(running|ready|blocked)\s+citadel")
+
     def test_10_keystone_changes_the_system(self):
         """KEYSTONE writes real system settings: choosing Jade recolours the desktop accent itself."""
         self.vm.run_command("open keystone")
