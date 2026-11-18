@@ -6,6 +6,8 @@
 #include "sand/drivers/device.h"
 #include "sand/fs/sandfs.h"
 #include "sand/ipc/tideway.h"
+#include "sand/net/driftnet.h"
+#include "sand/veyra/subsystems.h"
 #include "sand/graphics/desktop.h"
 #include "sand/kernel/process.h"
 #include "sand/kernel/scheduler.h"
@@ -95,6 +97,7 @@ static uint32_t required_permission(uint32_t number,uint32_t a) {
     case SAND_SYS_SETTING_SET: return SAND_PERM_SETTINGS;
     case SAND_SYS_INSTALL_PUT: case SAND_SYS_INSTALL_COMMIT: return SAND_PERM_INSTALL;
     case SAND_SYS_CHAN_OPEN: case SAND_SYS_CHAN_SEND: case SAND_SYS_CHAN_RECV: return SAND_PERM_IPC;
+    case SAND_SYS_NET_INFO: case SAND_SYS_NET_PING: case SAND_SYS_NET_UDP_SEND: case SAND_SYS_NET_UDP_RECV: return SAND_PERM_NET;
     default: return 0u;
     }
 }
@@ -104,6 +107,22 @@ static void audit_denied(uint32_t number) {
     while(d) line[n++]=digits[--d];
     line[n]='\0'; sand_audit(line);
 }
+
+/* Egress audit: every datagram or echo request an app sends is logged with its destination (the Veyra security trail). */
+static void audit_net(const char *kind, uint32_t ip, uint32_t port, uint32_t length) {
+    char line[72]; uint32_t n=0u, i;
+    for(i=0u; kind[i]; ++i) line[n++]=kind[i];
+    line[n++]=' ';
+    for(i=0u; i<4u; ++i) {
+        uint32_t v=(ip>>(8u*i))&255u; char dg[3]; uint32_t d=0u; do { dg[d++]=(char)('0'+v%10u); v/=10u; } while(v);
+        while(d) line[n++]=dg[--d];
+        if(i<3u) line[n++]='.';
+    }
+    if(port) { line[n++]=':'; char dg[6]; uint32_t d=0u; do { dg[d++]=(char)('0'+port%10u); port/=10u; } while(port); while(d) line[n++]=dg[--d]; }
+    if(length) { line[n++]=' '; line[n++]='l'; line[n++]='e'; line[n++]='n'; line[n++]='='; char dg[6]; uint32_t d=0u; do { dg[d++]=(char)('0'+length%10u); length/=10u; } while(length); while(d) line[n++]=dg[--d]; }
+    line[n]='\0'; sand_audit(line);
+}
+static struct driftnet_udp net_udp;      /* syscalls run with IRQs off on one CPU, so one kernel-side buffer is safe */
 
 uint32_t syscall_dispatch(uint32_t frame) {
     uint32_t *r=(uint32_t *)frame;
@@ -186,6 +205,33 @@ uint32_t syscall_dispatch(uint32_t frame) {
         result=tideway_recv((int32_t)a,&m);
         if(result==1) (void)copy_out(b,&m,sizeof(m));
         break; }
+    case SAND_SYS_VEYRA_QUERY: {
+        struct sand_veyra_subsystem_info info;
+        if(!user_ok(b,sizeof(info),1)) { result=SAND_E_FAULT; break; }
+        result=sand_veyra_to_syscall(veyra_query(a,&info));
+        if(result==0) (void)copy_out(b,&info,sizeof(info));
+        break; }
+    case SAND_SYS_NET_INFO: {
+        struct driftnet_info ni;
+        if(!user_ok(a,sizeof(ni),1)) { result=SAND_E_FAULT; break; }
+        result=sand_veyra_to_syscall(driftnet_info(&ni));
+        if(result==0) (void)copy_out(a,&ni,sizeof(ni));
+        break; }
+    case SAND_SYS_NET_PING: {
+        sand_veyra_status_t st=driftnet_ping_step(process_current(),a,b>10000u?10000u:b);
+        if(st==DRIFTNET_PING_PENDING) return retry_yield(r,frame);
+        if(st>=0) audit_net("NET_PING",a,0u,0u);
+        result=st>=0?st:sand_veyra_to_syscall(st); break; }
+    case SAND_SYS_NET_UDP_SEND: {
+        if(!user_ok(a,sizeof(net_udp),0)) { result=SAND_E_FAULT; break; }
+        if(copy_in(&net_udp,a,sizeof(net_udp))!=0) { result=SAND_E_FAULT; break; }
+        audit_net("NET_UDP_SEND",net_udp.ip,net_udp.dst_port,net_udp.length);
+        result=sand_veyra_to_syscall(driftnet_udp_send(&net_udp)); break; }
+    case SAND_SYS_NET_UDP_RECV: {
+        if(!user_ok(b,sizeof(net_udp),1)) { result=SAND_E_FAULT; break; }
+        int32_t got=driftnet_udp_recv((uint16_t)a,&net_udp);
+        if(got==1) (void)copy_out(b,&net_udp,sizeof(net_udp));
+        result=got>=0?got:sand_veyra_to_syscall(got); break; }
     case SAND_SYS_INSTALL_PUT: {
         if(c>sizeof(scratch)) { result=SAND_E_FAIL; break; }
         if(c!=0u && copy_in(scratch,b,c)!=0) { result=SAND_E_FAULT; break; }

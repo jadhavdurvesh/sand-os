@@ -4,6 +4,7 @@
 #include "sand/arch/x86/ata_pio.h"
 #include "sand/arch/x86/input.h"
 #include "sand/storage/block.h"
+#include "sand/net/driftnet.h"
 #include <stdint.h>
 static inline void debug_char(char c) { __asm__ volatile ("outb %0, $0xE9" : : "a"(c)); }
 static void debug_text(const char *s) { while(*s) debug_char(*s++); }
@@ -17,6 +18,8 @@ int drivers_init(void) {
     const struct sand_device *k=device_find("kbd0"), *s=device_find("serial0");
     if(k && s && k->status==SAND_DEVICE_READY && s->status==SAND_DEVICE_READY) debug_text("SAND_TEST:M8_IRQ_ROUTING_PASS\n");
     else { debug_text("SAND_TEST:M8_IRQ_ROUTING_FAIL\n"); failed=1; }
+    /* DRIFTNET is optional hardware: no NIC is not a boot failure. */
+    if(driftnet_init()==0) (void)device_register("net0","net","rtl8139-driftnet",SAND_DEVICE_READY);
     return failed?-1:0;
 }
 

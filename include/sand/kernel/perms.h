@@ -11,5 +11,6 @@
 #define SAND_PERM_WINDOW        0x20u   /* window.create */
 #define SAND_PERM_SETTINGS      0x40u   /* settings.write */
 #define SAND_PERM_INSTALL       0x80u   /* system.install: stage and store apps in SANDFS */
+#define SAND_PERM_NET           0x200u  /* net.access: DRIFTNET ping, UDP send/receive, NIC info (audited on egress) */
 #define SAND_PERM_IPC           0x100u  /* ipc.channel: open TIDEWAY channels, send and receive */
 #endif

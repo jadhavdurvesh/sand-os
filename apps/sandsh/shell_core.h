@@ -51,6 +51,9 @@ static void cmd_help(void)
         {"open <app>", "launch an app in the background"},
         {"settings [k v]", "show or change system settings"},
         {"ps", "list processes"},
+        {"veyra", "list the Veyra subsystem interfaces this machine offers"},
+        {"net", "network card address and counters (DRIFTNET)"},
+        {"ping <a.b.c.d>", "send an ICMP echo and time the reply"},
         {"mem", "memory and scheduler counters"},
         {"uptime", "time since boot"},
         {"devices", "list registered devices"},
@@ -141,6 +144,52 @@ static void cmd_mem(void)
     line_of("processes", si.process_count, "");
 }
 
+static const char *veyra_name(uint32_t id)
+{
+    return id == SAND_VEYRA_IF_FILES ? "FILES   (BEDROCK)" : id == SAND_VEYRA_IF_IPC ? "IPC     (TIDEWAY)" :
+           id == SAND_VEYRA_IF_NOTIFY ? "NOTIFY  (HERALD)" : "NET     (DRIFTNET)";
+}
+static void cmd_veyra(void)
+{
+    static const uint32_t ids[] = { SAND_VEYRA_IF_FILES, SAND_VEYRA_IF_IPC, SAND_VEYRA_IF_NOTIFY, SAND_VEYRA_IF_NET };
+    out(C_MUTED "  ID      INTERFACE           REV  PERM  LIMITS" C_RESET "\n");
+    for (uint32_t i = 0; i < 4; ++i) {
+        struct sand_veyra_subsystem_abi v;
+        int32_t rc = sand_veyra_query(ids[i], &v);
+        out("  0x0"); sh_putu(ids[i] >> 8); out("0"); sh_putu(ids[i] & 15u); out("  "); out(veyra_name(ids[i])); pad(strlen(veyra_name(ids[i])), 20);
+        if (rc != 0) { out(C_WARN "not present" C_RESET "\n"); continue; }
+        sh_putu(v.revision); out("    "); sh_putu(v.permission); out("    ");
+        for (uint32_t k = 0; k < 4; ++k) { sh_putu(v.limit[k]); out(k < 3 ? " / " : "\n"); }
+    }
+}
+static void print_ip(const uint8_t *ip) { for (int i = 0; i < 4; ++i) { sh_putu(ip[i]); if (i < 3) out("."); } }
+static void cmd_net(void)
+{
+    struct sand_netinfo ni;
+    int32_t rc = sand_net_info(&ni);
+    if (rc == SAND_E_PERM) { out(C_BAD "net: this shell has no net.access permission" C_RESET "\n"); return; }
+    if (rc != 0) { out(C_WARN "net: no network card" C_RESET "\n"); return; }
+    static const char hex[] = "0123456789abcdef";
+    out("  mac      "); for (int i = 0; i < 6; ++i) { char b[3] = { hex[ni.mac[i] >> 4], hex[ni.mac[i] & 15], 0 }; out(b); if (i < 5) out(":"); }
+    out("\n  ip       "); print_ip(ni.ip); out("\n  gateway  "); print_ip(ni.gateway);
+    out("\n  frames   rx "); sh_putu(ni.rx_frames); out("  tx "); sh_putu(ni.tx_frames); out("\n");
+}
+static void cmd_ping(const char *arg)
+{
+    uint32_t ip = 0, part = 0, dots = 0, digits = 0;
+    for (const char *p = arg;; ++p) {
+        if (*p >= '0' && *p <= '9') { part = part * 10u + (uint32_t)(*p - '0'); if (++digits > 3 || part > 255u) { dots = 99; break; } }
+        else if ((*p == '.' || *p == 0) && digits) { ip |= part << (8u * dots); part = 0; digits = 0; if (*p == 0) break; if (++dots > 3) { dots = 99; break; } }
+        else { dots = 99; break; }
+    }
+    if (dots != 3) { out(C_WARN "usage: ping <a.b.c.d>" C_RESET "\n"); return; }
+    int32_t rc = sand_net_ping(ip, 3000);
+    if (rc >= 0) { out("reply from "); out(arg); out(": time="); sh_putu((uint32_t)rc); out(" ms\n"); }
+    else if (rc == SAND_E_TIMEOUT) out(C_WARN "ping: no reply (timeout)" C_RESET "\n");
+    else if (rc == SAND_E_PERM) out(C_BAD "ping: this shell has no net.access permission" C_RESET "\n");
+    else if (rc == SAND_E_NODEV) out(C_WARN "ping: no network card" C_RESET "\n");
+    else out(C_BAD "ping: failed" C_RESET "\n");
+}
 static void cmd_uptime(void)
 {
     struct sand_sysinfo si;
@@ -288,6 +337,9 @@ static int execute(char *line)
     else if (!strcmp(c, "open")) { if (argc < 2) out(C_WARN "usage: open <app>" C_RESET "\n"); else cmd_open(argv[1]); }
     else if (!strcmp(c, "run")) { if (argc < 2) out(C_WARN "usage: run <app>" C_RESET "\n"); else cmd_run(argv[1]); }
     else if (!strcmp(c, "ps")) cmd_ps();
+    else if (!strcmp(c, "veyra")) cmd_veyra();
+    else if (!strcmp(c, "net")) cmd_net();
+    else if (!strcmp(c, "ping")) { if (argc < 2) out(C_WARN "usage: ping <a.b.c.d>" C_RESET "\n"); else cmd_ping(argv[1]); }
     else if (!strcmp(c, "mem")) cmd_mem();
     else if (!strcmp(c, "uptime")) cmd_uptime();
     else if (!strcmp(c, "devices")) cmd_devices();

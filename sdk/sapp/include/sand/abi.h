@@ -8,7 +8,7 @@
  *
  * Calling convention (x86-32): int 0x80, number in EAX, arguments in
  * EBX, ECX, EDX, result in EAX. Negative results are errors. */
-#define SAND_ABI_VERSION 8u
+#define SAND_ABI_VERSION 9u
 
 enum sand_syscall_number {
     SAND_SYS_EXIT = 1,        /* exit(status)                         */
@@ -45,6 +45,11 @@ enum sand_syscall_number {
     SAND_SYS_CHAN_OPEN = 29,     /* chan_open(name) -> handle >= 1: open (or create) a TIDEWAY channel; needs ipc.channel */
     SAND_SYS_CHAN_SEND = 30,     /* chan_send(handle, data, len 1..112) -> 0, SAND_E_FULL when the channel holds 8 messages */
     SAND_SYS_CHAN_RECV = 31,     /* chan_recv(handle, sand_chan_msg*) -> 1 message (oldest first; .from is the sender pid), 0 none */
+    SAND_SYS_VEYRA_QUERY = 36,   /* veyra_query(interface_id, sand_veyra_subsystem_info*) -> 0, SAND_E_NODEV for unknown or absent subsystems; id 0 = count; open to every app */
+    SAND_SYS_NET_INFO = 32,      /* net_info(sand_netinfo*) -> 0, SAND_E_NODEV without a NIC; needs net.access */
+    SAND_SYS_NET_PING = 33,      /* net_ping(ip, timeout_ms) -> round-trip ms (blocks), SAND_E_TIMEOUT, SAND_E_NODEV; ip = bytes a,b,c,d as a little-endian u32 */
+    SAND_SYS_NET_UDP_SEND = 34,  /* net_udp_send(sand_udp*) -> 0; data <= 512 bytes */
+    SAND_SYS_NET_UDP_RECV = 35,  /* net_udp_recv(port, sand_udp*) -> 1 datagram, 0 none (non-blocking); the first call binds the port */
 };
 
 #define SAND_E_FAIL   (-1)    /* generic failure / bad argument */
@@ -53,6 +58,21 @@ enum sand_syscall_number {
 #define SAND_E_NOSYS  (-4)    /* unknown system call             */
 #define SAND_E_PERM   (-5)    /* the app's manifest does not grant this capability */
 #define SAND_E_FULL   (-6)    /* a bounded kernel table or queue is full (TIDEWAY channels) */
+
+#define SAND_E_TIMEOUT (-7)   /* a network wait expired */
+#define SAND_E_NODEV   (-8)   /* no such device (no NIC) */
+struct sand_netinfo { uint8_t mac[6]; uint8_t ip[4]; uint8_t gateway[4]; uint32_t rx_frames; uint32_t tx_frames; };
+struct sand_udp { uint32_t ip; uint16_t src_port; uint16_t dst_port; uint32_t length; uint8_t data[512]; };
+
+/* Veyra subsystem descriptor as returned by veyra_query (layout identical to include/sand/veyra/subsystems.h). */
+struct sand_veyra_subsystem_abi {
+    uint32_t magic; uint16_t abi_major, abi_minor; uint32_t struct_size, flags;   /* struct sand_veyra_interface */
+    uint32_t interface_id, capabilities, revision, permission, limit[4];
+};
+#define SAND_VEYRA_IF_FILES  0x0101u
+#define SAND_VEYRA_IF_IPC    0x0102u
+#define SAND_VEYRA_IF_NOTIFY 0x0103u
+#define SAND_VEYRA_IF_NET    0x0104u
 
 /* TIDEWAY message as delivered by chan_recv. */
 struct sand_chan_msg { uint32_t from; uint32_t length; uint8_t data[112]; };

@@ -14,7 +14,7 @@ ABI_H := sdk/sapp/include/sand/abi.h
 PYTHON ?= python3
 SAPP := sdk/sapp
 # Built into the kernel image (launcher + boot-time needs) ...
-EMBEDDED_APPS := sandsh hello abitest spin crash locus locusc quanta chronos cairn keystone citadel herald
+EMBEDDED_APPS := sandsh hello abitest spin crash locus locusc quanta chronos cairn keystone citadel herald netecho
 # ... and apps stored only in SANDFS inside the disk image (loaded by diskapps.c, permissions from their manifest).
 DISK_APPS := jail lumen
 APPS := $(EMBEDDED_APPS) $(DISK_APPS)
@@ -23,7 +23,7 @@ SANDFS_SECTORS := 2048
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
 APP_OBJECTS := $(foreach a,$(EMBEDDED_APPS),$(APP_BUILD)/$(a)-image.o)
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/appinstall.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/sandfs.o $(BUILD)/tideway.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/appinstall.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/sandfs.o $(BUILD)/tideway.o $(BUILD)/driftnet.o $(BUILD)/veyra-registry.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
 .PHONY: run-serial all clean kernel disk run check apps test ui-preview
 apps: $(foreach a,$(APPS),$(APP_BUILD)/$(a).sapp)
 $(APP_BUILD):
@@ -127,6 +127,10 @@ $(BUILD)/sandfs.o: kernel/fs/sandfs.c include/sand/fs/sandfs.h include/sand/stor
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/tideway.o: kernel/ipc/tideway.c include/sand/ipc/tideway.h $(ABI_H) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/driftnet.o: kernel/net/driftnet.c include/sand/net/driftnet.h include/sand/veyra/status.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/veyra-registry.o: kernel/veyra/registry.c include/sand/veyra/subsystems.h include/sand/net/driftnet.h include/sand/ipc/tideway.h $(ABI_H) | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/graphics-framebuffer.o: kernel/graphics/framebuffer.c include/sand/graphics/framebuffer.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/vbe.o: kernel/arch/x86/vbe.c include/sand/arch/x86/vbe.h include/sand/graphics/framebuffer.h include/sand/arch/x86/paging.h | $(BUILD)
@@ -211,6 +215,7 @@ host-test: apps
 	mkdir -p $(BUILD)
 	cc -std=c11 -Wall -Wextra -Werror -Iinclude -Ikernel/crypto -o $(BUILD)/ed25519-kat tests/veyra/ed25519_kat_test.c kernel/crypto/sha512.c kernel/crypto/ed25519.c kernel/crypto/sha256.c kernel/security/stci.c
 	./$(BUILD)/ed25519-kat
+	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude -Isdk/sapp/include -o $(BUILD)/veyra-subsystems tests/veyra/subsystems_test.c kernel/veyra/registry.c kernel/ipc/tideway.c && $(BUILD)/veyra-subsystems
 	$(PYTHON) tests/veyra/ed25519_crosscheck.py
 	$(PYTHON) tests/veyra/stci_chain_test.py
 	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude -o $(BUILD)/diskapps-perm tests/veyra/diskapps_perm_test.c kernel/proc/diskapps.c
@@ -220,6 +225,7 @@ test: disk host-test
 	$(PYTHON) tests/qemu/test_shell.py
 	$(PYTHON) tests/qemu/test_desktop.py
 	$(PYTHON) tests/qemu/test_install_tool.py
+	$(PYTHON) tests/qemu/test_net.py
 ui-preview:
 	$(CC) -O2 -Wall -Iinclude -Isdk/sapp/include -o $(BUILD)/ui_preview tools/ui_preview.c kernel/graphics/ui.c kernel/graphics/ui_wall.c kernel/graphics/gfx.c kernel/graphics/font.c kernel/graphics/font_data.c
 	./$(BUILD)/ui_preview $(BUILD)/ui.ppm
