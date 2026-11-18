@@ -1,7 +1,7 @@
 /* SAND OS stage-2 loader.
  * BIOS E820 map is written at physical 0x5000: count at 0x5000,
  * followed by up to 32 24-byte entries at 0x5004.
- * Kernel is read from LBA 17 to physical 0x10000 in seven 64 KiB windows (up to 448 KiB, LBA 17-912).
+ * Kernel is read from LBA 17 to physical 0x10000 in eight 64 KiB windows (up to 512 KiB, LBA 17-1040).
  */
 .code16
 .section .text
@@ -123,6 +123,16 @@ stage2_start:
     int $0x13
     jc loader_error
 
+    /* Load the eighth 64 KiB kernel window from LBA 913 to 0x80000. */
+    movw $0x8000, kernel_packet+6
+    movl $913, kernel_packet+8
+    movl $0, kernel_packet+12
+    movw $kernel_packet, %si
+    movb boot_drive, %dl
+    movb $0x42, %ah
+    int $0x13
+    jc loader_error
+
     inb $0x92, %al
     orb $0x02, %al
     andb $0xFE, %al
@@ -220,6 +230,6 @@ protected_entry:
     movw %ax, %fs
     movw %ax, %gs
     movw %ax, %ss
-    movl $0x90000, %esp
+    movl $0x9F000, %esp
     movl $0x10000, %eax
     jmp *%eax

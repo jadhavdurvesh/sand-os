@@ -8,7 +8,7 @@
 .extern kernel_main
 _start:
     cli
-    movl $0x90000, %esp
+    movl $0x9F000, %esp
     xorl %ebp, %ebp
     call kernel_main
 1:

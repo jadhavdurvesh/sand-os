@@ -27,10 +27,10 @@ This is an educational first boot path, not a production bootloader. It assumes 
 
 ## Layout notes (M7–M11)
 
-- The second stage loads up to 448 KiB of kernel (seven 64 KiB INT 13h windows, LBA 17-912); `make` fails if `build/sand-kernel.bin` exceeds 458,752 bytes (the kernel is ~401 KB now; the image includes the zero-filled .bss, so ~57 KB of headroom remains). SANDFS starts at LBA 1024, which caps any further growth at ~500 KiB without moving it. `make host-test` and the kernel build need Python 3 and OpenSSL 3 (they generate throw-away test signing keys under `build/`).
+- BEDROCK: the second stage loads up to 512 KiB of kernel (eight 64 KiB INT 13h windows, LBA 17-1040, physical 0x10000-0x8FFFF); `make` fails if `build/sand-kernel.bin` exceeds 524,288 bytes (the kernel is ~442 KB now, about 80 KB of headroom; the image includes the zero-filled .bss). The kernel stack top moved from 0x90000 to 0x9F000 to make room. SANDFS starts at LBA 1088. Beyond 512 KiB the kernel would need to be loaded above 1 MiB, which is not done yet. `make host-test` and the kernel build need Python 3 and OpenSSL 3 (they generate throw-away test signing keys under `build/`).
 - `tools/sync_citadel.py <citadel-checkout>` refreshes the vendored Citadel core in `third_party/citadel/` (commit recorded in `VERSION`).
 - `tools/sand_install.py` installs a `.sapp` into a running system (`make run-serial`, then `--connect 127.0.0.1:4555`) or bakes it into a copy of the disk image (`--boot build/sand-os.img --out my.img`); see docs/ARCHITECTURE.md (Installing apps).
-- SANDFS lives at LBA 1024 so it cannot collide with the kernel image.
+- SANDFS lives at LBA 1088 so it cannot collide with the kernel image.
 - `make test` runs the QEMU-driven suites in `tests/qemu/` (needs Python 3 and `qemu-system-i386`): `test_shell.py` drives `sandsh` over serial, `test_desktop.py` checks desktop markers, wallpaper/chrome pixels, pointer movement and console mirroring from screenshots.
 - `make ui-preview` renders one desktop frame natively to `build/ui.ppm` for quick visual iteration (host tool only).
 - `tools/genfont.py` regenerates `kernel/graphics/font_data.c` (the SAND Sans glyph tables): `python3 tools/genfont.py emit kernel/graphics/font_data.c`.

@@ -293,7 +293,7 @@ int process_exit(sand_pid_t pid,int32_t exit_code) {
     struct process_slot *slot=find_slot(pid); if(slot==0 || slot->info.state==SAND_PROCESS_TERMINATED) return -1;
     if(active_pid==pid) {
         if(paging_activate(paging_kernel_directory())!=0) return -1;
-        tss_set_kernel_stack(0x90000u);
+        tss_set_kernel_stack(0x9F000u);
         active_pid=0u;
     }
     slot->info.exit_code=exit_code; slot->info.state=SAND_PROCESS_TERMINATED; (void)scheduler_wake_one(slot); return 0;
@@ -355,7 +355,7 @@ void process_scheduler_hook(uint32_t thread_id) {
         next->info.state=SAND_PROCESS_RUNNING; active_pid=next->info.pid;
     } else {
         (void)paging_activate(paging_kernel_directory());
-        tss_set_kernel_stack(0x90000u); active_pid=0u;
+        tss_set_kernel_stack(0x9F000u); active_pid=0u;
     }
 }
 static void process_thread_entry(void *argument) {
