@@ -109,7 +109,7 @@ class ShellTest(unittest.TestCase):
         ls = self.cmd("ls")
         self.assertRegex(ls, r"jail\.sapp.*?\d{4,} bytes")  # a multi-sector file (more than 512 bytes)
         out = self.cmd("run jail", timeout=20)
-        self.assertIn("jail: win=-5 set=-5 fsr=-5 fsw=-5 spawn=-5 read=-5 get=0", out)   # manifest said console.write only
+        self.assertIn("jail: win=-5 set=-5 fsr=-5 fsw=-5 spawn=-5 read=-5 ipc=-5 get=0", out)   # manifest said console.write only
         self.assertIn("cannot start", self.cmd("run nosuchapp"))
         self.assertIn("exited with status 0", out)
 
@@ -153,7 +153,7 @@ class ShellTest(unittest.TestCase):
     def test_10_permissions_are_enforced(self):
         """An app that declares only console.write is refused every gated call (SAND_E_PERM = -5)."""
         out = self.cmd("run jail", timeout=20)
-        self.assertIn("jail: win=-5 set=-5 fsr=-5 fsw=-5 spawn=-5 read=-5 get=0", out)
+        self.assertIn("jail: win=-5 set=-5 fsr=-5 fsw=-5 spawn=-5 read=-5 ipc=-5 get=0", out)
         self.assertIn("exited with status 0", out)
         self.assertNotIn("jail.txt", self.cmd("ls"))                 # the refused write really did not happen
         self.assertIn("accent=0", self.cmd("settings"))              # nor did the settings write

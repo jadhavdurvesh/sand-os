@@ -66,6 +66,9 @@ static inline int32_t sand_setting_get(uint32_t key) { return sand_syscall1(SAND
 static inline int32_t sand_setting_set(uint32_t key, uint32_t value) { return sand_syscall2(SAND_SYS_SETTING_SET, key, value); }
 static inline int32_t sand_install_put(uint32_t offset, const void *data, uint32_t length) { return sand_syscall3(SAND_SYS_INSTALL_PUT, offset, (uint32_t)data, length); }
 static inline int32_t sand_install_commit(const char *name) { return sand_syscall1(SAND_SYS_INSTALL_COMMIT, (uint32_t)name); }
+static inline int32_t sand_chan_open(const char *name) { return sand_syscall1(SAND_SYS_CHAN_OPEN, (uint32_t)name); }
+static inline int32_t sand_chan_send(int32_t h, const void *data, uint32_t len) { return sand_syscall3(SAND_SYS_CHAN_SEND, (uint32_t)h, (uint32_t)data, len); }
+static inline int32_t sand_chan_recv(int32_t h, struct sand_chan_msg *m) { return sand_syscall2(SAND_SYS_CHAN_RECV, (uint32_t)h, (uint32_t)m); }
 static inline int32_t sand_time_get(struct sand_time *out) { return sand_syscall1(SAND_SYS_TIME_GET, (uint32_t)out); }
 static inline int32_t sand_win_resizable(int32_t id, int32_t min_w, int32_t min_h) { return sand_syscall2(SAND_SYS_WIN_RESIZABLE, (uint32_t)id, ((uint32_t)min_w << 16) | (uint32_t)min_h); }
 static inline int32_t sand_device_list(uint32_t index, struct sand_devinfo *out) { return sand_syscall2(SAND_SYS_DEVICE_LIST, index, (uint32_t)out); }
