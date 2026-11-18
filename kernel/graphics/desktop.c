@@ -1,3 +1,4 @@
+#include "sand/ipc/tideway.h"
 #include "sand/graphics/desktop.h"
 #include "sand/graphics/ui.h"
 #include "sand/arch/x86/input.h"
@@ -69,6 +70,24 @@ static void present_frame(void) {
         if (++frames_presented == 1u) debug_text("SAND_TEST:M11_DESKTOP_FIRST_FRAME\n");
     }
 }
+/* HERALD: toasts arrive on the TIDEWAY channel "herald.notify"; the kernel-stamped sender pid becomes the card's source line.
+ * This thread runs with IRQs on, so the queue is touched with interrupts off (syscalls run that way already). */
+static int32_t herald_channel;
+static void herald_poll(void) {
+    struct tideway_msg m; char text[64]; char src[16] = "system"; int got;
+    if (sand_ui_toast_busy(&ui)) return;
+    __asm__ volatile("cli");
+    if (herald_channel == 0) herald_channel = tideway_open("herald.notify");
+    got = herald_channel > 0 ? tideway_recv(herald_channel, &m) : 0;
+    __asm__ volatile("sti");
+    if (got != 1) return;
+    uint32_t n = m.length < 63u ? m.length : 63u;
+    for (uint32_t i = 0; i < n; ++i) text[i] = (m.data[i] >= 0x20u && m.data[i] < 0x7Fu) ? (char)m.data[i] : '?';
+    text[n] = 0;
+    struct sand_process_info info;
+    if (process_get_info(m.from, &info) == 0) { uint32_t i = 0; while (info.name[i] && i < 15u) { src[i] = info.name[i]; ++i; } src[i] = 0; }
+    (void)sand_ui_toast(&ui, src, text, 500u);
+}
 static void desktop_thread(void *arg) {
     (void)arg;
     for (;;) {
@@ -83,6 +102,7 @@ static void desktop_thread(void *arg) {
             if (e.buttons != ui.buttons || dx > 40 || dx < -40) { sand_ui_pointer(&ui, dx, dy, buttons); dx = dy = 0; moved = 0; }
         }
         if (moved || buttons != ui.buttons) { sand_ui_pointer(&ui, dx, dy, buttons); if (++pointer_events == 1u) debug_text("SAND_TEST:M11_POINTER_EVENT\n"); }
+        herald_poll();
         present_frame();
         if (settings_dirty_since && timer_ticks() - settings_dirty_since >= 50u) { settings_dirty_since = 0u; settings_save(); }   /* debounced write, IRQs on */
         __asm__ volatile("sti; hlt");

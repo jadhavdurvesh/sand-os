@@ -55,7 +55,7 @@ static void say(const char *prefix, const char *s, uint32_t color)      /* word-
 static char app_names[APP_MAX][16];
 static uint32_t app_total;
 static int32_t opened[8];
-static const char *const hidden[] = { "sandsh", "abitest", "spin", "crash", "hello", "jail", "citadel", "locusc" };
+static const char *const hidden[] = { "sandsh", "abitest", "spin", "crash", "hello", "jail", "citadel", "locusc", "herald" };
 
 static void scan_apps(void)
 {
@@ -143,9 +143,52 @@ static struct { uint32_t due; char text[CITADEL_SAND_NOTE_MAX + 1]; } rem[REM_MA
 static uint32_t nrem;
 static uint32_t tick_hz = 100;
 static int alert;
+/* HERALD (the background service) keeps the timers alive after this window closes and raises the desktop toast. */
+static int32_t ch_req = -1, ch_rep = -1;
+static int herald_running(void)
+{
+    struct sand_procinfo info;
+    for (uint32_t n = 0; sand_proc_list(n, &info) == 0; ++n)
+        if (!strcmp(info.name, "herald") && info.state != 3u) return 1;
+    return 0;
+}
+static int herald_ensure(void)
+{
+    if (ch_req < 1) return 0;
+    if (herald_running()) return 1;
+    if (sand_spawn("herald") < 0) return 0;
+    sand_sleep_ms(150); return 1;
+}
+static void herald_send(const char *msg, uint32_t len) { if (ch_req >= 1) (void)sand_chan_send(ch_req, msg, len); }
+static void herald_sync(void)                            /* re-learn reminders that outlived an earlier window */
+{
+    if (ch_req < 1 || ch_rep < 1 || !herald_running()) return;
+    struct sand_chan_msg m; while (sand_chan_recv(ch_rep, &m) == 1) {}
+    herald_send("Q", 1);
+    for (int tries = 0; tries < 20; ++tries) {
+        int done = 0;
+        while (sand_chan_recv(ch_rep, &m) == 1) {
+            if (m.data[0] == 'E') { done = 1; break; }
+            if (m.data[0] != 'L' || nrem >= REM_MAX) continue;
+            uint32_t left = 0, i = 1; while (i < m.length && m.data[i] >= '0' && m.data[i] <= '9') left = left * 10u + (uint32_t)(m.data[i++] - '0');
+            if (i < m.length && m.data[i] == ' ') ++i;
+            uint32_t tl = 0; while (i < m.length && tl < CITADEL_SAND_NOTE_MAX) rem[nrem].text[tl++] = (char)m.data[i++];
+            rem[nrem].text[tl] = 0; rem[nrem].due = sand_ticks() + left * tick_hz; ++nrem;
+        }
+        if (done) break;
+        sand_sleep_ms(20);
+    }
+}
 static int p_rem_add(void *c, uint32_t seconds, const char *t)
 {
     (void)c; if (nrem >= REM_MAX) return -1;
+    if (herald_ensure()) {
+        char msg[72]; uint32_t o = 0, k = 0; char dig[10]; uint32_t v = seconds; int d = 0;
+        msg[o++] = 'R'; do { dig[d++] = (char)('0' + v % 10u); v /= 10u; } while (v);
+        while (d) msg[o++] = dig[--d];
+        msg[o++] = ' '; while (t[k] && o < sizeof(msg)) msg[o++] = t[k++];
+        herald_send(msg, o);
+    }
     rem[nrem].due = sand_ticks() + seconds * tick_hz; strcpy(rem[nrem].text, t); ++nrem; dirty = 1; return 0;
 }
 static uint32_t p_rem_count(void *c) { (void)c; return nrem; }
@@ -155,7 +198,7 @@ static int p_rem_get(void *c, uint32_t i, uint32_t *left, char *out, size_t cap)
     int32_t d = (int32_t)(rem[i].due - sand_ticks()); *left = d > 0 ? ((uint32_t)d + tick_hz - 1u) / tick_hz : 0u;
     memcpy(out, rem[i].text, strlen(rem[i].text) + 1); return 0;
 }
-static int p_rem_clear(void *c) { (void)c; nrem = 0; dirty = 1; return 0; }
+static int p_rem_clear(void *c) { (void)c; nrem = 0; dirty = 1; herald_send("C", 1); return 0; }
 static void rem_fire(void)
 {
     uint32_t now = sand_ticks();
@@ -270,6 +313,8 @@ void _start(void)
     platform.reminder_add = p_rem_add; platform.reminder_count = p_rem_count; platform.reminder_get = p_rem_get; platform.reminders_clear = p_rem_clear;
     { struct sand_sysinfo si; if (sand_sysinfo(&si) == 0 && si.tick_hz) tick_hz = si.tick_hz; }
     notes_load();
+    ch_req = sand_chan_open("herald.req"); ch_rep = sand_chan_open("herald.rep");
+    herald_sync();
     scan_apps();
     if (citadel_registry_init(&registry) != CITADEL_OK || citadel_sandos_register(&registry, &platform) != CITADEL_OK) { sand_win_close(win); sand_exit(2); }
     say("", "Hello, I am Citadel. I work offline and only do what I can list: say 'help'.", C_TEXT);

@@ -1,0 +1,1 @@
+{"id":"org.sand.herald","name":"Herald","version":"0.1.0","vendor":"SAND","description":"Background reminder service: holds timers for other apps and raises desktop notifications","permissions":["ipc.channel"],"dependencies":[]}

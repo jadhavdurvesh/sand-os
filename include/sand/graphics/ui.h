@@ -68,6 +68,7 @@ typedef struct sand_ui {
     uint32_t blink_seen, clock_min_seen, about_seen;
     uint8_t cur_fill[24 * 16], cur_edge[24 * 16];
     uint32_t frames;
+    char toast_src[16], toast_text[64]; uint32_t toast_until; uint8_t toast_on;   /* HERALD notification card */
 } sand_ui_t;
 
 int sand_ui_init(sand_ui_t *ui, const sand_ui_host_t *host, int32_t w, int32_t h);
@@ -87,6 +88,9 @@ int sand_ui_win_blit(sand_ui_t *ui, int id, uint32_t owner, const struct sand_bl
 int sand_ui_win_resizable(sand_ui_t *ui, int id, uint32_t owner, int32_t min_w, int32_t min_h);
 /* Keyboard routing: returns 1 when the focused window is an app window and took the key. */
 int sand_ui_key(sand_ui_t *ui, uint8_t ascii);
+/* HERALD toast: shows a short notification card under the menu bar for a few seconds. Returns 0, or -1 while one is still showing. */
+int sand_ui_toast(sand_ui_t *ui, const char *source, const char *text, uint32_t hold_ticks);
+int sand_ui_toast_busy(const sand_ui_t *ui);
 /* Renders whatever changed into the back buffer; returns 1 and the screen rectangle to present. */
 int sand_ui_frame(sand_ui_t *ui, struct sand_ui_rect *out);
 /* Converts the rectangle (plus pointer overlay) to the display format (bpp 24 or 32). */
