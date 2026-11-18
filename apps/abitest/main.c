@@ -33,6 +33,14 @@ void _start(void)
     check(sand_fs_remove("abitest.dat") == 0, "fs_remove");
     check(sand_fs_read("abitest.dat", back, sizeof(back)) == SAND_E_NOENT, "removed file is gone");
 
+    /* BEDROCK: whole files well beyond the old 512-byte limit round-trip intact */
+    static uint8_t big[20000], bigback[20000];
+    for (uint32_t i = 0; i < sizeof(big); ++i) big[i] = (uint8_t)(i * 7u + (i >> 8));
+    check(sand_fs_write("abibig.dat", big, sizeof(big)) == 0, "fs_write 20000 bytes");
+    check(sand_fs_read("abibig.dat", bigback, sizeof(bigback)) == (int32_t)sizeof(big), "fs_read 20000 length");
+    check(memcmp(big, bigback, sizeof(big)) == 0, "fs_read 20000 bytes");
+    check(sand_fs_remove("abibig.dat") == 0, "fs_remove big");
+
     struct sand_sysinfo info;
     check(sand_sysinfo(&info) == 0 && info.abi_version == SAND_ABI_VERSION && info.tick_hz == 100u, "sysinfo");
 

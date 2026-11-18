@@ -31,7 +31,7 @@ void gdt_init(void) {
     set_entry(2u,0u,0xFFFFFu,0x92u,0xCFu);
     set_entry(3u,0u,0xFFFFFu,0xFAu,0xCFu);
     set_entry(4u,0u,0xFFFFFu,0xF2u,0xCFu);
-    tss.esp0=0x90000u; tss.ss0=KERNEL_DATA_SELECTOR;
+    tss.esp0=0x9F000u; tss.ss0=KERNEL_DATA_SELECTOR;
     tss.iomap_base=(uint16_t)sizeof(tss);
     set_entry(5u,(uint32_t)&tss,(uint32_t)sizeof(tss)-1u,0x89u,0x00u);
     struct gdt_pointer pointer={(uint16_t)(sizeof(gdt)-1u),(uint32_t)&gdt[0]};

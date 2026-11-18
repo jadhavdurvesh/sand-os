@@ -25,7 +25,7 @@ void pic_init_masked(void);
 int userland_selftest(void);
 extern uint8_t sapp_test_image[174];
 /* SANDFS lives above the 5-window kernel area (LBA 17-656). */
-#define SAND_SANDFS_START_LBA 1024u
+#define SAND_SANDFS_START_LBA 1088u
 static volatile uint16_t *const vga=(uint16_t *)0xB8000;
 static volatile uint32_t producer_count,consumer_count,protected_count,reuse_done;
 static volatile uint32_t test_failures;

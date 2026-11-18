@@ -18,7 +18,7 @@ EMBEDDED_APPS := sandsh hello abitest spin crash locus locusc quanta chronos cai
 # ... and apps stored only in SANDFS inside the disk image (loaded by diskapps.c, permissions from their manifest).
 DISK_APPS := jail lumen
 APPS := $(EMBEDDED_APPS) $(DISK_APPS)
-SANDFS_LBA := 1024
+SANDFS_LBA := 1088
 SANDFS_SECTORS := 2048
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
@@ -189,7 +189,7 @@ $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
-	test $$(stat -c%s $@) -le 458752
+	test $$(stat -c%s $@) -le 524288
 kernel: $(KERNEL_BIN)
 disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUILD)/$(a).sapp) tools/mksandfs.py
 	dd if=/dev/zero of=$(DISK) bs=512 count=4096 status=none

@@ -25,6 +25,6 @@ int user_space_init(void) {
     return 0;
 }
 void user_mode_enter(uint32_t entry,uint32_t stack_top) {
-    tss_set_kernel_stack(0x90000u);
+    tss_set_kernel_stack(0x9F000u);
     x86_enter_user(entry?entry:user_entry_address,stack_top?stack_top:USER_STACK_TOP);
 }
