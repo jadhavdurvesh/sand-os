@@ -69,6 +69,11 @@ static inline int32_t sand_install_commit(const char *name) { return sand_syscal
 static inline int32_t sand_chan_open(const char *name) { return sand_syscall1(SAND_SYS_CHAN_OPEN, (uint32_t)name); }
 static inline int32_t sand_chan_send(int32_t h, const void *data, uint32_t len) { return sand_syscall3(SAND_SYS_CHAN_SEND, (uint32_t)h, (uint32_t)data, len); }
 static inline int32_t sand_chan_recv(int32_t h, struct sand_chan_msg *m) { return sand_syscall2(SAND_SYS_CHAN_RECV, (uint32_t)h, (uint32_t)m); }
+static inline int32_t sand_veyra_query(uint32_t id, struct sand_veyra_subsystem_abi *out) { return sand_syscall2(SAND_SYS_VEYRA_QUERY, id, (uint32_t)out); }
+static inline int32_t sand_net_info(struct sand_netinfo *out) { return sand_syscall1(SAND_SYS_NET_INFO, (uint32_t)out); }
+static inline int32_t sand_net_ping(uint32_t ip, uint32_t timeout_ms) { return sand_syscall2(SAND_SYS_NET_PING, ip, timeout_ms); }
+static inline int32_t sand_net_udp_send(const struct sand_udp *d) { return sand_syscall1(SAND_SYS_NET_UDP_SEND, (uint32_t)d); }
+static inline int32_t sand_net_udp_recv(uint16_t port, struct sand_udp *d) { return sand_syscall2(SAND_SYS_NET_UDP_RECV, port, (uint32_t)d); }
 static inline int32_t sand_time_get(struct sand_time *out) { return sand_syscall1(SAND_SYS_TIME_GET, (uint32_t)out); }
 static inline int32_t sand_win_resizable(int32_t id, int32_t min_w, int32_t min_h) { return sand_syscall2(SAND_SYS_WIN_RESIZABLE, (uint32_t)id, ((uint32_t)min_w << 16) | (uint32_t)min_h); }
 static inline int32_t sand_device_list(uint32_t index, struct sand_devinfo *out) { return sand_syscall2(SAND_SYS_DEVICE_LIST, index, (uint32_t)out); }

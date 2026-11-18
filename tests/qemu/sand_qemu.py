@@ -14,10 +14,11 @@ import time
 
 
 class SandVM:
-    def __init__(self, image, extra_disks=(), memory="128M", workdir=None):
+    def __init__(self, image, extra_disks=(), memory="128M", workdir=None, nic=None):
         self.image = image
         self.extra_disks = list(extra_disks)
         self.memory = memory
+        self.nic = nic            # e.g. "user,model=rtl8139,hostfwd=udp:127.0.0.1:PORT-:7777"
         self.dir = workdir or tempfile.mkdtemp(prefix="sandvm-")
         self.debug_path = os.path.join(self.dir, "debug.log")
         self.monitor_path = os.path.join(self.dir, "monitor.sock")
@@ -36,6 +37,8 @@ class SandVM:
                "-drive", f"file={self.image},format=raw,if=ide,index=0"]
         for i, disk in enumerate(self.extra_disks, start=1):
             cmd += ["-drive", f"file={disk},format=raw,if=ide,index={i}"]
+        if self.nic:
+            cmd += ["-nic", self.nic]
         cmd += ["-display", "none", "-no-reboot",
                 "-debugcon", f"file:{self.debug_path}", "-global", "isa-debugcon.iobase=0xe9",
                 "-serial", f"tcp:127.0.0.1:{port},server=on,wait=off",

@@ -1,0 +1,1 @@
+{"id":"org.sand.netecho","name":"NetEcho","version":"0.1.0","vendor":"SAND","description":"UDP echo on port 7777 (DRIFTNET demo and test)","permissions":["console.write","net.access"],"dependencies":[]}
