@@ -8,7 +8,7 @@
  *
  * Calling convention (x86-32): int 0x80, number in EAX, arguments in
  * EBX, ECX, EDX, result in EAX. Negative results are errors. */
-#define SAND_ABI_VERSION 7u
+#define SAND_ABI_VERSION 8u
 
 enum sand_syscall_number {
     SAND_SYS_EXIT = 1,        /* exit(status)                         */
@@ -41,7 +41,10 @@ enum sand_syscall_number {
     SAND_SYS_SETTING_SET = 25,   /* setting_set(key, value) -> 0, or SAND_E_FAIL for a bad key/value; persisted to system.cfg */
     SAND_SYS_INSTALL_PUT = 26,   /* install_put(offset, data, len<=512) -> staged bytes; offset 0 starts a new image, later offsets must append */
     SAND_SYS_INSTALL_COMMIT = 27,/* install_commit(name) -> 0: gate-check the staged SAPP and store it as <name>.sapp (needs system.install) */
-    SAND_SYS_TIME_GET = 28       /* time_get(sand_time*) -> 0: the machine's real-time clock (UTC as set by firmware, unsynchronised), SAND_E_FAIL if unreadable */
+    SAND_SYS_TIME_GET = 28,      /* time_get(sand_time*) -> 0: the machine's real-time clock (UTC as set by firmware, unsynchronised), SAND_E_FAIL if unreadable */
+    SAND_SYS_CHAN_OPEN = 29,     /* chan_open(name) -> handle >= 1: open (or create) a TIDEWAY channel; needs ipc.channel */
+    SAND_SYS_CHAN_SEND = 30,     /* chan_send(handle, data, len 1..112) -> 0, SAND_E_FULL when the channel holds 8 messages */
+    SAND_SYS_CHAN_RECV = 31,     /* chan_recv(handle, sand_chan_msg*) -> 1 message (oldest first; .from is the sender pid), 0 none */
 };
 
 #define SAND_E_FAIL   (-1)    /* generic failure / bad argument */
@@ -49,6 +52,10 @@ enum sand_syscall_number {
 #define SAND_E_NOENT  (-3)    /* no such file, app or process    */
 #define SAND_E_NOSYS  (-4)    /* unknown system call             */
 #define SAND_E_PERM   (-5)    /* the app's manifest does not grant this capability */
+#define SAND_E_FULL   (-6)    /* a bounded kernel table or queue is full (TIDEWAY channels) */
+
+/* TIDEWAY message as delivered by chan_recv. */
+struct sand_chan_msg { uint32_t from; uint32_t length; uint8_t data[112]; };
 
 /* Exit status given to a process killed by a CPU fault:
  * SAND_EXIT_FAULT_BASE - vector (page fault 14 -> -270). */

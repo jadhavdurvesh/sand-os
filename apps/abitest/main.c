@@ -41,6 +41,23 @@ void _start(void)
     check(memcmp(big, bigback, sizeof(big)) == 0, "fs_read 20000 bytes");
     check(sand_fs_remove("abibig.dat") == 0, "fs_remove big");
 
+    /* TIDEWAY: loopback through a named channel; kernel stamps the sender pid */
+    int32_t ch = sand_chan_open("abitest.loop");
+    check(ch >= 1, "chan_open");
+    check(sand_chan_open("abitest.loop") == ch, "chan_open is idempotent by name");
+    check(sand_chan_open("Bad Name") == SAND_E_FAIL, "chan_open rejects bad names");
+    struct sand_chan_msg m;
+    check(sand_chan_recv(ch, &m) == 0, "empty channel gives 0");
+    check(sand_chan_send(ch, "one", 3) == 0 && sand_chan_send(ch, "two!", 4) == 0, "chan_send");
+    check(sand_chan_send(ch, "x", 0) == SAND_E_FAIL, "empty message refused");
+    check(sand_chan_recv(ch, &m) == 1 && m.length == 3 && memcmp(m.data, "one", 3) == 0 && m.from == (uint32_t)sand_getpid(), "chan_recv first, sender stamped");
+    check(sand_chan_recv(ch, &m) == 1 && m.length == 4 && memcmp(m.data, "two!", 4) == 0, "chan_recv second in order");
+    check(sand_chan_recv(ch, &m) == 0, "drained");
+    int sent = 0; while (sand_chan_send(ch, "f", 1) == 0) ++sent;
+    check(sent == 8, "channel holds exactly 8 messages");
+    check(sand_chan_send(ch, "f", 1) == SAND_E_FULL, "full channel reports SAND_E_FULL");
+    while (sand_chan_recv(ch, &m) == 1) {}
+
     struct sand_sysinfo info;
     check(sand_sysinfo(&info) == 0 && info.abi_version == SAND_ABI_VERSION && info.tick_hz == 100u, "sysinfo");
 

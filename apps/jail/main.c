@@ -17,6 +17,7 @@ void _start(void)
     num("fsw=", sand_fs_write("jail.txt", "x", 1));
     num("spawn=", sand_spawn("hello"));
     num("read=", sand_read(buf, sizeof(buf)));
+    num("ipc=", sand_chan_open("probe"));
     num("get=", sand_setting_get(SAND_SET_ACCENT) >= 0 ? 0 : -1);
     sand_puts("\n");
     sand_exit(0);

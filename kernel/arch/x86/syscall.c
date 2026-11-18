@@ -5,6 +5,7 @@
 #include "sand/console/console.h"
 #include "sand/drivers/device.h"
 #include "sand/fs/sandfs.h"
+#include "sand/ipc/tideway.h"
 #include "sand/graphics/desktop.h"
 #include "sand/kernel/process.h"
 #include "sand/kernel/scheduler.h"
@@ -93,6 +94,7 @@ static uint32_t required_permission(uint32_t number,uint32_t a) {
     case SAND_SYS_WIN_CREATE: return SAND_PERM_WINDOW;
     case SAND_SYS_SETTING_SET: return SAND_PERM_SETTINGS;
     case SAND_SYS_INSTALL_PUT: case SAND_SYS_INSTALL_COMMIT: return SAND_PERM_INSTALL;
+    case SAND_SYS_CHAN_OPEN: case SAND_SYS_CHAN_SEND: case SAND_SYS_CHAN_RECV: return SAND_PERM_IPC;
     default: return 0u;
     }
 }
@@ -170,6 +172,20 @@ uint32_t syscall_dispatch(uint32_t frame) {
         for(uint32_t f=0;f<6u;++f) { v[f]=0u; for(uint32_t d=0;d<wd[f];++d) v[f]=v[f]*10u+(uint32_t)(iso[at[f]+d]-'0'); }
         t.year=v[0]; t.month=v[1]; t.day=v[2]; t.hour=v[3]; t.minute=v[4]; t.second=v[5];
         (void)copy_out(a,&t,sizeof(t)); result=0; break; }
+    case SAND_SYS_CHAN_OPEN:
+        if(copy_name(a)!=0) { result=SAND_E_FAULT; break; }
+        result=tideway_open(name_buffer); break;
+    case SAND_SYS_CHAN_SEND: {
+        if(c==0u || c>TIDEWAY_MSG_MAX) { result=SAND_E_FAIL; break; }
+        uint8_t msg[TIDEWAY_MSG_MAX];
+        if(copy_in(msg,b,c)!=0) { result=SAND_E_FAULT; break; }
+        result=tideway_send((int32_t)a,process_current(),msg,c); break; }
+    case SAND_SYS_CHAN_RECV: {
+        struct tideway_msg m;
+        if(!user_ok(b,sizeof(m),1)) { result=SAND_E_FAULT; break; }
+        result=tideway_recv((int32_t)a,&m);
+        if(result==1) (void)copy_out(b,&m,sizeof(m));
+        break; }
     case SAND_SYS_INSTALL_PUT: {
         if(c>sizeof(scratch)) { result=SAND_E_FAIL; break; }
         if(c!=0u && copy_in(scratch,b,c)!=0) { result=SAND_E_FAULT; break; }
