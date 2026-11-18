@@ -284,6 +284,34 @@ class DesktopTest(unittest.TestCase):
         time.sleep(2.0)
         self.assertNotRegex(self.vm.run_command("ps"), r"(running|ready|blocked)\s+citadel")
 
+    def test_09d_herald_toast_outlives_the_window(self):
+        """HERALD: a reminder set in CITADEL survives closing the window; the background service raises a desktop toast."""
+        self.vm.run_command("open citadel")
+        time.sleep(2.5)
+        self.type_keys("remind me in 12 seconds to stretch\n")
+        time.sleep(1.0)
+        self.assertRegex(self.vm.run_command("ps"), r"(running|ready|blocked)\s+herald")   # the service was started on demand
+        self.type_keys("exit\n")
+        time.sleep(2.0)
+        self.assertNotRegex(self.vm.run_command("ps"), r"(running|ready|blocked)\s+citadel")
+        self.assertRegex(self.vm.run_command("ps"), r"(running|ready|blocked)\s+herald")   # ...and keeps running without the window
+        base = self.shot("desktop-herald-a.ppm")
+        def toast_diff(img):                                           # the card sits under the menu bar, top right
+            return sum(1 for x in range(680, 1000, 2) for y in range(46, 100, 2) if pixel(base, x, y) != pixel(img, x, y))
+        shown = None
+        for _ in range(14):
+            time.sleep(1.0)
+            img = self.shot("desktop-herald-b.ppm")
+            if toast_diff(img) > 300:
+                shown = img; break
+        self.assertIsNotNone(shown, "no toast appeared")
+        for _ in range(12):                                            # and it goes away again by itself
+            time.sleep(1.0)
+            if toast_diff(self.shot("desktop-herald-c.ppm")) < 50:
+                break
+        else:
+            self.fail("toast never disappeared")
+
     def test_10_keystone_changes_the_system(self):
         """KEYSTONE writes real system settings: choosing Jade recolours the desktop accent itself."""
         self.vm.run_command("open keystone")

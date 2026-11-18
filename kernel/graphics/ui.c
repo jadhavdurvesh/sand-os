@@ -362,6 +362,32 @@ static void draw_launcher(sand_ui_t *ui) {
         gfx_text(g, &ui->sans_small, x + 66, ry + 36, a->subtitle, C_MUTED, 255u, 0);
     }
 }
+#define TOAST_W 340
+#define TOAST_H 62
+static void toast_rect(const sand_ui_t *ui, int32_t *x, int32_t *y) { *x = ui->w - TOAST_W - 14; *y = MENU_H + 12; }
+int sand_ui_toast_busy(const sand_ui_t *ui) { return ui->toast_on; }
+int sand_ui_toast(sand_ui_t *ui, const char *source, const char *text, uint32_t hold_ticks) {
+    int32_t x, y; uint32_t i;
+    if (ui->toast_on) return -1;
+    for (i = 0; source[i] && i < 15u; ++i) ui->toast_src[i] = source[i];
+    ui->toast_src[i] = 0;
+    for (i = 0; text[i] && i < 63u; ++i) ui->toast_text[i] = text[i];
+    ui->toast_text[i] = 0;
+    ui->toast_until = ui->host.ticks() + hold_ticks; ui->toast_on = 1;
+    toast_rect(ui, &x, &y); mark(ui, x - 20, y - 12, x + TOAST_W + 20, y + TOAST_H + 24);
+    return 0;
+}
+static void draw_toast(sand_ui_t *ui) {
+    int32_t x, y; toast_rect(ui, &x, &y);
+    if (!ui->toast_on || !gfx_visible(&ui->g, x - 20, y - 12, TOAST_W + 40, TOAST_H + 36)) return;
+    gfx_shadow(&ui->g, x, y, TOAST_W, TOAST_H, 20, 20, 8, 0x000000u, 140u);
+    glass(ui, x, y, TOAST_W, TOAST_H, 14, y, y + TOAST_H, C_SURFACE2, 190u);
+    gfx_rrect_ring(&ui->g, x, y, TOAST_W, TOAST_H, 14, 1, C_CHAMP, 110u);
+    gfx_circle(&ui->g, x + 24, y + 31, 9, C_CHAMP, 255u);
+    gfx_circle(&ui->g, x + 27, y + 28, 5, 0xFFE9C8u, 170u);
+    gfx_text(&ui->g, &ui->sans_small, x + 48, y + 24, ui->toast_src, C_MUTED, 255u, 120);
+    gfx_text(&ui->g, &ui->sans_medium, x + 48, y + 46, ui->toast_text, C_TEXT, 255u, 0);
+}
 static void draw_menubar(sand_ui_t *ui) {
     gfx_t *g = &ui->g;
     if (!gfx_visible(g, 0, 0, ui->w, MENU_H + 1)) return;
@@ -793,6 +819,7 @@ int sand_ui_frame(sand_ui_t *ui, struct sand_ui_rect *out) {
              ui->win[0].x + TERM_PAD + (ui->term_col + 1) * CELL_W, ui->win[0].y + TITLE_H + TERM_PAD + (ui->term_row + 1) * CELL_H + 2);
     }
     if (ui->win[1].visible && ui->about_seen != t / 50u) { ui->about_seen = t / 50u; mark(ui, ui->win[1].x, ui->win[1].y + TITLE_H, ui->win[1].x + ui->win[1].w, ui->win[1].y + ui->win[1].h); }
+    if (ui->toast_on && (int32_t)(t - ui->toast_until) >= 0) { int32_t tx, ty; ui->toast_on = 0; toast_rect(ui, &tx, &ty); mark(ui, tx - 20, ty - 12, tx + TOAST_W + 20, ty + TOAST_H + 24); }
     if (ui->clock_min_seen != t / 500u) { ui->clock_min_seen = t / 500u; mark(ui, ui->w - 120, 0, ui->w, MENU_H); }
     if (ui->liveness_seen != t / 25u) {
         ui->liveness_seen = t / 25u;
@@ -860,6 +887,7 @@ int sand_ui_frame(sand_ui_t *ui, struct sand_ui_rect *out) {
     draw_menubar(ui);
     draw_dock(ui);
     draw_launcher(ui);
+    draw_toast(ui);
     gfx_set_clip(&ui->g, 0, 0, ui->w, ui->h);
     ++ui->frames;
     *out = present;
