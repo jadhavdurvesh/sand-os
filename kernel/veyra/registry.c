@@ -31,11 +31,11 @@ sand_veyra_status_t veyra_query(uint32_t id, struct sand_veyra_subsystem_info *o
     case SAND_VEYRA_IF_IPC: fill(o, id, SAND_VEYRA_CAP_SEND | SAND_VEYRA_CAP_RECEIVE | SAND_VEYRA_CAP_CONTROL, SAND_PERM_IPC, TIDEWAY_CHANNELS, TIDEWAY_QUEUE, TIDEWAY_MSG_MAX, TIDEWAY_NAME_MAX - 1u); return SAND_VEYRA_OK;
     /* limit: pending timers per client service, text bytes, toast seconds, longest timer seconds. Reached through the IPC channels "herald.*". */
     case SAND_VEYRA_IF_NOTIFY: fill(o, id, SAND_VEYRA_CAP_SEND | SAND_VEYRA_CAP_CONTROL, SAND_PERM_IPC, 8u, 60u, 5u, 86400u); return SAND_VEYRA_OK;
-    /* limit: datagram bytes, UDP sockets, ping, 0; absent without a NIC */
+    /* limit: datagram bytes, UDP sockets, concurrent pings, concurrent TCP connections; absent without a NIC. Revision 2 added DHCP and the TCP client. */
     case SAND_VEYRA_IF_NET: {
         struct driftnet_info ni;
         if(driftnet_info(&ni) != 0) return SAND_VEYRA_E_NOT_FOUND;
-        fill(o, id, SAND_VEYRA_CAP_SEND | SAND_VEYRA_CAP_RECEIVE | SAND_VEYRA_CAP_READ, SAND_PERM_NET, DRIFTNET_UDP_MAX, 4u, 1u, 0u); return SAND_VEYRA_OK; }
+        fill(o, id, SAND_VEYRA_CAP_SEND | SAND_VEYRA_CAP_RECEIVE | SAND_VEYRA_CAP_READ, SAND_PERM_NET, DRIFTNET_UDP_MAX, 4u, 1u, 1u); o->revision = 2u; return SAND_VEYRA_OK; }
     default: return SAND_VEYRA_E_NOT_FOUND;
     }
 }

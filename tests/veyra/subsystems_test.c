@@ -34,7 +34,7 @@ int main(void)
     /* documented limits */
     veyra_query(SAND_VEYRA_IF_FILES, &d); assert(d.limit[0] == 65536u);
     veyra_query(SAND_VEYRA_IF_IPC, &d);   assert(d.limit[0] == 8u && d.limit[1] == 8u && d.limit[2] == 112u);
-    veyra_query(SAND_VEYRA_IF_NET, &d);   assert(d.limit[0] == 512u && (d.base.capabilities & SAND_VEYRA_CAP_SEND));
+    veyra_query(SAND_VEYRA_IF_NET, &d);   assert(d.limit[0] == 512u && d.limit[3] == 1u && d.revision == 2u && (d.base.capabilities & SAND_VEYRA_CAP_SEND));
 
     /* absent hardware is reported, unknown ids and bad arguments are rejected */
     nic_present = 0;

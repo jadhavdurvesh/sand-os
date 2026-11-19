@@ -97,7 +97,7 @@ static uint32_t required_permission(uint32_t number,uint32_t a) {
     case SAND_SYS_SETTING_SET: return SAND_PERM_SETTINGS;
     case SAND_SYS_INSTALL_PUT: case SAND_SYS_INSTALL_COMMIT: return SAND_PERM_INSTALL;
     case SAND_SYS_CHAN_OPEN: case SAND_SYS_CHAN_SEND: case SAND_SYS_CHAN_RECV: return SAND_PERM_IPC;
-    case SAND_SYS_NET_INFO: case SAND_SYS_NET_PING: case SAND_SYS_NET_UDP_SEND: case SAND_SYS_NET_UDP_RECV: return SAND_PERM_NET;
+    case SAND_SYS_NET_INFO: case SAND_SYS_NET_PING: case SAND_SYS_NET_UDP_SEND: case SAND_SYS_NET_UDP_RECV: case SAND_SYS_TCP_CONNECT: case SAND_SYS_TCP_SEND: case SAND_SYS_TCP_RECV: case SAND_SYS_TCP_CLOSE: return SAND_PERM_NET;
     default: return 0u;
     }
 }
@@ -205,6 +205,27 @@ uint32_t syscall_dispatch(uint32_t frame) {
         result=tideway_recv((int32_t)a,&m);
         if(result==1) (void)copy_out(b,&m,sizeof(m));
         break; }
+    case SAND_SYS_TCP_CONNECT: {
+        sand_veyra_status_t st=driftnet_tcp_connect_step(process_current(),a,b,c>10000u?10000u:c);
+        if(st==DRIFTNET_TCP_PENDING) return retry_yield(r,frame);
+        if(st==SAND_VEYRA_OK) audit_net("NET_TCP_CONNECT",a,b,0u);
+        result=st==SAND_VEYRA_E_IO?SAND_E_CLOSED:sand_veyra_to_syscall(st); break; }
+    case SAND_SYS_TCP_SEND: {
+        static uint8_t tcp_buf[DRIFTNET_TCP_SEG_MAX];
+        if(b==0u || b>DRIFTNET_TCP_SEG_MAX) { result=SAND_E_FAIL; break; }
+        if(copy_in(tcp_buf,a,b)!=0) { result=SAND_E_FAULT; break; }
+        int32_t st=driftnet_tcp_send_step(process_current(),tcp_buf,b);
+        if(st==DRIFTNET_TCP_PENDING) return retry_yield(r,frame);
+        if(st>0) audit_net("NET_TCP_SEND",(uint32_t)0,0u,(uint32_t)st);
+        result=st>=0?st:st==DRIFTNET_TCP_CLOSED?SAND_E_CLOSED:sand_veyra_to_syscall(st); break; }
+    case SAND_SYS_TCP_RECV: {
+        static uint8_t tcp_in[DRIFTNET_TCP_SEG_MAX];
+        uint32_t cap=b>DRIFTNET_TCP_SEG_MAX?DRIFTNET_TCP_SEG_MAX:b;
+        if(cap==0u || !user_ok(a,cap,1)) { result=SAND_E_FAULT; break; }
+        int32_t n=driftnet_tcp_recv(process_current(),tcp_in,cap);
+        if(n>0) (void)copy_out(a,tcp_in,(uint32_t)n);
+        result=n>=0?n:SAND_E_CLOSED; break; }
+    case SAND_SYS_TCP_CLOSE: driftnet_tcp_close(process_current()); result=0; break;
     case SAND_SYS_VEYRA_QUERY: {
         struct sand_veyra_subsystem_info info;
         if(!user_ok(b,sizeof(info),1)) { result=SAND_E_FAULT; break; }

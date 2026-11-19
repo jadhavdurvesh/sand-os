@@ -14,7 +14,7 @@ ABI_H := sdk/sapp/include/sand/abi.h
 PYTHON ?= python3
 SAPP := sdk/sapp
 # Built into the kernel image (launcher + boot-time needs) ...
-EMBEDDED_APPS := sandsh hello abitest spin crash locus locusc quanta chronos cairn keystone citadel herald netecho
+EMBEDDED_APPS := sandsh hello abitest spin crash locus locusc quanta chronos cairn keystone citadel herald netecho netget
 # ... and apps stored only in SANDFS inside the disk image (loaded by diskapps.c, permissions from their manifest).
 DISK_APPS := jail lumen
 APPS := $(EMBEDDED_APPS) $(DISK_APPS)
