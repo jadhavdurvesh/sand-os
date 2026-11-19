@@ -171,7 +171,7 @@ static void cmd_net(void)
     if (rc != 0) { out(C_WARN "net: no network card" C_RESET "\n"); return; }
     static const char hex[] = "0123456789abcdef";
     out("  mac      "); for (int i = 0; i < 6; ++i) { char b[3] = { hex[ni.mac[i] >> 4], hex[ni.mac[i] & 15], 0 }; out(b); if (i < 5) out(":"); }
-    out("\n  ip       "); print_ip(ni.ip); out("\n  gateway  "); print_ip(ni.gateway);
+    out("\n  ip       "); print_ip(ni.ip); out("\n  netmask  "); print_ip(ni.mask); out("\n  gateway  "); print_ip(ni.gateway); out((ni.flags & 1u) ? "\n  address  from DHCP" : "\n  address  static fallback");
     out("\n  frames   rx "); sh_putu(ni.rx_frames); out("  tx "); sh_putu(ni.tx_frames); out("\n");
 }
 static void cmd_ping(const char *arg)

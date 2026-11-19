@@ -53,6 +53,43 @@ class NetTest(unittest.TestCase):
         self.assertEqual(got.get("data"), b"driftnet says hi")
         self.assertIn("SAND_AUDIT:NET_UDP_SEND", self.vm.debug_log())
 
+    def test_7_dhcp_bound_on_default_network(self):
+        self.assertIn("SAND_TEST:DRIFTNET_DHCP_BOUND", self.vm.debug_log())
+        self.assertIn("from DHCP", self.vm.run_command("net"))
+    def test_8_tcp_round_trip_with_the_host(self):
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM); srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind(("127.0.0.1", 7778)); srv.listen(1); srv.settimeout(30)
+        seen = {}
+        def serve():
+            try:
+                c, _ = srv.accept(); c.settimeout(20)
+                data = b""
+                while not data.endswith(b"\n"): data += c.recv(100)
+                seen["got"] = data; c.sendall(data.upper()); c.close()
+            except Exception as e:
+                seen["err"] = repr(e)
+        t = threading.Thread(target=serve); t.start()
+        out = self.vm.run_command("run netget", timeout=40)
+        t.join(30); srv.close()
+        self.assertIn("connected", out); self.assertIn("reply: HELLO TCP", out); self.assertIn("closed", out)
+        self.assertEqual(seen.get("got"), b"hello tcp\n")
+        self.assertIn("SAND_AUDIT:NET_TCP_CONNECT", self.vm.debug_log())
+    def test_9_tcp_refused_is_reported(self):
+        out = self.vm.run_command("run netget", timeout=40)             # nothing listens on 7778 now
+        self.assertIn("connect failed", out)
+
+class CustomSubnetTest(unittest.TestCase):
+    def test_dhcp_hands_out_a_non_default_address(self):
+        vm = SandVM(IMAGE, nic="user,model=rtl8139,net=192.168.76.0/24,dhcpstart=192.168.76.50").start()
+        try:
+            self.assertTrue(vm.wait_marker("SAND_TEST:M9_SHELL_STARTED", 40))
+            self.assertIn("SAND_TEST:DRIFTNET_DHCP_BOUND", vm.debug_log())
+            out = vm.run_command("net")
+            self.assertIn("192.168.76.50", out); self.assertIn("192.168.76.2", out); self.assertIn("255.255.255.0", out)
+            self.assertIn("reply from 192.168.76.2", vm.run_command("ping 192.168.76.2", timeout=15))
+        finally:
+            vm.stop()
+
 class NoNicTest(unittest.TestCase):
     def test_absent_nic_is_reported_not_fatal(self):
         vm = SandVM(IMAGE).start()

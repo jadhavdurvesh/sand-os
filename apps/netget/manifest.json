@@ -1,0 +1,1 @@
+{"id":"org.sand.netget","name":"NetGet","version":"0.1.0","vendor":"SAND","description":"TCP demo: connects to the gateway on port 7778, sends a line, prints the reply","permissions":["console.write","net.access"],"dependencies":[]}

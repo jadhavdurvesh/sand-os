@@ -45,7 +45,7 @@ Veyra implementation rules:
 | Files (BEDROCK) | `0x0101`, `kernel/arch/x86/syscall.c`, `kernel/fs/sandfs.c` | Whole-file read/write up to 64 KiB through the FS syscalls; 512 KiB kernel load window | Contiguous files, 15 entries, no directories or file handles |
 | IPC (TIDEWAY) | `0x0102`, `include/sand/ipc/tideway.h`, `kernel/ipc/tideway.c` | 8 named channels x 8 messages x 112 bytes, kernel-stamped sender pid, `ipc.channel` | Global by name (a capability, not per-pair isolation); non-blocking; never destroyed |
 | Notify (HERALD) | `0x0103`, `apps/herald`, `sand_ui_toast` | Window-less timer service over TIDEWAY; desktop toast card with the sender's kernel-stamped name | Not persistent across reboot; one toast at a time; no click action |
-| Network (DRIFTNET) | `0x0104`, `include/sand/net/driftnet.h`, `kernel/net/driftnet.c` | PCI scan, RTL8139 driver (polled), ARP, IPv4, ICMP echo (send and answer), UDP (4 sockets, 512-byte datagrams), egress audit, `net.access` | Static 10.0.2.15; no TCP, DHCP, DNS, IPv6, fragmentation or interrupts; one NIC; verified only on QEMU's user network |
+| Network (DRIFTNET) | `0x0104`, `include/sand/net/driftnet.h`, `kernel/net/driftnet.c` | PCI scan, RTL8139 driver (polled), DHCP client (falls back to the static QEMU defaults), ARP, IPv4, ICMP echo, UDP (4 sockets, 512-byte datagrams), a TCP **client** (one connection, stop-and-wait, 2 KiB receive ring, in-order only), egress audit, `net.access` | No listen/accept, window management, congestion control, DNS, TLS, IPv6, fragmentation, lease renewal or interrupts; one NIC; verified only on QEMU's user network |
 
 ## Important Veyra gaps before third-party/native applications
 
@@ -56,7 +56,7 @@ Veyra implementation rules:
 - A display-device API and surface/presentation contract.
 - A real compositor contract, window-server boundary and desktop protocol.
 - A VFS-like filesystem API, directory semantics, mount model and file handles.
-- Network: DRIFTNET provides a datagram path (UDP/ICMP); TCP, sockets with handles, DNS and TLS are still missing.
+- Network: DRIFTNET provides UDP/ICMP and a single-connection TCP client; TCP servers, multiple sockets with handles, DNS and TLS are still missing.
 - Audio device/stream APIs and power-management interfaces.
 - Service supervision, logging, configuration and security policy.
 
