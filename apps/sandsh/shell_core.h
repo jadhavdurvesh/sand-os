@@ -54,6 +54,7 @@ static void cmd_help(void)
         {"veyra", "list the Veyra subsystem interfaces this machine offers"},
         {"net", "network card address and counters (DRIFTNET)"},
         {"huginn <name> [server]", "look a host name up (HUGINN resolver)"},
+        {"skald <host> <port> <text> [dns]", "send one line over TCP to a name or IP and print the reply"},
         {"ping <a.b.c.d>", "send an ICMP echo and time the reply"},
         {"mem", "memory and scheduler counters"},
         {"uptime", "time since boot"},
@@ -206,6 +207,42 @@ static void cmd_huginn(int argc, char **argv)
     else if (rc == SAND_E_TIMEOUT) out(C_WARN "huginn: no answer (timeout)" C_RESET "\n");
     else if (rc == SAND_E_PERM) out(C_BAD "huginn: this shell has no net.access permission" C_RESET "\n");
     else out(C_BAD "huginn: bad name or lookup failed" C_RESET "\n");
+}
+/* skald: the teller. Resolves a host name with HUGINN (or takes a dotted IP), connects with DRIFTNET TCP, sends one line, prints the answer. */
+static void cmd_skald(int argc, char **argv)
+{
+    uint32_t ip = 0, port = 0, dns_ip = 0, dns_port = 0, tcp_port = 0;
+    if (argc < 4) { out(C_WARN "usage: skald <host|a.b.c.d> <port> <text> [dns a.b.c.d[:port]]" C_RESET "\n"); return; }
+    for (const char *p = argv[2]; *p; ++p) { if (*p < '0' || *p > '9') { tcp_port = 0; break; } tcp_port = tcp_port * 10u + (uint32_t)(*p - '0'); if (tcp_port > 65535u) { tcp_port = 0; break; } }
+    if (tcp_port == 0) { out(C_WARN "skald: bad port" C_RESET "\n"); return; }
+    uint32_t tl = (uint32_t)strlen(argv[3]);
+    if (tl == 0 || tl > 200) { out(C_WARN "skald: text must be 1..200 characters" C_RESET "\n"); return; }
+    if (argc > 4 && !parse_ip_port(argv[4], &dns_ip, &dns_port)) { out(C_WARN "skald: bad dns server address" C_RESET "\n"); return; }
+    if (parse_ip_port(argv[1], &ip, &port) && port == 0) { /* a plain dotted address */ }
+    else {
+        struct sand_resolve r; memset(&r, 0, sizeof(r));
+        if (strlen(argv[1]) > 63) { out(C_WARN "skald: name too long" C_RESET "\n"); return; }
+        for (uint32_t k = 0; argv[1][k]; ++k) r.name[k] = argv[1][k];
+        r.server = dns_ip; r.port = (uint16_t)dns_port;
+        int32_t rc = sand_name_resolve(&r);
+        if (rc == SAND_E_PERM) { out(C_BAD "skald: this shell has no net.access permission" C_RESET "\n"); return; }
+        if (rc != 0) { out(C_WARN "skald: could not resolve " C_RESET); out(argv[1]); out("\n"); return; }
+        ip = r.ip; out("resolved "); out(argv[1]); out(" to "); print_ip((const uint8_t *)&ip); out("\n");
+    }
+    int32_t rc = sand_tcp_connect(ip, tcp_port, 5000);
+    if (rc == SAND_E_CLOSED) { out(C_WARN "skald: connection refused" C_RESET "\n"); return; }
+    if (rc != 0) { out(C_WARN "skald: connect failed" C_RESET "\n"); return; }
+    out("connected\n");
+    char line[204]; for (uint32_t k = 0; k < tl; ++k) line[k] = argv[3][k]; line[tl] = '\n';
+    if (sand_tcp_send(line, tl + 1) != (int32_t)(tl + 1)) { out(C_BAD "skald: send failed" C_RESET "\n"); sand_tcp_close(); return; }
+    char buf[257]; uint32_t got = 0;
+    for (int i = 0; i < 100 && got < 256; ++i) {
+        int32_t n = sand_tcp_recv(buf + got, 256 - got);
+        if (n > 0) { got += (uint32_t)n; if (buf[got - 1] == '\n') break; }
+        else if (n < 0) break; else sand_sleep_ms(50);
+    }
+    buf[got] = 0; out("reply: "); out(buf); if (got == 0 || buf[got - 1] != '\n') out("\n");
+    sand_tcp_close(); out("closed\n");
 }
 static void cmd_ping(const char *arg)
 {
@@ -373,6 +410,7 @@ static int execute(char *line)
     else if (!strcmp(c, "veyra")) cmd_veyra();
     else if (!strcmp(c, "net")) cmd_net();
     else if (!strcmp(c, "huginn")) cmd_huginn(argc, argv);
+    else if (!strcmp(c, "skald")) cmd_skald(argc, argv);
     else if (!strcmp(c, "ping")) { if (argc < 2) out(C_WARN "usage: ping <a.b.c.d>" C_RESET "\n"); else cmd_ping(argv[1]); }
     else if (!strcmp(c, "mem")) cmd_mem();
     else if (!strcmp(c, "uptime")) cmd_uptime();

@@ -115,6 +115,34 @@ class NetTest(unittest.TestCase):
     def test_c_huginn_times_out_without_an_answer(self):
         self.assertIn("timeout", self.vm.run_command("huginn silent.sand 10.0.2.2:5399", timeout=20))
 
+    def test_d_skald_connects_by_name(self):
+        """skald = HUGINN + TCP: a fake DNS server maps gate.sand to the gateway (the host), a real TCP server answers there."""
+        dns = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); dns.bind(("127.0.0.1", 5354)); dns.settimeout(25)
+        tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM); tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        tcp.bind(("127.0.0.1", 7779)); tcp.listen(1); tcp.settimeout(30)
+        seen = {}
+        def serve():
+            try:
+                q, addr = dns.recvfrom(512); i = 12
+                while q[i]: i += 1 + q[i]
+                dns.sendto(q[:2] + b"\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00" + q[12:i + 5] +
+                           b"\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04\x0a\x00\x02\x02", addr)      # gate.sand -> 10.0.2.2
+                c, _ = tcp.accept(); c.settimeout(20); data = b""
+                while not data.endswith(b"\n"): data += c.recv(100)
+                seen["got"] = data; c.sendall(b"ack: " + data); c.close()
+            except Exception as e:
+                seen["err"] = repr(e)
+        t = threading.Thread(target=serve); t.start()
+        out = self.vm.run_command("skald gate.sand 7779 runes 10.0.2.2:5354", timeout=40)
+        t.join(35); dns.close(); tcp.close()
+        self.assertIn("resolved gate.sand to 10.0.2.2", out); self.assertIn("reply: ack: runes", out)
+        self.assertEqual(seen.get("got"), b"runes\n")
+    def test_e_skald_errors(self):
+        self.assertIn("usage", self.vm.run_command("skald"))
+        self.assertIn("bad port", self.vm.run_command("skald 10.0.2.2 99999 hi", timeout=10))
+        self.assertIn("could not resolve", self.vm.run_command("skald nobody.sand 7779 hi 10.0.2.2:5399", timeout=20))
+        self.assertIn("refused", self.vm.run_command("skald 10.0.2.2 7780 hi", timeout=20))
+
 class CustomSubnetTest(unittest.TestCase):
     def test_dhcp_hands_out_a_non_default_address(self):
         vm = SandVM(IMAGE, nic="user,model=rtl8139,net=192.168.76.0/24,dhcpstart=192.168.76.50").start()
