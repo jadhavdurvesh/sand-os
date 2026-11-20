@@ -44,6 +44,9 @@ int frame_allocator_init(void) {
 
     /* Reserve low memory, firmware data, loader, kernel and boot stack. */
     for (uint32_t frame = 0; frame < 256u; ++frame) frame_mark_used(frame);
+    /* The kernel image now lives above 1 MiB (linked at 0x100000): keep its frames out of the pool. */
+    extern char __kernel_end[];
+    for (uint32_t frame = 256u; frame < ((uint32_t)(uintptr_t)__kernel_end + SAND_PAGE_SIZE - 1u) / SAND_PAGE_SIZE; ++frame) frame_mark_used(frame);
     return 0;
 }
 uint32_t frame_alloc(void) {

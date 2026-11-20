@@ -18,7 +18,7 @@ EMBEDDED_APPS := sandsh hello abitest spin crash locus locusc quanta chronos cai
 # ... and apps stored only in SANDFS inside the disk image (loaded by diskapps.c, permissions from their manifest).
 DISK_APPS := jail lumen
 APPS := $(EMBEDDED_APPS) $(DISK_APPS)
-SANDFS_LBA := 1088
+SANDFS_LBA := 2112
 SANDFS_SECTORS := 2048
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
@@ -195,15 +195,15 @@ $(KERNEL_ELF): $(KERNEL_OBJECTS) linker/kernel.ld
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
-	test $$(stat -c%s $@) -le 524288
+	test $$(stat -c%s $@) -le 1048576
 kernel: $(KERNEL_BIN)
 disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUILD)/$(a).sapp) tools/mksandfs.py
-	dd if=/dev/zero of=$(DISK) bs=512 count=4096 status=none
+	dd if=/dev/zero of=$(DISK) bs=512 count=4352 status=none
 	dd if=$(BOOT_SECTOR) of=$(DISK) conv=notrunc status=none
 	dd if=$(STAGE2) of=$(DISK) bs=512 seek=1 conv=notrunc status=none
 	dd if=$(KERNEL_BIN) of=$(DISK) bs=512 seek=17 conv=notrunc status=none
 	$(PYTHON) tools/mksandfs.py $(DISK) $(SANDFS_LBA) $(SANDFS_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(APP_BUILD)/$(a).sapp)
-	test $$(stat -c%s $(DISK)) -eq 2097152
+	test $$(stat -c%s $(DISK)) -eq 2228224
 run-serial: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M -serial tcp:127.0.0.1:4555,server=on,wait=off
 

@@ -1,7 +1,7 @@
 ENTRY(_start)
 SECTIONS
 {
-    . = 0x10000;
+    . = 0x100000;
     .text ALIGN(16) : { *(.text*) }
     .rodata ALIGN(16) : { *(.rodata*) }
     .data ALIGN(16) : { *(.data*) }
@@ -11,4 +11,5 @@ SECTIONS
     .usertext : { KEEP(*(.usertext)) }
     . = ALIGN(4096);
     __user_text_end = .;
+    __kernel_end = .;
 }
