@@ -42,7 +42,7 @@ Veyra implementation rules:
 
 | Area | Interface / location | What exists | Maturity and limits |
 |---|---|---|---|
-| Files (BEDROCK) | `0x0101`, `kernel/arch/x86/syscall.c`, `kernel/fs/sandfs.c` | Whole-file read/write up to 64 KiB through the FS syscalls; 512 KiB kernel load window | Contiguous files, 15 entries, no directories or file handles |
+| Files (BEDROCK) | `0x0101`, `kernel/arch/x86/syscall.c`, `kernel/fs/sandfs.c` | Whole-file read/write up to 64 KiB through the FS syscalls; kernel loaded above 1 MiB (RIDGELINE, up to 1 MiB) | Contiguous files, 15 entries, no directories or file handles |
 | IPC (TIDEWAY) | `0x0102`, `include/sand/ipc/tideway.h`, `kernel/ipc/tideway.c` | 8 named channels x 8 messages x 112 bytes, kernel-stamped sender pid, `ipc.channel` | Global by name (a capability, not per-pair isolation); non-blocking; never destroyed |
 | Notify (HERALD) | `0x0103`, `apps/herald`, `sand_ui_toast` | Window-less timer service over TIDEWAY; desktop toast card with the sender's kernel-stamped name | Not persistent across reboot; one toast at a time; no click action |
 | Network (DRIFTNET) | `0x0104`, `include/sand/net/driftnet.h`, `kernel/net/driftnet.c` | PCI scan, RTL8139 driver (polled), DHCP client (falls back to the static QEMU defaults), ARP, IPv4, ICMP echo, UDP (4 sockets, 512-byte datagrams), a TCP **client** (one connection, stop-and-wait, 2 KiB receive ring, in-order only), egress audit, `net.access` | No listen/accept, window management, congestion control, DNS, TLS, IPv6, fragmentation, lease renewal or interrupts; one NIC; verified only on QEMU's user network |

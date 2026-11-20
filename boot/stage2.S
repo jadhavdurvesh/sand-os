@@ -1,7 +1,7 @@
 /* SAND OS stage-2 loader.
  * BIOS E820 map is written at physical 0x5000: count at 0x5000,
  * followed by up to 32 24-byte entries at 0x5004.
- * Kernel is read from LBA 17 to physical 0x10000 in eight 64 KiB windows (up to 512 KiB, LBA 17-1040).
+ * Kernel is read from LBA 17 in sixteen 64 KiB windows (up to 1 MiB, LBA 17-2064) and copied to physical 0x100000.
  */
 .code16
 .section .text
@@ -58,80 +58,35 @@ stage2_start:
     movzbl %es:0x0019, %eax
     movl %eax, %fs:0x0010
 
+    /* Kernel load: 16 windows of 64 KiB (up to 1 MiB, LBA 17-2064). Each window is read with INT 13h into
+       0x10000 and then copied by BIOS INT 15h AH=87h (which works with the A20 gate and protected mode on
+       our behalf) to 0x100000 + window*64 KiB, where the kernel is linked. */
+    movb $0, load_window
+load_next_window:
+    movzbl load_window, %eax
+    shll $7, %eax
+    addl $17, %eax
+    movl %eax, kernel_packet+8
     movw $kernel_packet, %si
     movb boot_drive, %dl
     movb $0x42, %ah
     int $0x13
     jc loader_error
-
-    /* Load the second 64 KiB kernel window from LBA 145 to 0x20000. */
-    movw $0x2000, kernel_packet+6
-    movl $145, kernel_packet+8
-    movl $0, kernel_packet+12
-    movw $kernel_packet, %si
-    movb boot_drive, %dl
-    movb $0x42, %ah
-    int $0x13
+    movb load_window, %al
+    addb $0x10, %al
+    movb %al, bios_dst_mid
+    xorw %ax, %ax
+    movw %ax, %es
+    movw $bios_gdt, %si
+    movw $0x8000, %cx
+    movb $0x87, %ah
+    int $0x15
     jc loader_error
-
-    /* Load the third 64 KiB kernel window from LBA 273 to 0x30000. */
-    movw $0x3000, kernel_packet+6
-    movl $273, kernel_packet+8
-    movl $0, kernel_packet+12
-    movw $kernel_packet, %si
-    movb boot_drive, %dl
-    movb $0x42, %ah
-    int $0x13
-    jc loader_error
-
-    /* Load the fourth 64 KiB kernel window from LBA 401 to 0x40000. */
-    movw $0x4000, kernel_packet+6
-    movl $401, kernel_packet+8
-    movl $0, kernel_packet+12
-    movw $kernel_packet, %si
-    movb boot_drive, %dl
-    movb $0x42, %ah
-    int $0x13
-    jc loader_error
-
-    /* Load the fifth 64 KiB kernel window from LBA 529 to 0x50000. */
-    movw $0x5000, kernel_packet+6
-    movl $529, kernel_packet+8
-    movl $0, kernel_packet+12
-    movw $kernel_packet, %si
-    movb boot_drive, %dl
-    movb $0x42, %ah
-    int $0x13
-    jc loader_error
-
-    /* Load the sixth 64 KiB kernel window from LBA 657 to 0x60000. */
-    movw $0x6000, kernel_packet+6
-    movl $657, kernel_packet+8
-    movl $0, kernel_packet+12
-    movw $kernel_packet, %si
-    movb boot_drive, %dl
-    movb $0x42, %ah
-    int $0x13
-    jc loader_error
-    /* Load the seventh 64 KiB kernel window from LBA 785 to 0x70000. */
-    movw $0x7000, kernel_packet+6
-    movl $785, kernel_packet+8
-    movl $0, kernel_packet+12
-    movw $kernel_packet, %si
-    movb boot_drive, %dl
-    movb $0x42, %ah
-    int $0x13
-    jc loader_error
-
-    /* Load the eighth 64 KiB kernel window from LBA 913 to 0x80000. */
-    movw $0x8000, kernel_packet+6
-    movl $913, kernel_packet+8
-    movl $0, kernel_packet+12
-    movw $kernel_packet, %si
-    movb boot_drive, %dl
-    movb $0x42, %ah
-    int $0x13
-    jc loader_error
+    testb %ah, %ah
+    jnz loader_error
+    incb load_window
+    cmpb $16, load_window
+    jb load_next_window
 
     inb $0x92, %al
     orb $0x02, %al
@@ -209,6 +164,20 @@ kernel_packet:
     .quad 17
 boot_drive:
     .byte 0
+load_window:
+    .byte 0
+.align 8
+bios_gdt:                                /* INT 15h AH=87h descriptor table: null, gdt, source, destination, bios cs, bios ss */
+    .quad 0
+    .quad 0
+    .word 0xFFFF, 0x0000
+    .byte 0x01, 0x93, 0x00, 0x00         /* source: 0x010000 */
+    .word 0xFFFF, 0x0000
+bios_dst_mid:
+    .byte 0x10
+    .byte 0x93, 0x00, 0x00               /* destination: 0x100000 + window * 0x10000 (the middle base byte is patched) */
+    .quad 0
+    .quad 0
 error_text:
     .asciz "SAND: kernel disk read failed"
 
@@ -231,5 +200,5 @@ protected_entry:
     movw %ax, %gs
     movw %ax, %ss
     movl $0x9F000, %esp
-    movl $0x10000, %eax
+    movl $0x100000, %eax
     jmp *%eax
