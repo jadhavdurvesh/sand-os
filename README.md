@@ -20,6 +20,7 @@ SAND is beyond a boot-sector-only prototype. The repository contains a working 3
 | Processes | Separate address spaces, ELF32/SAPP v1 loading, activation, termination, exit status and wait primitives | **M7 complete:** scheduler-owned process contexts, per-process kernel stacks, CR3/TSS switching, exit/wait/spawn, ring-3 fault containment (exit status `-256-vector`), orphan reaping, up to 6 processes |
 | Drivers | Device registry, 16550 serial, IRQ-driven PS/2 keyboard and mouse, generic IRQ routing, 4-position PATA ATA PIO, CMOS RTC (**M8**) | Emulator-tested only; no USB, AHCI or APIC |
 | Network | DRIFTNET: from-scratch PCI + RTL8139 driver, DHCP, ARP, IPv4, ICMP, UDP and a single-connection TCP client; `net.access` permission with egress audit; shell `net` and `ping` | QEMU user network only; no TCP server, DNS, TLS or IPv6; no lease renewal |
+| TCP by name | shell `skald <host> <port> <text>` combines HUGINN and the TCP client | One-line request/reply only |
 | Names | HUGINN DNS resolver (A records, cache, DHCP-provided server), shell `huginn <name>` | No AAAA/TCP fallback; matched on address+id only |
 | Veyra discovery | `VEYRA_QUERY` syscall returns versioned descriptors (id, revision, permission, limits) for FILES, IPC, NOTIFY, NET, NAMES; shell `veyra`; host contract test | All EXPERIMENTAL, no stable function tables |
 | Notifications | HERALD background service + desktop toast cards (reminders survive closing CITADEL; kernel-stamped source name) | Not persistent across reboot; one toast at a time; no dismiss/click |
