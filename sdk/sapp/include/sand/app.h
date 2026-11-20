@@ -72,6 +72,7 @@ static inline int32_t sand_chan_recv(int32_t h, struct sand_chan_msg *m) { retur
 static inline int32_t sand_veyra_query(uint32_t id, struct sand_veyra_subsystem_abi *out) { return sand_syscall2(SAND_SYS_VEYRA_QUERY, id, (uint32_t)out); }
 static inline int32_t sand_net_info(struct sand_netinfo *out) { return sand_syscall1(SAND_SYS_NET_INFO, (uint32_t)out); }
 static inline int32_t sand_net_ping(uint32_t ip, uint32_t timeout_ms) { return sand_syscall2(SAND_SYS_NET_PING, ip, timeout_ms); }
+static inline int32_t sand_name_resolve(struct sand_resolve *r) { return sand_syscall1(SAND_SYS_NAME_RESOLVE, (uint32_t)r); }
 static inline int32_t sand_tcp_connect(uint32_t ip, uint32_t port, uint32_t timeout_ms) { return sand_syscall3(SAND_SYS_TCP_CONNECT, ip, port, timeout_ms); }
 static inline int32_t sand_tcp_send(const void *data, uint32_t len) { return sand_syscall2(SAND_SYS_TCP_SEND, (uint32_t)data, len); }
 static inline int32_t sand_tcp_recv(void *buf, uint32_t cap) { return sand_syscall2(SAND_SYS_TCP_RECV, (uint32_t)buf, cap); }

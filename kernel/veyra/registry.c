@@ -36,6 +36,11 @@ sand_veyra_status_t veyra_query(uint32_t id, struct sand_veyra_subsystem_info *o
         struct driftnet_info ni;
         if(driftnet_info(&ni) != 0) return SAND_VEYRA_E_NOT_FOUND;
         fill(o, id, SAND_VEYRA_CAP_SEND | SAND_VEYRA_CAP_RECEIVE | SAND_VEYRA_CAP_READ, SAND_PERM_NET, DRIFTNET_UDP_MAX, 4u, 1u, 1u); o->revision = 2u; return SAND_VEYRA_OK; }
+    /* limit: longest name (63), cache entries (4), cap on cached lifetime in seconds (300), concurrent lookups (1); needs the NIC */
+    case SAND_VEYRA_IF_NAMES: {
+        struct driftnet_info ni;
+        if(driftnet_info(&ni) != 0) return SAND_VEYRA_E_NOT_FOUND;
+        fill(o, id, SAND_VEYRA_CAP_READ, SAND_PERM_NET, 63u, 4u, 300u, 1u); return SAND_VEYRA_OK; }
     default: return SAND_VEYRA_E_NOT_FOUND;
     }
 }

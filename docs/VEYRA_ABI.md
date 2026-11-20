@@ -48,7 +48,7 @@ The descriptor and status headers are a reusable contract foundation. They do no
 
 ## Implemented subsystem descriptors (EXPERIMENTAL)
 
-Four SAND-built subsystems now publish a `struct sand_veyra_subsystem_info` (`include/sand/veyra/subsystems.h`): a `sand_veyra_interface_info` prefix (validated with `sand_veyra_interface_valid`), a subsystem `revision`, the `SAND_PERM_*` bit its calls need, and four documented limits. Apps ask the kernel with syscall `VEYRA_QUERY` (36, open to every app) instead of assuming a subsystem exists; an absent one (no NIC) answers `SAND_E_NODEV`, id `0` returns the interface count. All carry `SAND_VEYRA_IFACE_EXPERIMENTAL`: no function table or layout is declared stable.
+Five SAND-built subsystems now publish a `struct sand_veyra_subsystem_info` (`include/sand/veyra/subsystems.h`): a `sand_veyra_interface_info` prefix (validated with `sand_veyra_interface_valid`), a subsystem `revision`, the `SAND_PERM_*` bit its calls need, and four documented limits. Apps ask the kernel with syscall `VEYRA_QUERY` (36, open to every app) instead of assuming a subsystem exists; an absent one (no NIC) answers `SAND_E_NODEV`, id `0` returns the interface count. All carry `SAND_VEYRA_IFACE_EXPERIMENTAL`: no function table or layout is declared stable.
 
 | Id | Subsystem | Name | Permission | limit[0..3] |
 |---|---|---|---|---|
@@ -56,6 +56,10 @@ Four SAND-built subsystems now publish a `struct sand_veyra_subsystem_info` (`in
 | `0x0102` | IPC | TIDEWAY: named channels | `ipc.channel` | channels (8), queue depth (8), message bytes (112), name length (15) |
 | `0x0103` | NOTIFY | HERALD: toasts and background timers over the `herald.*` channels | `ipc.channel` | pending timers (8), text bytes (60), toast seconds (5), longest timer seconds (86400) |
 | `0x0104` | NET | DRIFTNET: Ethernet, ARP, IPv4, ICMP echo, UDP | `net.access` | datagram bytes (512), UDP sockets (4), concurrent pings (1), concurrent TCP connections (1); revision 2 |
+
+| `0x0105` | NAMES | HUGINN: DNS resolver (A records over UDP) | `net.access` | longest name (63), cache entries (4), cached lifetime cap seconds (300), concurrent lookups (1) |
+
+HUGINN (named for Odin's raven that flies out and brings information back) is called through `NAME_RESOLVE` (41). It takes the resolver from DHCP option 6 (default 10.0.2.3, QEMU's), or an explicit server and port in the request. It validates names (lowercase letters, digits, `-`, `_`, dots; labels up to 63, whole name up to 63 in this implementation), retries each second until the 4-second budget ends, returns the first A record (CNAME chains are skipped, not followed), maps NXDOMAIN and answers without an A record to "no such name", and keeps a 4-entry cache whose lifetime is the record TTL capped at 5 minutes. Every lookup is audited as `NET_RESOLVE <name> <ip>`. Limits: no TCP fallback for truncated answers, no IPv6/AAAA, no search domains, no DNSSEC, no check that a reply came from the queried port beyond address, id and flag matching (a spoofing host on the same network could race the answer).
 
 Status convention. Inside the kernel the subsystems speak Veyra statuses (`driftnet_*` return `sand_veyra_status_t`; its own pending marker is `DRIFTNET_PING_PENDING` = -100, a documented subsystem value). The syscall layer keeps its established `SAND_E_*` results, and `sand_veyra_to_syscall` is the single translation point (OK to 0, NOT_FOUND to NODEV, TIMEOUT to TIMEOUT, PERMISSION to PERM, BUSY to FULL, everything else to FAIL). The two numbering schemes are different on purpose and must not be mixed: for example `SAND_E_PERM` is -5 while `SAND_VEYRA_E_UNSUPPORTED` is -5 and `SAND_VEYRA_E_PERMISSION` is -6.
 

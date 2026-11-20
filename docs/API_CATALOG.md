@@ -47,6 +47,8 @@ Veyra implementation rules:
 | Notify (HERALD) | `0x0103`, `apps/herald`, `sand_ui_toast` | Window-less timer service over TIDEWAY; desktop toast card with the sender's kernel-stamped name | Not persistent across reboot; one toast at a time; no click action |
 | Network (DRIFTNET) | `0x0104`, `include/sand/net/driftnet.h`, `kernel/net/driftnet.c` | PCI scan, RTL8139 driver (polled), DHCP client (falls back to the static QEMU defaults), ARP, IPv4, ICMP echo, UDP (4 sockets, 512-byte datagrams), a TCP **client** (one connection, stop-and-wait, 2 KiB receive ring, in-order only), egress audit, `net.access` | No listen/accept, window management, congestion control, DNS, TLS, IPv6, fragmentation, lease renewal or interrupts; one NIC; verified only on QEMU's user network |
 
+| Names (HUGINN) | `0x0105`, `kernel/net/driftnet.c` | DNS A-record resolver over UDP with a 4-entry TTL cache, DHCP-provided server, shell `huginn` | No TCP fallback, AAAA, search domains or DNSSEC; reply is matched on source address, id and flags only |
+
 ## Important Veyra gaps before third-party/native applications
 
 - A versioned, documented syscall ABI with safe user-memory access and error conventions.
@@ -56,7 +58,7 @@ Veyra implementation rules:
 - A display-device API and surface/presentation contract.
 - A real compositor contract, window-server boundary and desktop protocol.
 - A VFS-like filesystem API, directory semantics, mount model and file handles.
-- Network: DRIFTNET provides UDP/ICMP and a single-connection TCP client; TCP servers, multiple sockets with handles, DNS and TLS are still missing.
+- Network: DRIFTNET provides UDP/ICMP and a single-connection TCP client; TCP servers, multiple sockets with handles and TLS are still missing (DNS is HUGINN, A records only).
 - Audio device/stream APIs and power-management interfaces.
 - Service supervision, logging, configuration and security policy.
 
