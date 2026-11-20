@@ -8,7 +8,7 @@
  *
  * Calling convention (x86-32): int 0x80, number in EAX, arguments in
  * EBX, ECX, EDX, result in EAX. Negative results are errors. */
-#define SAND_ABI_VERSION 10u
+#define SAND_ABI_VERSION 11u
 
 enum sand_syscall_number {
     SAND_SYS_EXIT = 1,        /* exit(status)                         */
@@ -45,6 +45,7 @@ enum sand_syscall_number {
     SAND_SYS_CHAN_OPEN = 29,     /* chan_open(name) -> handle >= 1: open (or create) a TIDEWAY channel; needs ipc.channel */
     SAND_SYS_CHAN_SEND = 30,     /* chan_send(handle, data, len 1..112) -> 0, SAND_E_FULL when the channel holds 8 messages */
     SAND_SYS_CHAN_RECV = 31,     /* chan_recv(handle, sand_chan_msg*) -> 1 message (oldest first; .from is the sender pid), 0 none */
+    SAND_SYS_NAME_RESOLVE = 41,  /* name_resolve(sand_resolve*) -> 0 with .ip filled (blocks; server 0 = the DHCP/default resolver, port 0 = 53), SAND_E_TIMEOUT, SAND_E_NODEV when the name does not exist; needs net.access */
     SAND_SYS_TCP_CONNECT = 37,   /* tcp_connect(ip, port, timeout_ms) -> 0 once established (blocks), SAND_E_TIMEOUT, SAND_E_CLOSED when refused; one connection system-wide */
     SAND_SYS_TCP_SEND = 38,      /* tcp_send(data, len 1..512) -> len once the peer ACKed it (blocks), SAND_E_TIMEOUT, SAND_E_CLOSED */
     SAND_SYS_TCP_RECV = 39,      /* tcp_recv(buf, cap) -> bytes (non-blocking), 0 nothing yet, SAND_E_CLOSED when the peer closed and nothing is left */
@@ -69,6 +70,8 @@ enum sand_syscall_number {
 struct sand_netinfo { uint8_t mac[6]; uint8_t ip[4]; uint8_t gateway[4]; uint8_t mask[4]; uint32_t rx_frames; uint32_t tx_frames; uint32_t flags; };   /* flags bit 0: address came from DHCP */
 struct sand_udp { uint32_t ip; uint16_t src_port; uint16_t dst_port; uint32_t length; uint8_t data[512]; };
 
+struct sand_resolve { char name[64]; uint32_t server; uint16_t port; uint16_t pad; uint32_t ip; uint32_t ttl; uint32_t server_used; };   /* ip and server_used: bytes a,b,c,d as a little-endian u32 */
+
 /* Veyra subsystem descriptor as returned by veyra_query (layout identical to include/sand/veyra/subsystems.h). */
 struct sand_veyra_subsystem_abi {
     uint32_t magic; uint16_t abi_major, abi_minor; uint32_t struct_size, flags;   /* struct sand_veyra_interface */
@@ -78,6 +81,7 @@ struct sand_veyra_subsystem_abi {
 #define SAND_VEYRA_IF_IPC    0x0102u
 #define SAND_VEYRA_IF_NOTIFY 0x0103u
 #define SAND_VEYRA_IF_NET    0x0104u
+#define SAND_VEYRA_IF_NAMES  0x0105u
 
 /* TIDEWAY message as delivered by chan_recv. */
 struct sand_chan_msg { uint32_t from; uint32_t length; uint8_t data[112]; };

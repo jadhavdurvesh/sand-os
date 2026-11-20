@@ -53,6 +53,7 @@ static void cmd_help(void)
         {"ps", "list processes"},
         {"veyra", "list the Veyra subsystem interfaces this machine offers"},
         {"net", "network card address and counters (DRIFTNET)"},
+        {"huginn <name> [server]", "look a host name up (HUGINN resolver)"},
         {"ping <a.b.c.d>", "send an ICMP echo and time the reply"},
         {"mem", "memory and scheduler counters"},
         {"uptime", "time since boot"},
@@ -147,13 +148,13 @@ static void cmd_mem(void)
 static const char *veyra_name(uint32_t id)
 {
     return id == SAND_VEYRA_IF_FILES ? "FILES   (BEDROCK)" : id == SAND_VEYRA_IF_IPC ? "IPC     (TIDEWAY)" :
-           id == SAND_VEYRA_IF_NOTIFY ? "NOTIFY  (HERALD)" : "NET     (DRIFTNET)";
+           id == SAND_VEYRA_IF_NOTIFY ? "NOTIFY  (HERALD)" : id == SAND_VEYRA_IF_NET ? "NET     (DRIFTNET)" : "NAMES   (HUGINN)";
 }
 static void cmd_veyra(void)
 {
-    static const uint32_t ids[] = { SAND_VEYRA_IF_FILES, SAND_VEYRA_IF_IPC, SAND_VEYRA_IF_NOTIFY, SAND_VEYRA_IF_NET };
+    static const uint32_t ids[] = { SAND_VEYRA_IF_FILES, SAND_VEYRA_IF_IPC, SAND_VEYRA_IF_NOTIFY, SAND_VEYRA_IF_NET, SAND_VEYRA_IF_NAMES };
     out(C_MUTED "  ID      INTERFACE           REV  PERM  LIMITS" C_RESET "\n");
-    for (uint32_t i = 0; i < 4; ++i) {
+    for (uint32_t i = 0; i < 5; ++i) {
         struct sand_veyra_subsystem_abi v;
         int32_t rc = sand_veyra_query(ids[i], &v);
         out("  0x0"); sh_putu(ids[i] >> 8); out("0"); sh_putu(ids[i] & 15u); out("  "); out(veyra_name(ids[i])); pad(strlen(veyra_name(ids[i])), 20);
@@ -173,6 +174,38 @@ static void cmd_net(void)
     out("  mac      "); for (int i = 0; i < 6; ++i) { char b[3] = { hex[ni.mac[i] >> 4], hex[ni.mac[i] & 15], 0 }; out(b); if (i < 5) out(":"); }
     out("\n  ip       "); print_ip(ni.ip); out("\n  netmask  "); print_ip(ni.mask); out("\n  gateway  "); print_ip(ni.gateway); out((ni.flags & 1u) ? "\n  address  from DHCP" : "\n  address  static fallback");
     out("\n  frames   rx "); sh_putu(ni.rx_frames); out("  tx "); sh_putu(ni.tx_frames); out("\n");
+}
+static int parse_ip_port(const char *s, uint32_t *ip, uint32_t *port)
+{
+    uint32_t a[4] = {0}, k = 0, digits = 0, p = 0; int has_port = 0;
+    for (; *s; ++s) {
+        if (*s >= '0' && *s <= '9') {
+            if (has_port) { p = p * 10u + (uint32_t)(*s - '0'); if (p > 65535u) return 0; }
+            else { a[k] = a[k] * 10u + (uint32_t)(*s - '0'); if (a[k] > 255u) return 0; }
+            ++digits;
+        } else if (*s == '.' && !has_port && digits && k < 3) { ++k; digits = 0; }
+        else if (*s == ':' && !has_port && digits && k == 3) { has_port = 1; digits = 0; }
+        else return 0;
+    }
+    if (k != 3 || !digits) { if (!(has_port && digits)) return 0; }
+    *ip = a[0] | (a[1] << 8) | (a[2] << 16) | (a[3] << 24); *port = p; return 1;
+}
+static void cmd_huginn(int argc, char **argv)
+{
+    struct sand_resolve r; memset(&r, 0, sizeof(r));
+    if (argc < 2 || strlen(argv[1]) > 63) { out(C_WARN "usage: huginn <name> [server a.b.c.d[:port]]" C_RESET "\n"); return; }
+    for (uint32_t k = 0; argv[1][k]; ++k) r.name[k] = argv[1][k];
+    if (argc > 2) {                                  /* optional resolver: a.b.c.d or a.b.c.d:port */
+        uint32_t ip = 0, port = 0;
+        if (!parse_ip_port(argv[2], &ip, &port)) { out(C_WARN "huginn: bad server address" C_RESET "\n"); return; }
+        r.server = ip; r.port = (uint16_t)port;
+    }
+    int32_t rc = sand_name_resolve(&r);
+    if (rc == 0) { out(argv[1]); out(" is "); print_ip((const uint8_t *)&r.ip); if (r.server_used) { out("  (via "); print_ip((const uint8_t *)&r.server_used); out(")\n"); } else out("  (cached)\n"); }
+    else if (rc == SAND_E_NODEV) out(C_WARN "huginn: no such name" C_RESET "\n");
+    else if (rc == SAND_E_TIMEOUT) out(C_WARN "huginn: no answer (timeout)" C_RESET "\n");
+    else if (rc == SAND_E_PERM) out(C_BAD "huginn: this shell has no net.access permission" C_RESET "\n");
+    else out(C_BAD "huginn: bad name or lookup failed" C_RESET "\n");
 }
 static void cmd_ping(const char *arg)
 {
@@ -339,6 +372,7 @@ static int execute(char *line)
     else if (!strcmp(c, "ps")) cmd_ps();
     else if (!strcmp(c, "veyra")) cmd_veyra();
     else if (!strcmp(c, "net")) cmd_net();
+    else if (!strcmp(c, "huginn")) cmd_huginn(argc, argv);
     else if (!strcmp(c, "ping")) { if (argc < 2) out(C_WARN "usage: ping <a.b.c.d>" C_RESET "\n"); else cmd_ping(argv[1]); }
     else if (!strcmp(c, "mem")) cmd_mem();
     else if (!strcmp(c, "uptime")) cmd_uptime();

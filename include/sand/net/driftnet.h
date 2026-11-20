@@ -16,6 +16,11 @@ sand_veyra_status_t driftnet_info(struct driftnet_info *out);   /* OK, or NOT_FO
 sand_veyra_status_t driftnet_ping_step(uint32_t owner, uint32_t ip, uint32_t timeout_ms);
 sand_veyra_status_t driftnet_udp_send(const struct driftnet_udp *d);   /* OK, INVALID (length), TIMEOUT (next hop never answered ARP), NOT_FOUND */
 int32_t driftnet_udp_recv(uint16_t port, struct driftnet_udp *out);   /* binds the port on first use; 1 datagram, 0 none, or a Veyra status */
+/* HUGINN: the DNS resolver (A records over UDP, 4-entry TTL cache). One lookup at a time system-wide. */
+#define DRIFTNET_RESOLVE_PENDING (-103)
+#define DRIFTNET_NAME_MAX 63u
+struct driftnet_resolve { char name[64]; uint32_t server; uint16_t port; uint16_t pad; uint32_t ip; uint32_t ttl; uint32_t server_used; };
+sand_veyra_status_t driftnet_resolve_step(uint32_t owner, struct driftnet_resolve *r, uint32_t timeout_ms);   /* OK, PENDING marker, TIMEOUT, BUSY, INVALID (bad name), NOT_FOUND (no such name / no NIC) */
 /* TCP client: ONE connection system-wide, no listen/accept, no retransmit beyond stop-and-wait, in-order receive only. */
 #define DRIFTNET_TCP_PENDING (-102)
 #define DRIFTNET_TCP_CLOSED  (-101)

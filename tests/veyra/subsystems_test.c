@@ -12,7 +12,7 @@ sand_veyra_status_t driftnet_info(struct driftnet_info *out) { (void)out; return
 int main(void)
 {
     struct sand_veyra_subsystem_info d;
-    static const uint32_t ids[] = { SAND_VEYRA_IF_FILES, SAND_VEYRA_IF_IPC, SAND_VEYRA_IF_NOTIFY, SAND_VEYRA_IF_NET };
+    static const uint32_t ids[] = { SAND_VEYRA_IF_FILES, SAND_VEYRA_IF_IPC, SAND_VEYRA_IF_NOTIFY, SAND_VEYRA_IF_NET, SAND_VEYRA_IF_NAMES };
 
     /* the kernel struct and the SDK mirror must stay byte-compatible */
     assert(sizeof(struct sand_veyra_subsystem_info) == sizeof(struct sand_veyra_subsystem_abi));
@@ -36,9 +36,12 @@ int main(void)
     veyra_query(SAND_VEYRA_IF_IPC, &d);   assert(d.limit[0] == 8u && d.limit[1] == 8u && d.limit[2] == 112u);
     veyra_query(SAND_VEYRA_IF_NET, &d);   assert(d.limit[0] == 512u && d.limit[3] == 1u && d.revision == 2u && (d.base.capabilities & SAND_VEYRA_CAP_SEND));
 
+    veyra_query(SAND_VEYRA_IF_NAMES, &d); assert(d.limit[0] == 63u && d.limit[1] == 4u && d.limit[2] == 300u);
+
     /* absent hardware is reported, unknown ids and bad arguments are rejected */
     nic_present = 0;
     assert(veyra_query(SAND_VEYRA_IF_NET, &d) == SAND_VEYRA_E_NOT_FOUND);
+    assert(veyra_query(SAND_VEYRA_IF_NAMES, &d) == SAND_VEYRA_E_NOT_FOUND);
     assert(veyra_query(SAND_VEYRA_IF_FILES, &d) == SAND_VEYRA_OK);
     assert(veyra_query(0x7777u, &d) == SAND_VEYRA_E_NOT_FOUND);
     assert(veyra_query(SAND_VEYRA_IF_IPC, NULL) == SAND_VEYRA_E_INVALID);

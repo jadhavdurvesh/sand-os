@@ -97,7 +97,7 @@ static uint32_t required_permission(uint32_t number,uint32_t a) {
     case SAND_SYS_SETTING_SET: return SAND_PERM_SETTINGS;
     case SAND_SYS_INSTALL_PUT: case SAND_SYS_INSTALL_COMMIT: return SAND_PERM_INSTALL;
     case SAND_SYS_CHAN_OPEN: case SAND_SYS_CHAN_SEND: case SAND_SYS_CHAN_RECV: return SAND_PERM_IPC;
-    case SAND_SYS_NET_INFO: case SAND_SYS_NET_PING: case SAND_SYS_NET_UDP_SEND: case SAND_SYS_NET_UDP_RECV: case SAND_SYS_TCP_CONNECT: case SAND_SYS_TCP_SEND: case SAND_SYS_TCP_RECV: case SAND_SYS_TCP_CLOSE: return SAND_PERM_NET;
+    case SAND_SYS_NET_INFO: case SAND_SYS_NET_PING: case SAND_SYS_NET_UDP_SEND: case SAND_SYS_NET_UDP_RECV: case SAND_SYS_TCP_CONNECT: case SAND_SYS_TCP_SEND: case SAND_SYS_TCP_RECV: case SAND_SYS_TCP_CLOSE: case SAND_SYS_NAME_RESOLVE: return SAND_PERM_NET;
     default: return 0u;
     }
 }
@@ -120,6 +120,15 @@ static void audit_net(const char *kind, uint32_t ip, uint32_t port, uint32_t len
     }
     if(port) { line[n++]=':'; char dg[6]; uint32_t d=0u; do { dg[d++]=(char)('0'+port%10u); port/=10u; } while(port); while(d) line[n++]=dg[--d]; }
     if(length) { line[n++]=' '; line[n++]='l'; line[n++]='e'; line[n++]='n'; line[n++]='='; char dg[6]; uint32_t d=0u; do { dg[d++]=(char)('0'+length%10u); length/=10u; } while(length); while(d) line[n++]=dg[--d]; }
+    line[n]='\0'; sand_audit(line);
+}
+/* HUGINN audit: which name an app looked up and what it got back. */
+static void audit_name(const char *name, uint32_t ip) {
+    char line[112]; uint32_t n=0u, i;
+    const char *k="NET_RESOLVE "; for(i=0u;k[i];++i) line[n++]=k[i];
+    for(i=0u;name[i] && i<63u;++i) line[n++]=name[i];
+    line[n++]=' ';
+    for(i=0u;i<4u;++i) { uint32_t v=(ip>>(8u*i))&255u; char dg[3]; uint32_t d=0u; do { dg[d++]=(char)('0'+v%10u); v/=10u; } while(v); while(d) line[n++]=dg[--d]; if(i<3u) line[n++]='.'; }
     line[n]='\0'; sand_audit(line);
 }
 static struct driftnet_udp net_udp;      /* syscalls run with IRQs off on one CPU, so one kernel-side buffer is safe */
@@ -205,6 +214,13 @@ uint32_t syscall_dispatch(uint32_t frame) {
         result=tideway_recv((int32_t)a,&m);
         if(result==1) (void)copy_out(b,&m,sizeof(m));
         break; }
+    case SAND_SYS_NAME_RESOLVE: {
+        static struct driftnet_resolve rv;
+        if(copy_in(&rv,a,sizeof(rv))!=0) { result=SAND_E_FAULT; break; }
+        sand_veyra_status_t st=driftnet_resolve_step(process_current(),&rv,4000u);
+        if(st==DRIFTNET_RESOLVE_PENDING) return retry_yield(r,frame);
+        if(st==SAND_VEYRA_OK) { audit_name(rv.name,rv.ip); (void)copy_out(a,&rv,sizeof(rv)); }
+        result=sand_veyra_to_syscall(st); break; }
     case SAND_SYS_TCP_CONNECT: {
         sand_veyra_status_t st=driftnet_tcp_connect_step(process_current(),a,b,c>10000u?10000u:c);
         if(st==DRIFTNET_TCP_PENDING) return retry_yield(r,frame);

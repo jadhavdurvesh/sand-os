@@ -16,7 +16,8 @@
 #define SAND_VEYRA_IF_IPC     0x0102u  /* TIDEWAY: named message channels */
 #define SAND_VEYRA_IF_NOTIFY  0x0103u  /* HERALD: desktop notifications and background timers */
 #define SAND_VEYRA_IF_NET     0x0104u  /* DRIFTNET: Ethernet, ARP, IPv4, ICMP echo, UDP datagrams */
-#define SAND_VEYRA_IF_COUNT   4u
+#define SAND_VEYRA_IF_NAMES   0x0105u  /* HUGINN: DNS name resolution (A records) */
+#define SAND_VEYRA_IF_COUNT   5u
 
 #define SAND_VEYRA_CAP_SEND   0x00000010u   /* subsystem-specific: can transmit */
 #define SAND_VEYRA_CAP_RECEIVE 0x00000020u  /* subsystem-specific: can receive */

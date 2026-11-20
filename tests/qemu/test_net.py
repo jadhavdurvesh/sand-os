@@ -20,7 +20,7 @@ class NetTest(unittest.TestCase):
 
     def test_1_veyra_discovery(self):
         out = self.vm.run_command("veyra")
-        for name in ("FILES", "IPC", "NOTIFY", "NET"):
+        for name in ("FILES", "IPC", "NOTIFY", "NET", "HUGINN"):
             self.assertIn(name, out)
         self.assertNotIn("not present", out)           # the NIC exists in this VM
     def test_2_nic_is_up(self):
@@ -77,6 +77,43 @@ class NetTest(unittest.TestCase):
     def test_9_tcp_refused_is_reported(self):
         out = self.vm.run_command("run netget", timeout=40)             # nothing listens on 7778 now
         self.assertIn("connect failed", out)
+
+    def test_a_huginn_resolves_names(self):
+        """A tiny fake DNS server on the host (reached through the gateway) answers one name with a compressed A record."""
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); srv.bind(("127.0.0.1", 5353)); srv.settimeout(20)
+        seen = []
+        def serve():
+            try:
+                for _ in range(2):
+                    q, addr = srv.recvfrom(512)
+                    name = b""; i = 12
+                    while q[i]: name += q[i + 1:i + 1 + q[i]] + b"."; i += 1 + q[i]
+                    seen.append(name)
+                    hdr = q[:2]
+                    if name == b"odin.sand.":
+                        resp = hdr + b"\x81\x80\x00\x01\x00\x02\x00\x00\x00\x00" + q[12:i + 5]
+                        resp += b"\xc0\x0c\x00\x05\x00\x01\x00\x00\x00\x3c\x00\x02\xc0\x0c"        # a CNAME first: must be skipped
+                        resp += b"\xc0\x0c\x00\x01\x00\x01\x00\x00\x01\x2c\x00\x04\x0a\x09\x08\x07"     # then the A record 10.9.8.7, ttl 300
+                    else:
+                        resp = hdr + b"\x81\x83\x00\x01\x00\x00\x00\x00\x00\x00" + q[12:i + 5]          # NXDOMAIN
+                    srv.sendto(resp, addr)
+            except Exception as e:
+                seen.append(repr(e).encode())
+        t = threading.Thread(target=serve); t.start()
+        out = self.vm.run_command("huginn odin.sand 10.0.2.2:5353", timeout=20)
+        self.assertIn("odin.sand is 10.9.8.7", out)
+        out = self.vm.run_command("huginn nowhere.sand 10.0.2.2:5353", timeout=20)
+        self.assertIn("no such name", out)
+        t.join(25); srv.close()
+        self.assertEqual(seen[:2], [b"odin.sand.", b"nowhere.sand."])
+        self.assertIn("SAND_AUDIT:NET_RESOLVE odin.sand 10.9.8.7", self.vm.debug_log())
+        self.assertIn("(cached)", self.vm.run_command("huginn odin.sand", timeout=10))      # second lookup needs no server
+    def test_b_huginn_rejects_bad_input(self):
+        self.assertIn("usage", self.vm.run_command("huginn"))
+        self.assertIn("bad name", self.vm.run_command("huginn BAD..name", timeout=10))
+        self.assertIn("bad server", self.vm.run_command("huginn a.b 10.0.2", timeout=10))
+    def test_c_huginn_times_out_without_an_answer(self):
+        self.assertIn("timeout", self.vm.run_command("huginn silent.sand 10.0.2.2:5399", timeout=20))
 
 class CustomSubnetTest(unittest.TestCase):
     def test_dhcp_hands_out_a_non_default_address(self):

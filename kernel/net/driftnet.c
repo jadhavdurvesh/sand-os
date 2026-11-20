@@ -31,7 +31,7 @@ static uint32_t rx_off, tx_idx;
 static uint8_t mac[6];
 static uint8_t my_ip[4] = { 10, 0, 2, 15 }, gw_ip[4] = { 10, 0, 2, 2 }, netmask[4] = { 255, 255, 255, 0 };   /* defaults until DHCP answers */
 static uint8_t dhcp_done, dhcp_active; static uint32_t dhcp_xid; static uint8_t dhcp_stage;   /* stage 1 = waiting for OFFER, 2 = waiting for ACK */
-static uint8_t dhcp_offer[4], dhcp_server[4], dhcp_mask[4], dhcp_router[4];
+static uint8_t dhcp_offer[4], dhcp_server[4], dhcp_mask[4], dhcp_router[4], dns_ip[4] = { 10, 0, 2, 3 };   /* resolver: DHCP option 6, else QEMU's default */
 static uint32_t rx_frames, tx_frames;
 
 static int nic_send(const uint8_t *frame, uint32_t len) {
@@ -131,6 +131,7 @@ static struct { uint8_t state; uint32_t owner; uint8_t ip[4]; uint32_t deadline;
 static struct { uint16_t port; uint8_t full; struct driftnet_udp d; } sock[UDP_PORTS];
 
 static void dhcp_input(const uint8_t *bootp, uint32_t len);
+static void dns_input(const uint8_t *msg, uint32_t len, const uint8_t *from_ip);
 static void tcp_input(const uint8_t *f, uint32_t ihl, const uint8_t *p, uint32_t plen);
 static void on_ip(const uint8_t *f, uint32_t len) {
     if(len < 34u || (f[14] >> 4) != 4u) return;
@@ -150,6 +151,7 @@ static void on_ip(const uint8_t *f, uint32_t len) {
     } else if(f[23] == 17u && plen >= 8u) {                                /* UDP */
         uint16_t dport = be16(p + 2), ulen = be16(p + 4);
         if(ulen < 8u || ulen > plen) return;
+        if(dport == 53053u) { dns_input(p + 8, ulen - 8u, f + 26); return; }
         for(uint32_t i = 0; i < UDP_PORTS; ++i) {
             if(sock[i].port != dport || sock[i].full) continue;
             uint32_t n = ulen - 8u; if(n > DRIFTNET_UDP_MAX) n = DRIFTNET_UDP_MAX;
@@ -255,7 +257,7 @@ static void dhcp_input(const uint8_t *b, uint32_t len) {
     uint32_t xid = ((uint32_t)b[4] << 24) | ((uint32_t)b[5] << 16) | ((uint32_t)b[6] << 8) | b[7];
     if(xid != dhcp_xid) return;
     for(uint32_t i = 0; i < 6u; ++i) if(b[28 + i] != mac[i]) return;
-    uint8_t type = 0, srv[4] = {0}, mk[4] = {255, 255, 255, 0}, rt[4] = {0};
+    uint8_t type = 0, srv[4] = {0}, mk[4] = {255, 255, 255, 0}, rt[4] = {0}, dn[4] = {0};
     for(uint32_t i = 240u; i < len;) {
         uint8_t code = b[i++];
         if(code == 255u) break;
@@ -264,11 +266,11 @@ static void dhcp_input(const uint8_t *b, uint32_t len) {
         uint8_t l = b[i++];
         if(i + l > len) break;
         if(code == 53u && l == 1u) type = b[i]; else if(code == 54u && l == 4u) mcopy(srv, b + i, 4);
-        else if(code == 1u && l == 4u) mcopy(mk, b + i, 4); else if(code == 3u && l >= 4u) mcopy(rt, b + i, 4);
+        else if(code == 1u && l == 4u) mcopy(mk, b + i, 4); else if(code == 3u && l >= 4u) mcopy(rt, b + i, 4); else if(code == 6u && l >= 4u) mcopy(dn, b + i, 4);
         i += l;
     }
     if(dhcp_stage == 1u && type == 2u) { mcopy(dhcp_offer, b + 16, 4); mcopy(dhcp_server, srv, 4); mcopy(dhcp_mask, mk, 4); mcopy(dhcp_router, rt, 4); dhcp_stage = 2u; }
-    else if(dhcp_stage == 2u && type == 5u) { mcopy(my_ip, b + 16, 4); mcopy(netmask, mk, 4); mcopy(gw_ip, rt, 4); dhcp_stage = 3u; }
+    else if(dhcp_stage == 2u && type == 5u) { mcopy(my_ip, b + 16, 4); mcopy(netmask, mk, 4); mcopy(gw_ip, rt, 4); if(dn[0] | dn[1] | dn[2] | dn[3]) mcopy(dns_ip, dn, 4); dhcp_stage = 3u; }
 }
 static void dhcp_run(void) {
     dhcp_active = 1u; dhcp_xid = 0x53414E44u ^ ((uint32_t)mac[4] << 8) ^ mac[5]; dhcp_stage = 1u;
@@ -383,4 +385,98 @@ void driftnet_tcp_close(uint32_t owner) {
     if(tcp.owner != owner || tcp.state == 0u) return;
     if(tcp.state == 2u) { static const uint8_t none[1] = {0}; tcp_send(0x11u, tcp.snd_nxt, tcp.rcv_nxt, none, 0); for(uint32_t i = 0; i < 20000u; ++i) poll_rx(); }
     tcp_reset_state(); tcp.owner = 0;
+}
+
+/* ---- HUGINN: DNS resolver (RFC 1035, A records, recursion desired; no TCP fallback, no IPv6) ---- */
+#define DNS_LOCAL_PORT 53053u
+static struct { uint8_t state; uint32_t owner, deadline, sent_at, tries; uint16_t id; uint8_t server[4]; uint16_t port; char name[64]; uint32_t ip, ttl; uint8_t failed; } dns;
+static struct { char name[64]; uint32_t ip, expires; uint8_t used; } dns_cache[4];
+static uint32_t dns_cache_next;
+static int dns_name_ok(const char *n) {
+    uint32_t len = 0, label = 0;
+    for(; n[len]; ++len) {
+        char c = n[len]; if(len >= DRIFTNET_NAME_MAX) return 0;
+        if(c == '.') { if(label == 0u) return 0; label = 0; continue; }
+        if(!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_')) return 0;
+        if(++label > 63u) return 0;
+    }
+    return len > 0u && label > 0u;
+}
+static int dns_same(const char *a, const char *b) { uint32_t i = 0; while(a[i] && a[i] == b[i]) ++i; return a[i] == b[i]; }
+static void dns_send_query(void) {
+    static uint8_t f[34 + 8 + 12 + 70];
+    uint8_t *q = f + 42; uint32_t o = 12, start = 0, i;
+    put16(q, dns.id); put16(q + 2, 0x0100u); put16(q + 4, 1); put16(q + 6, 0); put16(q + 8, 0); put16(q + 10, 0);
+    for(i = 0; ; ++i) {                                    /* labels */
+        if(dns.name[i] == '.' || dns.name[i] == 0) {
+            q[o++] = (uint8_t)(i - start); for(uint32_t k = start; k < i; ++k) q[o++] = (uint8_t)dns.name[k];
+            start = i + 1u; if(dns.name[i] == 0) break;
+        }
+    }
+    q[o++] = 0; put16(q + o, 1); put16(q + o + 2, 1); o += 4u;
+    uint32_t ulen = 8u + o;
+    put16(f + 34, DNS_LOCAL_PORT); put16(f + 36, dns.port); put16(f + 38, (uint16_t)ulen); put16(f + 40, 0);
+    (void)send_ip(f, dns.server, 17, ulen);
+}
+static uint32_t dns_skip_name(const uint8_t *m, uint32_t len, uint32_t o) {   /* returns the offset after the name, or 0 on error */
+    while(o < len) {
+        uint8_t l = m[o];
+        if(l == 0u) return o + 1u;
+        if((l & 0xC0u) == 0xC0u) return o + 2u <= len ? o + 2u : 0u;         /* compression pointer ends the name */
+        if(l > 63u) return 0u;
+        o += 1u + l;
+    }
+    return 0u;
+}
+static void dns_input(const uint8_t *m, uint32_t len, const uint8_t *from) {
+    if(dns.state != 1u || len < 12u || !ip_eq(from, dns.server) || be16(m) != dns.id || !(m[2] & 0x80u)) return;
+    if((m[3] & 15u) != 0u) { dns.failed = 1u; dns.state = 2u; return; }       /* NXDOMAIN and friends */
+    uint32_t qd = be16(m + 4), an = be16(m + 6), o = 12u;
+    for(uint32_t i = 0; i < qd; ++i) { o = dns_skip_name(m, len, o); if(!o || o + 4u > len) return; o += 4u; }
+    for(uint32_t i = 0; i < an; ++i) {
+        o = dns_skip_name(m, len, o); if(!o || o + 10u > len) return;
+        uint16_t type = be16(m + o), cls = be16(m + o + 2), rd = be16(m + o + 8);
+        uint32_t ttl = ((uint32_t)m[o + 4] << 24) | ((uint32_t)m[o + 5] << 16) | ((uint32_t)m[o + 6] << 8) | m[o + 7];
+        o += 10u; if(o + rd > len) return;
+        if(type == 1u && cls == 1u && rd == 4u) {                                 /* first A record wins (CNAME chains are skipped) */
+            dns.ip = (uint32_t)m[o] | ((uint32_t)m[o + 1] << 8) | ((uint32_t)m[o + 2] << 16) | ((uint32_t)m[o + 3] << 24);
+            dns.ttl = ttl; dns.state = 2u; return;
+        }
+        o += rd;
+    }
+    dns.failed = 1u; dns.state = 2u;                                              /* answer without an A record */
+}
+sand_veyra_status_t driftnet_resolve_step(uint32_t owner, struct driftnet_resolve *r, uint32_t timeout_ms) {
+    if(!io) return SAND_VEYRA_E_NOT_FOUND;
+    uint32_t now = timer_ticks();
+    r->name[63] = 0;
+    if(dns.state == 0u) {
+        if(!dns_name_ok(r->name)) return SAND_VEYRA_E_INVALID;
+        for(uint32_t i = 0; i < 4u; ++i)                                           /* cache first */
+            if(dns_cache[i].used && dns_same(dns_cache[i].name, r->name) && (int32_t)(dns_cache[i].expires - now) > 0) { r->ip = dns_cache[i].ip; r->ttl = 0; r->server_used = 0; return SAND_VEYRA_OK; }
+        dns.owner = owner; dns.failed = 0; dns.state = 1u; dns.tries = 0; dns.sent_at = 0;
+        dns.id = (uint16_t)(now * 2654435761u >> 16);
+        for(uint32_t i = 0; i < 64u; ++i) dns.name[i] = r->name[i];
+        uint32_t srv = r->server ? r->server : ((uint32_t)dns_ip[0] | ((uint32_t)dns_ip[1] << 8) | ((uint32_t)dns_ip[2] << 16) | ((uint32_t)dns_ip[3] << 24));
+        for(uint32_t i = 0; i < 4u; ++i) dns.server[i] = (uint8_t)(srv >> (8u * i));
+        dns.port = r->port ? r->port : 53u;
+        dns.deadline = now + (timeout_ms * SAND_TICK_HZ + 999u) / 1000u + 1u;
+    } else if(dns.owner != owner) {
+        if((int32_t)(now - dns.deadline) >= 0) dns.state = 0u;
+        return SAND_VEYRA_E_BUSY;
+    }
+    poll_rx();
+    if(dns.state == 2u) {
+        dns.state = 0u;
+        if(dns.failed) return SAND_VEYRA_E_NOT_FOUND;
+        r->ip = dns.ip; r->ttl = dns.ttl; r->server_used = (uint32_t)dns.server[0] | ((uint32_t)dns.server[1] << 8) | ((uint32_t)dns.server[2] << 16) | ((uint32_t)dns.server[3] << 24);
+        uint32_t life = dns.ttl > 300u ? 300u : dns.ttl;                           /* cap cached lifetime at 5 minutes */
+        dns_cache[dns_cache_next].used = 1u; dns_cache[dns_cache_next].ip = dns.ip; dns_cache[dns_cache_next].expires = now + life * SAND_TICK_HZ;
+        for(uint32_t i = 0; i < 64u; ++i) dns_cache[dns_cache_next].name[i] = dns.name[i];
+        dns_cache_next = (dns_cache_next + 1u) & 3u;
+        return SAND_VEYRA_OK;
+    }
+    if((int32_t)(now - dns.deadline) >= 0) { dns.state = 0u; return SAND_VEYRA_E_TIMEOUT; }
+    if(dns.sent_at == 0u || now - dns.sent_at >= 100u) { dns.sent_at = now ? now : 1u; dns_send_query(); }   /* ask again every second */
+    return (sand_veyra_status_t)DRIFTNET_RESOLVE_PENDING;
 }
