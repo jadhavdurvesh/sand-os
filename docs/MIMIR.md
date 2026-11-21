@@ -10,6 +10,7 @@ differ from the FAT / ext / NTFS / APFS family: there are **no inodes, no alloca
 | **Everything is self-verifying** | Every block carries its own hash; the log is a hash chain whose head is stored in the seal. A flipped bit is reported as `SAND_E_CORRUPT`, it is never returned as file data. |
 | **Atomic by construction** | New blocks are only believed once a *seal* names them. Two seal slots alternate with a generation counter; a torn seal falls back one generation. No journal, no fsck. |
 | **Twin tides** | The volume holds two log areas. When the active one fills, the *ebb* copies the live files into the other tide and flips the seal (a copying collector). Content addressing means rune ids survive the move. |
+| **Wards** | The policy lives in the store: the ordinary file `ward.rules` (`<name or *suffix> <read mask> <write mask>`, first match wins, at most 8 rules, 1 KiB) gives *new* files their default labels and decides who may create them. It is versioned, hash-chained and roll-back-able like any file (`mimir log ward.rules`, `mimir undo ward.rules 1`). The image ships `*.sapp -> write system.install`, `system.cfg -> write settings.write` and `ward.rules -> write system.install`. |
 | **Veyra labels** | Every file version carries a read mask and a write mask of `SAND_PERM_*` bits. The syscall layer refuses callers that do not hold them, and audits it (`MIMIR_LABEL_DENIED`). |
 
 ## Layout (little-endian)
@@ -38,6 +39,7 @@ seal's. Chunk payloads are verified lazily on every read, and `mimir verify` (sy
 - **rollback** (`mimir undo f v`): appends a new rune carrying version v's content. History is never rewritten. Labels stay as they are now.
 - **remove**: appends a tombstone rune (version continues if the name is written again).
 - **ebb** (automatic when a tide is full, or `mimir ebb`): live files only; removed files and old versions are dropped. A failed or interrupted ebb leaves the old seal in force.
+- **wards**: a file that does not exist (or was removed) is created with the labels of the first matching rule, and the syscall layer checks the creator holds that rule's write mask, so an app with only `fs.write` can no longer drop a `.sapp` file on disk. Live files keep their own labels. Changing `ward.rules` takes effect immediately for files created afterwards (existing files are not relabelled; use `mimir label`). A missing, oversized or unreadable rules file means no rules (fail open: the permission gate and labels already set still apply), malformed lines are skipped.
 - **labels**: `FS_LABEL` needs `system.install`. The kernel writes `*.sapp` with write label `0x80` (`system.install`) and `system.cfg` with write label `0x40` (`settings.write`).
 
 ## Interfaces
@@ -52,6 +54,7 @@ Kernel API `include/sand/fs/mimir.h`; syscalls 8-11 (read/write/list/remove, now
 - 32 files, 192 versions per tide, names up to 23 printable ASCII characters, files up to 256 KiB (a rune record could address ~490 KB; three kernel buffers of that size are allocated once and never freed, which is the limit). One flat namespace, no directories, no file handles, no partial reads or writes.
 - History lives only inside the active tide: an ebb drops it. The volume is 4 MiB (2 tides of 511 blocks); live data must fit in one tide.
 - The hash chain proves integrity, not authenticity: anyone who can write the disk can rebuild a consistent chain. Signing the seal with the STCI/Ed25519 machinery is a possible next step, not done.
+- Wards are matched by file name only (exact or `*suffix`), not by content or location; there are no directories to attach them to.
 - Labels are enforced in the syscall layer; kernel code (desktop settings, installer) writes directly. There is no encryption.
 - Single CPU, interrupts off, polling ATA PIO; every sector write is synchronous, so writes are slow (a 256 KiB file is 66 blocks of 8 sector writes). A failed update reloads state from disk.
 - A mount failure on a disk that is not MIMIR formats the volume (as the earlier boot code did). Existing SANDFS volumes are not converted: the image builder always writes MIMIR.

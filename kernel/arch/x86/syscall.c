@@ -105,7 +105,10 @@ static uint32_t required_permission(uint32_t number,uint32_t a) {
 /* MIMIR labels: every file version carries read and write masks of SAND_PERM_* bits; the caller must hold them all. */
 static int label_allows(const char *name, int write) {
     struct mimir_info in;
-    if(mimir_stat(name,&in)!=0) return 1;                 /* no such file yet: nothing to protect */
+    if(mimir_stat(name,&in)!=0) {                          /* no such file yet: the wards decide who may create it */
+        uint32_t rp=0u,wp=0u; if(!write || !mimir_ward_lookup(name,&rp,&wp)) return 1;
+        return (process_permissions(process_current())&wp)==wp;
+    }
     uint32_t need=write?in.write_perm:in.read_perm;
     return (process_permissions(process_current())&need)==need;
 }

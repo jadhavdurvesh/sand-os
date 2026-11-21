@@ -11,6 +11,7 @@
  *  - Crash-safe: new blocks are only believed once an alternating pair of seals (A/B, generation counter) names them.
  *  - Twin tides: the volume has two log areas; when the active tide fills, the "ebb" copies the live files into the
  *    other tide and flips the seal (a copying collector; history older than the ebb is dropped).
+ *  - Wards: a rules file inside the store (versioned like any file) gives new files their default Veyra labels by name.
  *  - Veyra labels: every file version carries a read mask and a write mask of SAND_PERM_* bits that a caller must hold.
  * Layout and byte formats: docs/MIMIR.md. tools/mkmimir.py writes the same format.
  */
@@ -41,4 +42,7 @@ int mimir_set_labels(const char *name, uint32_t read_perm, uint32_t write_perm);
 int mimir_seal_info(struct mimir_seal *out);
 int mimir_scrub(struct mimir_scrub *out);
 int mimir_ebb(void);
+/* WARDS: the file "ward.rules" (itself a versioned, hash-chained MIMIR file) lists "<name or *suffix> <read mask> <write mask>" lines;
+ * a new file whose name matches takes those labels. Returns 1 and fills the masks when a rule matches, else 0. */
+int mimir_ward_lookup(const char *name, uint32_t *read_perm, uint32_t *write_perm);
 #endif

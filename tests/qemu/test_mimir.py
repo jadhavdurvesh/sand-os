@@ -24,11 +24,14 @@ def boot(image):
 class MimirTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.vm = boot(IMAGE)
+        cls.copy = os.path.join(os.path.dirname(IMAGE), "mimir-suite.img")   # never write to the shared build image
+        shutil.copyfile(IMAGE, cls.copy)
+        cls.vm = boot(cls.copy)
 
     @classmethod
     def tearDownClass(cls):
         cls.vm.stop()
+        os.unlink(cls.copy)
 
     def cmd(self, text, timeout=15):
         return self.vm.run_command(text, timeout)
@@ -85,6 +88,22 @@ class MimirTest(unittest.TestCase):
         self.assertIn("exited with status 0", self.cmd("run jail", timeout=20))             # disk apps load from the new tide
         self.assertIn("all hashes and the chain match", self.cmd("mimir verify", timeout=20))
         self.cmd("rm keep.txt")
+
+    def test_05_wards_label_new_files_and_gate_creation(self):
+        rules = self.cmd("cat ward.rules")
+        self.assertIn("*.sapp 0x0 0x80", rules)
+        self.assertRegex(self.cmd("mimir stat ward.rules"), r"write 0x80")           # the policy is itself protected
+        self.cmd("write fresh.sapp not really an app")                                 # the shell holds system.install: allowed, and labelled by the ward
+        self.assertRegex(self.cmd("mimir stat fresh.sapp"), r"write 0x80")
+        self.cmd("rm fresh.sapp")
+        out = self.cmd("run wardprobe", timeout=20)                                    # fs.rw but no system.install / settings.write
+        self.assertIn("wardprobe: sapp=-5 txt=0 cfg=-5 rm=0", out)
+        self.assertIn("exited with status 0", out)
+        self.assertNotRegex(self.cmd("ls"), r"\sprobe\.sapp")        # wardprobe.sapp is a different file
+        self.assertIn("SAND_AUDIT:MIMIR_LABEL_DENIED write probe.sapp", self.vm.debug_log())
+        self.assertIn("SAND_AUDIT:MIMIR_LABEL_DENIED write system.cfg", self.vm.debug_log())
+        self.assertRegex(self.cmd("mimir log ward.rules"), r"v1 ")                      # the rules have history like any file
+
 
 
 class MimirBitRotTest(unittest.TestCase):

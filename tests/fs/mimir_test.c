@@ -55,6 +55,32 @@ static void test_labels(void) {
     CHECK(read_eq("system.cfg", (const uint8_t *)"x=2", 3));
     CHECK(mimir_mount(0, base_lba) == 0); CHECK(mimir_stat("system.cfg", &in) == 0 && in.write_perm == 0x80);
 }
+static void test_wards(void) {
+    fresh();
+    uint32_t rp = 9, wp = 9;
+    CHECK(mimir_ward_lookup("x.sapp", &rp, &wp) == 0);                                       /* no rules file: nothing matches */
+    const char *rules = "# comment\n*.sapp 0x0 0x80\nsystem.cfg 0 64\n  secret.txt   0x400 0x400  \nbad line\n*.log 0xZZ 1\n";
+    CHECK(mimir_write("ward.rules", rules, (uint32_t)strlen(rules)) == 0);
+    CHECK(mimir_ward_lookup("tool.sapp", &rp, &wp) == 1 && rp == 0 && wp == 0x80);
+    CHECK(mimir_ward_lookup("system.cfg", &rp, &wp) == 1 && wp == 64u);
+    CHECK(mimir_ward_lookup("secret.txt", &rp, &wp) == 1 && rp == 0x400 && wp == 0x400);
+    CHECK(mimir_ward_lookup("a.log", &rp, &wp) == 0 && mimir_ward_lookup("notes.txt", &rp, &wp) == 0);   /* malformed lines are ignored */
+    CHECK(mimir_ward_lookup("sapp", &rp, &wp) == 0);                                          /* "*.sapp" needs the dot */
+    CHECK(mimir_write("tool.sapp", "x", 1) == 0);
+    struct mimir_info in; CHECK(mimir_stat("tool.sapp", &in) == 0 && in.write_perm == 0x80);   /* new files take the ward labels */
+    CHECK(mimir_write("plain.txt", "x", 1) == 0 && mimir_stat("plain.txt", &in) == 0 && in.write_perm == 0 && in.read_perm == 0);
+    CHECK(mimir_write_labeled("tool2.sapp", "x", 1, 1, 2) == 0 && mimir_stat("tool2.sapp", &in) == 0 && in.read_perm == 1 && in.write_perm == 2);   /* explicit labels win */
+    CHECK(mimir_set_labels("tool.sapp", 0, 0) == 0); CHECK(mimir_write("tool.sapp", "y", 1) == 0 && mimir_stat("tool.sapp", &in) == 0 && in.write_perm == 0);   /* live files keep their own labels */
+    CHECK(mimir_remove("tool.sapp") == 0); CHECK(mimir_write("tool.sapp", "z", 1) == 0 && mimir_stat("tool.sapp", &in) == 0 && in.write_perm == 0x80);   /* re-created: the ward applies again */
+    CHECK(mimir_mount(0, base_lba) == 0); CHECK(mimir_ward_lookup("q.sapp", &rp, &wp) == 1);   /* rules survive a remount */
+    CHECK(mimir_ebb() == 0); CHECK(mimir_ward_lookup("q.sapp", &rp, &wp) == 1);                 /* and an ebb */
+    CHECK(mimir_write("ward.rules", "*.txt 0x0 0x2\n", 14) == 0);                              /* the rules are an ordinary versioned file */
+    CHECK(mimir_ward_lookup("q.sapp", &rp, &wp) == 0 && mimir_ward_lookup("b.txt", &rp, &wp) == 1 && wp == 2u);
+    CHECK(mimir_rollback("ward.rules", 1) == 0); CHECK(mimir_ward_lookup("q.sapp", &rp, &wp) == 1 && wp == 0x80);   /* rolling the file back rolls the policy back */
+    CHECK(mimir_remove("ward.rules") == 0); CHECK(mimir_ward_lookup("q.sapp", &rp, &wp) == 0);
+    static char big[2000]; memset(big, ' ', sizeof(big)); memcpy(big, "*.sapp 0 1\n", 12);
+    CHECK(mimir_write("ward.rules", big, sizeof(big)) == 0); CHECK(mimir_ward_lookup("q.sapp", &rp, &wp) == 0);   /* oversized rules grant nothing */
+}
 static void test_remount_and_seal(void) {
     static uint8_t a[20000]; fill(a, sizeof(a), 5); fresh(); CHECK(mimir_write("a", a, sizeof(a)) == 0); CHECK(mimir_write("b", "bb", 2) == 0);
     struct mimir_seal s1, s2; CHECK(mimir_seal_info(&s1) == 0); CHECK(mimir_mount(0, base_lba) == 0); CHECK(mimir_seal_info(&s2) == 0);
@@ -138,6 +164,7 @@ static int image_check(int argc, char **argv) {
         struct mimir_info in; CHECK(mimir_stat(argv[i], &in) == 0 && in.version == 1u);
         if(strstr(argv[i], ".sapp")) CHECK(in.write_perm == 0x80);
     }
+    { uint32_t r, w; CHECK(mimir_ward_lookup("any.sapp", &r, &w) == 1 && w == 0x80); CHECK(mimir_ward_lookup("system.cfg", &r, &w) == 1 && w == 0x40); }   /* the image ships the default wards */
     struct mimir_scrub sc; CHECK(mimir_scrub(&sc) == 0 && sc.bad == 0 && sc.blocks > 0);
     CHECK(mimir_write("host-written.txt", "later", 5) == 0); CHECK(mimir_mount(0, start) == 0);   /* the kernel code can extend a Python-built volume */
     printf("mimir image check: %s\n", failures ? "FAILED" : "ok"); return failures != 0;
@@ -147,6 +174,6 @@ int main(int argc, char **argv) {
     mutable_disk = disk; mutable_disk.sector_count = ram_sectors;
     if(block_register(&mutable_disk) != 0) return 2;
     if(argc >= 4) return image_check(argc, argv);
-    test_basic(); test_versions(); test_labels(); test_remount_and_seal(); test_corruption(); test_torn_writes(); test_ebb(); test_crash_during_ebb();
+    test_basic(); test_versions(); test_labels(); test_wards(); test_remount_and_seal(); test_corruption(); test_torn_writes(); test_ebb(); test_crash_during_ebb();
     printf("mimir host tests: %s\n", failures ? "FAILED" : "ok"); free(ram); return failures != 0;
 }

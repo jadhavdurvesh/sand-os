@@ -13,6 +13,11 @@ NAME_MAX, FILE_MAX, TIDE_MAX = 24, 262144, 512
 M_SEAL, M_CHUNK, M_RUNE = b"MIMR", b"MCHK", b"MRUN"
 SECTORS_MIN, SECTORS_MAX = 80, 8 * (1 + 2 * TIDE_MAX)
 WRITE_INSTALL = 0x80
+# WARDS: default labels for new files, stored in the volume as the ordinary file "ward.rules" (docs/MIMIR.md).
+DEFAULT_WARDS = (b"# MIMIR wards: <name or *suffix> <read mask> <write mask>; first match wins; applies to files created later.\n"
+                 b"*.sapp 0x0 0x80\n"        # only system.install may create or replace an app
+                 b"system.cfg 0x0 0x40\n"    # only settings.write may change the settings file
+                 b"ward.rules 0x0 0x80\n")   # and only system.install may change the rules themselves
 
 
 def sha(b):
@@ -67,8 +72,10 @@ def main():
         data = Path(path).read_bytes()
         if not 0 < len(data) <= FILE_MAX:
             sys.exit(f"mkmimir: {path}: size {len(data)} outside 1..{FILE_MAX}")
-        rp, wp = (int(x, 0) for x in labels.split(",")) if labels else (0, WRITE_INSTALL if name.endswith(".sapp") else 0)
+        rp, wp = (int(x, 0) for x in labels.split(",")) if labels else (0, WRITE_INSTALL if name.endswith(".sapp") else 0)   # same result as the default wards
         files.append((name, data, rp, wp))
+    if "ward.rules" not in {f[0] for f in files}:
+        files.append(("ward.rules", DEFAULT_WARDS, 0, WRITE_INSTALL))
     if len({f[0] for f in files}) != len(files) or len(files) > 32:
         sys.exit("mkmimir: duplicate names or too many files")
     blob, tail, chain = build(files, sectors)
