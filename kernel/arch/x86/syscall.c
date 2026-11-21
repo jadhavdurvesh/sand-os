@@ -4,7 +4,7 @@
 #include "sand/arch/x86/timer.h"
 #include "sand/console/console.h"
 #include "sand/drivers/device.h"
-#include "sand/fs/sandfs.h"
+#include "sand/fs/mimir.h"
 #include "sand/ipc/tideway.h"
 #include "sand/net/driftnet.h"
 #include "sand/veyra/subsystems.h"
@@ -40,7 +40,7 @@ static uint8_t scratch[512];
 static uint8_t *fs_big;
 static uint8_t *fs_buffer(uint32_t need) {
     if(need<=sizeof(scratch)) return scratch;
-    if(fs_big==0) fs_big=(uint8_t *)kmalloc(SANDFS_FILE_MAX);
+    if(fs_big==0) fs_big=(uint8_t *)kmalloc(MIMIR_FILE_MAX);
     return fs_big;
 }
 void syscall_init(void) { idt_set_syscall(x86_syscall_entry); idt_load(); (void)fs_buffer(sizeof(scratch)+1u); /* allocate the 64 KiB FS buffer up front: frame accounting stays stable */ }
@@ -90,8 +90,9 @@ static uint32_t required_permission(uint32_t number,uint32_t a) {
     switch(number) {
     case SAND_SYS_WRITE: return SAND_PERM_CONSOLE_WRITE;
     case SAND_SYS_READ: return SAND_PERM_CONSOLE_READ;
-    case SAND_SYS_FS_READ: case SAND_SYS_FS_LIST: return SAND_PERM_FS_READ;
-    case SAND_SYS_FS_WRITE: case SAND_SYS_FS_REMOVE: return SAND_PERM_FS_WRITE;
+    case SAND_SYS_FS_READ: case SAND_SYS_FS_LIST: case SAND_SYS_FS_STAT: case SAND_SYS_FS_HISTORY: case SAND_SYS_FS_SEAL: case SAND_SYS_FS_SCRUB: return SAND_PERM_FS_READ;
+    case SAND_SYS_FS_WRITE: case SAND_SYS_FS_REMOVE: case SAND_SYS_FS_ROLLBACK: case SAND_SYS_FS_EBB: return SAND_PERM_FS_WRITE;
+    case SAND_SYS_FS_LABEL: return SAND_PERM_INSTALL;
     case SAND_SYS_SPAWN: return SAND_PERM_SPAWN;
     case SAND_SYS_WIN_CREATE: return SAND_PERM_WINDOW;
     case SAND_SYS_SETTING_SET: return SAND_PERM_SETTINGS;
@@ -100,6 +101,22 @@ static uint32_t required_permission(uint32_t number,uint32_t a) {
     case SAND_SYS_NET_INFO: case SAND_SYS_NET_PING: case SAND_SYS_NET_UDP_SEND: case SAND_SYS_NET_UDP_RECV: case SAND_SYS_TCP_CONNECT: case SAND_SYS_TCP_SEND: case SAND_SYS_TCP_RECV: case SAND_SYS_TCP_CLOSE: case SAND_SYS_NAME_RESOLVE: return SAND_PERM_NET;
     default: return 0u;
     }
+}
+/* MIMIR labels: every file version carries read and write masks of SAND_PERM_* bits; the caller must hold them all. */
+static int label_allows(const char *name, int write) {
+    struct mimir_info in;
+    if(mimir_stat(name,&in)!=0) return 1;                 /* no such file yet: nothing to protect */
+    uint32_t need=write?in.write_perm:in.read_perm;
+    return (process_permissions(process_current())&need)==need;
+}
+static int32_t fs_error(int rc,const char *name) {
+    if(rc==MIMIR_E_CORRUPT) { char line[64]="MIMIR_CORRUPT "; uint32_t n=0u,i; while(line[n]) ++n; for(i=0u;name[i] && n<62u;++i) line[n++]=name[i]; line[n]='\0'; sand_audit(line); return SAND_E_CORRUPT; }
+    return SAND_E_NOENT;
+}
+static void audit_label(const char *kind,const char *name) {
+    char line[72]; uint32_t n=0u,i; for(i=0u;kind[i];++i) line[n++]=kind[i]; line[n++]=' ';
+    for(i=0u;name[i] && n<70u;++i) line[n++]=name[i];
+    line[n]='\0'; sand_audit(line);
 }
 static void audit_denied(uint32_t number) {
     char line[48]="PERMISSION_DENIED syscall="; uint32_t n=0u; while(line[n]) ++n;
@@ -181,18 +198,20 @@ uint32_t syscall_dispatch(uint32_t frame) {
     case SAND_SYS_FS_READ: {
         if(copy_name(a)!=0) { result=SAND_E_FAULT; break; }
         if(b==0u || c==0u) { result=SAND_E_FAULT; break; }
-        uint32_t cap=c>SANDFS_FILE_MAX?SANDFS_FILE_MAX:c;      /* BEDROCK: whole files up to 64 KiB, not just 512 bytes */
+        uint32_t cap=c>MIMIR_FILE_MAX?MIMIR_FILE_MAX:c;      /* BEDROCK: whole files up to 64 KiB, not just 512 bytes */
         if(!user_ok(b,cap,1)) { result=SAND_E_FAULT; break; }
         uint8_t *buf=fs_buffer(cap); if(buf==0) { result=SAND_E_FAIL; break; }
         uint32_t length=0u;
-        if(sandfs_read(name_buffer,buf,cap,&length)!=0) { result=SAND_E_NOENT; break; }
+        if(!label_allows(name_buffer,0)) { audit_label("MIMIR_LABEL_DENIED read",name_buffer); result=SAND_E_PERM; break; }
+        { int rc=mimir_read(name_buffer,buf,cap,&length); if(rc!=0) { result=fs_error(rc,name_buffer); break; } }
         (void)copy_out(b,buf,length); result=(int32_t)length; break; }
     case SAND_SYS_FS_WRITE: {
         if(copy_name(a)!=0) { result=SAND_E_FAULT; break; }
-        if(c==0u || c>SANDFS_FILE_MAX) { result=SAND_E_FAIL; break; }
+        if(c==0u || c>MIMIR_FILE_MAX) { result=SAND_E_FAIL; break; }
         uint8_t *buf=fs_buffer(c); if(buf==0) { result=SAND_E_FAIL; break; }
         if(copy_in(buf,b,c)!=0) { result=SAND_E_FAULT; break; }
-        result=sandfs_write(name_buffer,buf,c)==0?0:SAND_E_FAIL; break; }
+        if(!label_allows(name_buffer,1)) { audit_label("MIMIR_LABEL_DENIED write",name_buffer); result=SAND_E_PERM; break; }
+        result=mimir_write(name_buffer,buf,c)==0?0:SAND_E_FAIL; break; }
     case SAND_SYS_TIME_GET: {
         char iso[20]; struct sand_time t; uint32_t v[6]; static const uint8_t at[6]={0,5,8,11,14,17}, wd[6]={4,2,2,2,2,2};
         if(!user_ok(a,sizeof(t),1)) { result=SAND_E_FAULT; break; }
@@ -279,17 +298,51 @@ uint32_t syscall_dispatch(uint32_t frame) {
     case SAND_SYS_FS_LIST: {
         struct sand_dirent entry; uint32_t length=0u;
         if(!user_ok(b,sizeof(entry),1)) { result=SAND_E_FAULT; break; }
-        if(sandfs_list(a,entry.name,sizeof(entry.name),&length)!=0) { result=SAND_E_NOENT; break; }
+        if(mimir_list(a,entry.name,sizeof(entry.name),&length)!=0) { result=SAND_E_NOENT; break; }
         entry.length=length; (void)copy_out(b,&entry,sizeof(entry)); result=0; break; }
     case SAND_SYS_FS_REMOVE:
         if(copy_name(a)!=0) { result=SAND_E_FAULT; break; }
-        result=sandfs_remove(name_buffer)==0?0:SAND_E_NOENT; break;
+        if(!label_allows(name_buffer,1)) { audit_label("MIMIR_LABEL_DENIED remove",name_buffer); result=SAND_E_PERM; break; }
+        result=mimir_remove(name_buffer)==0?0:SAND_E_NOENT; break;
+    case SAND_SYS_FS_STAT: {
+        struct mimir_info in;
+        if(copy_name(a)!=0 || !user_ok(b,sizeof(in),1)) { result=SAND_E_FAULT; break; }
+        if(mimir_stat(name_buffer,&in)!=0) { result=SAND_E_NOENT; break; }
+        (void)copy_out(b,&in,sizeof(in)); result=0; break; }
+    case SAND_SYS_FS_HISTORY: {
+        struct mimir_ver v;
+        if(copy_name(a)!=0 || !user_ok(c,sizeof(v),1)) { result=SAND_E_FAULT; break; }
+        if(mimir_history(name_buffer,b,&v)!=0) { result=SAND_E_NOENT; break; }
+        (void)copy_out(c,&v,sizeof(v)); result=0; break; }
+    case SAND_SYS_FS_ROLLBACK:
+        if(copy_name(a)!=0) { result=SAND_E_FAULT; break; }
+        if(!label_allows(name_buffer,1)) { audit_label("MIMIR_LABEL_DENIED rollback",name_buffer); result=SAND_E_PERM; break; }
+        if(mimir_rollback(name_buffer,b)==0) { audit_label("MIMIR_ROLLBACK",name_buffer); result=0; } else result=SAND_E_NOENT;
+        break;
+    case SAND_SYS_FS_SEAL: {
+        struct mimir_seal s;
+        if(!user_ok(a,sizeof(s),1)) { result=SAND_E_FAULT; break; }
+        if(mimir_seal_info(&s)!=0) { result=SAND_E_NODEV; break; }
+        (void)copy_out(a,&s,sizeof(s)); result=0; break; }
+    case SAND_SYS_FS_SCRUB: {
+        struct mimir_scrub s;
+        if(!user_ok(a,sizeof(s),1)) { result=SAND_E_FAULT; break; }
+        if(mimir_scrub(&s)!=0) { result=SAND_E_NODEV; break; }
+        if(s.bad!=0u) sand_audit("MIMIR_SCRUB_DAMAGE");
+        (void)copy_out(a,&s,sizeof(s)); result=0; break; }
+    case SAND_SYS_FS_LABEL:
+        if(copy_name(a)!=0) { result=SAND_E_FAULT; break; }
+        if(mimir_set_labels(name_buffer,b,c)==0) { audit_label("MIMIR_LABEL_SET",name_buffer); result=0; } else result=SAND_E_NOENT;
+        break;
+    case SAND_SYS_FS_EBB:
+        if(mimir_ebb()==0) { sand_audit("MIMIR_EBB"); result=0; } else result=SAND_E_FAIL;
+        break;
     case SAND_SYS_SPAWN: {
         const uint8_t *image; uint32_t size; sand_pid_t pid=0u;
         if(copy_name(a)!=0) { result=SAND_E_FAULT; break; }
         if(apps_find(name_buffer,&image,&size)==0) {
             result=process_spawn_sapp(name_buffer,image,size,&pid)==0?(int32_t)pid:SAND_E_FAIL; break; }
-        /* Not built in: try SANDFS. Its permissions come from the image's own metadata; the spawn runs with
+        /* Not built in: try MIMIR. Its permissions come from the image's own metadata; the spawn runs with
          * IRQs off, so the child cannot execute a syscall before they are applied. */
         if(diskapps_find(name_buffer,&image,&size)!=0) { result=SAND_E_NOENT; break; }
         if(process_spawn_sapp(name_buffer,image,size,&pid)!=0) { result=SAND_E_FAIL; break; }

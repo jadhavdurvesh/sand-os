@@ -1,5 +1,5 @@
 #include "sand/libsand.h"
-/* LOCUS (native): file explorer for SANDFS. Console/ANSI front end; the windowed
+/* LOCUS (native): file explorer for MIMIR. Console/ANSI front end; the windowed
  * LOCUS from the sand-apps preview will reuse this logic once a window service exists. */
 #define JADE  "\x1b[38;2;130;200;173m"
 #define MUTE  "\x1b[38;2;146;153;173m"

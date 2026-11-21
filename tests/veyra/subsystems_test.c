@@ -12,7 +12,7 @@ sand_veyra_status_t driftnet_info(struct driftnet_info *out) { (void)out; return
 int main(void)
 {
     struct sand_veyra_subsystem_info d;
-    static const uint32_t ids[] = { SAND_VEYRA_IF_FILES, SAND_VEYRA_IF_IPC, SAND_VEYRA_IF_NOTIFY, SAND_VEYRA_IF_NET, SAND_VEYRA_IF_NAMES };
+    static const uint32_t ids[] = { SAND_VEYRA_IF_FILES, SAND_VEYRA_IF_IPC, SAND_VEYRA_IF_NOTIFY, SAND_VEYRA_IF_NET, SAND_VEYRA_IF_NAMES, SAND_VEYRA_IF_STORE };
 
     /* the kernel struct and the SDK mirror must stay byte-compatible */
     assert(sizeof(struct sand_veyra_subsystem_info) == sizeof(struct sand_veyra_subsystem_abi));

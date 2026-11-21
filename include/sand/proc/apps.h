@@ -3,7 +3,7 @@
 #include <stdint.h>
 /* Built-in application table: SAPP images linked into the kernel image by the
  * build (see Makefile). A future package manager will replace this with
- * images read from SANDFS. */
+ * images read from MIMIR. */
 int apps_find(const char *name, const uint8_t **image, uint32_t *size);
 /* Permission bits for a built-in app (sand/kernel/perms.h); 0 for an unknown name. */
 uint32_t apps_permissions(const char *name);

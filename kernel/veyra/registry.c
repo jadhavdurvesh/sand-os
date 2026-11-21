@@ -2,7 +2,7 @@
 #include "sand/kernel/perms.h"
 #include "sand/ipc/tideway.h"
 #include "sand/net/driftnet.h"
-#include "sand/fs/sandfs.h"
+#include "sand/fs/mimir.h"
 #include "sand/abi.h"
 
 int32_t sand_veyra_to_syscall(sand_veyra_status_t status) {
@@ -26,7 +26,9 @@ sand_veyra_status_t veyra_query(uint32_t id, struct sand_veyra_subsystem_info *o
     switch(id) {
     case 0u: fill(o, 0u, SAND_VEYRA_CAP_ENUMERATE, 0u, SAND_VEYRA_IF_COUNT, 0u, 0u, 0u); return SAND_VEYRA_OK;
     /* limit: file max bytes, entry count, name length, 0 */
-    case SAND_VEYRA_IF_FILES: fill(o, id, SAND_VEYRA_CAP_READ | SAND_VEYRA_CAP_WRITE | SAND_VEYRA_CAP_ENUMERATE, SAND_PERM_FS_READ | SAND_PERM_FS_WRITE, SANDFS_FILE_MAX, 15u, 31u, 0u); return SAND_VEYRA_OK;
+    case SAND_VEYRA_IF_FILES: fill(o, id, SAND_VEYRA_CAP_READ | SAND_VEYRA_CAP_WRITE | SAND_VEYRA_CAP_ENUMERATE, SAND_PERM_FS_READ | SAND_PERM_FS_WRITE, MIMIR_FILE_MAX, MIMIR_FILES, MIMIR_NAME_MAX - 1u, 0u); return SAND_VEYRA_OK;
+    /* limit: versions kept per tide (192), chunk bytes (4016), files (32), label bits (SAND_PERM_* masks). Revision 1; history is cut by an ebb. */
+    case SAND_VEYRA_IF_STORE: fill(o, id, SAND_VEYRA_CAP_READ | SAND_VEYRA_CAP_WRITE | SAND_VEYRA_CAP_ENUMERATE | SAND_VEYRA_CAP_CONTROL, SAND_PERM_FS_READ, 192u, 4016u, MIMIR_FILES, 0x3FFu); return SAND_VEYRA_OK;
     /* limit: channels, queue depth, message bytes, name length */
     case SAND_VEYRA_IF_IPC: fill(o, id, SAND_VEYRA_CAP_SEND | SAND_VEYRA_CAP_RECEIVE | SAND_VEYRA_CAP_CONTROL, SAND_PERM_IPC, TIDEWAY_CHANNELS, TIDEWAY_QUEUE, TIDEWAY_MSG_MAX, TIDEWAY_NAME_MAX - 1u); return SAND_VEYRA_OK;
     /* limit: pending timers per client service, text bytes, toast seconds, longest timer seconds. Reached through the IPC channels "herald.*". */

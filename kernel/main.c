@@ -11,7 +11,7 @@
 #include "sand/mm/heap.h"
 #include "sand/mm/memory_map.h"
 #include "sand/arch/x86/ata_pio.h"
-#include "sand/fs/sandfs.h"
+#include "sand/fs/mimir.h"
 #include "sand/arch/x86/vbe.h"
 #include "sand/graphics/desktop.h"
 #include "sand/storage/block.h"
@@ -24,8 +24,9 @@ int sand_stci_gate_selftest(void);
 void pic_init_masked(void);
 int userland_selftest(void);
 extern uint8_t sapp_test_image[174];
-/* SANDFS lives above the 5-window kernel area (LBA 17-656). */
-#define SAND_SANDFS_START_LBA 2112u
+/* MIMIR lives above the kernel image area (LBA 17-2064). */
+#define SAND_MIMIR_START_LBA 2112u
+#define SAND_MIMIR_SECTORS 8192u
 static volatile uint16_t *const vga=(uint16_t *)0xB8000;
 static volatile uint32_t producer_count,consumer_count,protected_count,reuse_done;
 static volatile uint32_t test_failures;
@@ -221,16 +222,16 @@ void kernel_main(void) {
     if(process_activate(first)!=0) { debug_text("SAND_TEST:M5_REACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     debug_text("SAND_TEST:M6_STORAGE_INIT\n");
     if(ata_pio_init()!=0 || block_count()<1u) { debug_text("SAND_TEST:M6_ATA_INIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
-    if(sandfs_mount(0u,SAND_SANDFS_START_LBA)!=0 && (sandfs_format(0u,SAND_SANDFS_START_LBA,2048u)!=0 || sandfs_mount(0u,SAND_SANDFS_START_LBA)!=0)) { debug_text("SAND_TEST:M6_FORMAT_MOUNT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    if(mimir_mount(0u,SAND_MIMIR_START_LBA)!=0 && (mimir_format(0u,SAND_MIMIR_START_LBA,SAND_MIMIR_SECTORS)!=0 || mimir_mount(0u,SAND_MIMIR_START_LBA)!=0)) { debug_text("SAND_TEST:M6_FORMAT_MOUNT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     static const char storage_message[]="SAND native storage read/write verified";
     char storage_readback[64]; uint32_t storage_length=0u;
-    if(sandfs_write("m6-test.txt",storage_message,sizeof(storage_message))!=0 ||
-       sandfs_read("m6-test.txt",storage_readback,sizeof(storage_readback),&storage_length)!=0 ||
+    if(mimir_write("m6-test.txt",storage_message,sizeof(storage_message))!=0 ||
+       mimir_read("m6-test.txt",storage_readback,sizeof(storage_readback),&storage_length)!=0 ||
        storage_length!=sizeof(storage_message)) { debug_text("SAND_TEST:M6_FILE_IO_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     for(uint32_t i=0;i<storage_length;++i) if(storage_readback[i]!=storage_message[i]) { debug_text("SAND_TEST:M6_VERIFY_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     debug_text("SAND_TEST:M6_ATA_IDENTIFY_PASS\n");
     drivers_storage_report();
-    debug_text("SAND_TEST:M6_SANDFS_FORMAT_PASS\n");
+    debug_text("SAND_TEST:M6_MIMIR_FORMAT_PASS\n");
     debug_text("SAND_TEST:M6_FILE_READ_WRITE_PASS\n");
     if(sapp_loader_self_test()!=0) { debug_text("SAND_TEST:SAPP_LOADER_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     debug_text("SAND_TEST:SAPP_NATIVE_LOADER_PASS\n");

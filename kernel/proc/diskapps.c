@@ -1,5 +1,5 @@
 #include "sand/proc/diskapps.h"
-#include "sand/fs/sandfs.h"
+#include "sand/fs/mimir.h"
 #include "sand/mm/heap.h"
 #include "sand/kernel/perms.h"
 #include "sand/proc/apps.h"
@@ -17,17 +17,17 @@ static int valid_app_name(const char *name) {
     return n>0u;
 }
 int diskapps_find(const char *name,const uint8_t **image,uint32_t *size) {
-    char file[SANDFS_NAME_MAX]; uint32_t n=0u, len=0u;
-    if(image==0 || size==0 || !valid_app_name(name) || !sandfs_is_mounted()) return -1;
+    char file[MIMIR_NAME_MAX]; uint32_t n=0u, len=0u;
+    if(image==0 || size==0 || !valid_app_name(name) || !mimir_is_mounted()) return -1;
     while(name[n]) { file[n]=name[n]; ++n; }
     for(uint32_t i=0;i<sizeof(SUFFIX);++i) file[n+i]=SUFFIX[i];
-    if(staging==0) { staging=(uint8_t *)kmalloc(SANDFS_FILE_MAX); if(staging==0) return -1; }
-    if(sandfs_read(file,staging,SANDFS_FILE_MAX,&len)!=0 || len==0u) return -1;
+    if(staging==0) { staging=(uint8_t *)kmalloc(MIMIR_FILE_MAX); if(staging==0) return -1; }
+    if(mimir_read(file,staging,MIMIR_FILE_MAX,&len)!=0 || len==0u) return -1;
     *image=staging; *size=len; return 0;
 }
 int diskapps_name_at(uint32_t index,char *name_out,uint32_t capacity) {
-    char file[SANDFS_NAME_MAX]; uint32_t length;
-    for(uint32_t ordinal=0u;sandfs_list(ordinal,file,sizeof(file),&length)==0;++ordinal) {
+    char file[MIMIR_NAME_MAX]; uint32_t length;
+    for(uint32_t ordinal=0u;mimir_list(ordinal,file,sizeof(file),&length)==0;++ordinal) {
         uint32_t n=0u; while(file[n]) ++n;
         if(n<=sizeof(SUFFIX)-1u) continue;
         uint32_t base=n-(uint32_t)(sizeof(SUFFIX)-1u), k=0u;
@@ -170,7 +170,7 @@ void diskapps_launcher_scan(void) {
     uint32_t n=0u;
     disk_launcher_count=0u;
     for(uint32_t i=0u;n<DISK_LAUNCHER_MAX;++i) {
-        char name[SANDFS_NAME_MAX]; const uint8_t *image; uint32_t size, order;
+        char name[MIMIR_NAME_MAX]; const uint8_t *image; uint32_t size, order;
         if(diskapps_name_at(i,name,sizeof(name))!=0) break;
         if(diskapps_find(name,&image,&size)!=0) continue;
         if(diskapps_manifest_launcher(image,size,name,&found[n].info,&order)!=0) continue;

@@ -160,7 +160,7 @@ class DesktopTest(unittest.TestCase):
         self.assertNotIn("locus", ps)
 
     def test_07b_disk_app_in_the_launcher(self):
-        """LUMEN lives only in SANDFS; its manifest puts it in the launcher and the dock starts it from disk."""
+        """LUMEN lives only in MIMIR; its manifest puts it in the launcher and the dock starts it from disk."""
         DesktopTest._ptr = (None, None)
         self.move_to(444, 716)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
@@ -256,7 +256,7 @@ class DesktopTest(unittest.TestCase):
         self.assertNotRegex(self.vm.run_command("ps"), r"(running|ready|blocked)\s+citadel")
 
     def test_09c_citadel_notes_and_reminders(self):
-        """CITADEL notes persist in notes.txt on SANDFS; a reminder fires inside the window; clearing notes asks first."""
+        """CITADEL notes persist in notes.txt on MIMIR; a reminder fires inside the window; clearing notes asks first."""
         self.vm.run_command("rm notes.txt")
         self.vm.run_command("open citadel")
         time.sleep(2.5)

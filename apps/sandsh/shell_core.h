@@ -41,7 +41,8 @@ static void cmd_help(void)
         {"version", "kernel / ABI / shell versions"},
         {"echo <text>", "print text"},
         {"clear", "clear the screen"},
-        {"ls", "list files on SANDFS"},
+        {"ls", "list files on MIMIR"},
+        {"mimir [sub]", "seal | stat f | log f | undo f v | verify | ebb | label f r w"},
         {"install", "install <name>: store an app sent as hex lines"},
         {"cat <file>", "print a file"},
         {"write <file> <text>", "create or replace a file"},
@@ -92,7 +93,7 @@ static void cmd_cat(const char *name)
     int32_t n = sand_fs_read(name, buf, sizeof(buf));
     if (n < 0) { out(C_BAD "cat: no such file: " C_RESET); out(name); out("\n"); return; }
     uint32_t len = (uint32_t)n;
-    while (len && buf[len - 1] == '\0') --len;       /* SANDFS pads the sector */
+    while (len && buf[len - 1] == '\0') --len;       /* MIMIR keeps exact lengths; stripping NULs only tidies old files */
     (void)sh_write(buf, len); out("\n");
 }
 
@@ -149,13 +150,80 @@ static void cmd_mem(void)
 static const char *veyra_name(uint32_t id)
 {
     return id == SAND_VEYRA_IF_FILES ? "FILES   (BEDROCK)" : id == SAND_VEYRA_IF_IPC ? "IPC     (TIDEWAY)" :
-           id == SAND_VEYRA_IF_NOTIFY ? "NOTIFY  (HERALD)" : id == SAND_VEYRA_IF_NET ? "NET     (DRIFTNET)" : "NAMES   (HUGINN)";
+           id == SAND_VEYRA_IF_NOTIFY ? "NOTIFY  (HERALD)" : id == SAND_VEYRA_IF_NET ? "NET     (DRIFTNET)" : id == SAND_VEYRA_IF_STORE ? "STORE   (MIMIR)" : "NAMES   (HUGINN)";
+}
+/* ---- MIMIR: history, rollback, seal, scrub and labels ---- */
+static void put_hex(const uint8_t *b, uint32_t n)
+{
+    static const char d[] = "0123456789abcdef";
+    char two[3] = {0, 0, 0};
+    for (uint32_t i = 0; i < n; ++i) { two[0] = d[b[i] >> 4]; two[1] = d[b[i] & 15u]; out(two); }
+}
+static void put_mask(uint32_t v)
+{
+    static const char d[] = "0123456789abcdef";
+    char t[8]; int n = 0;
+    out("0x"); do { t[n++] = d[v & 15u]; v >>= 4; } while (v && n < 8);
+    char c[2] = {0, 0}; while (n) { c[0] = t[--n]; out(c); }
+}
+static uint32_t parse_num(const char *p)
+{
+    uint32_t v = 0;
+    if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+        for (p += 2; *p; ++p) { uint32_t d = (*p >= '0' && *p <= '9') ? (uint32_t)(*p - '0') : (*p >= 'a' && *p <= 'f') ? (uint32_t)(*p - 'a' + 10) : (*p >= 'A' && *p <= 'F') ? (uint32_t)(*p - 'A' + 10) : 16u; if (d > 15u) break; v = v * 16u + d; }
+    } else for (; *p >= '0' && *p <= '9'; ++p) v = v * 10u + (uint32_t)(*p - '0');
+    return v;
+}
+static void cmd_mimir(int argc, char **argv)
+{
+    const char *sub = argc > 1 ? argv[1] : "seal";
+    if (!strcmp(sub, "seal")) {
+        struct sand_fsseal s;
+        if (sand_fs_seal(&s) != 0) { out(C_BAD "mimir: no volume" C_RESET "\n"); return; }
+        out(C_ACCENT "MIMIR" C_RESET " generation "); sh_putu(s.generation); out("  tide "); sh_putu(s.tide); out("  epoch "); sh_putu(s.epoch);
+        out("  blocks "); sh_putu(s.used_blocks); out("/"); sh_putu(s.tide_blocks); out("  files "); sh_putu(s.files); out("  versions "); sh_putu(s.versions); out("\n");
+        out("  chain "); put_hex(s.chain, 32); out("\n");
+    } else if (!strcmp(sub, "stat") && argc > 2) {
+        struct sand_fsstat st;
+        if (sand_fs_stat(argv[2], &st) != 0) { out(C_BAD "mimir: no such file: " C_RESET); out(argv[2]); out("\n"); return; }
+        out(argv[2]); out("  size "); sh_putu(st.size); out("  version "); sh_putu(st.version); out("  chunks "); sh_putu(st.chunks);
+        out("  read "); put_mask(st.read_perm); out("  write "); put_mask(st.write_perm); out("\n  id "); put_hex(st.id, 32); out("\n");
+    } else if (!strcmp(sub, "log") && argc > 2) {
+        struct sand_fsver v; uint32_t n = 0;
+        for (uint32_t i = 0; sand_fs_history(argv[2], i, &v) == 0; ++i) {
+            out("  v"); sh_putu(v.version); out("  "); sh_putu(v.size); out(" bytes  id "); put_hex(v.id, 8);
+            if (v.flags & 1u) out(C_WARN "  deleted" C_RESET);
+            out("\n"); ++n;
+        }
+        if (n == 0) { out(C_BAD "mimir: no history for " C_RESET); out(argv[2]); out("\n"); }
+    } else if (!strcmp(sub, "undo") && argc > 3) {
+        int32_t rc = sand_fs_rollback(argv[2], parse_num(argv[3]));
+        if (rc == 0) { out(C_GOOD "restored " C_RESET); out(argv[2]); out(" from v"); sh_putu(parse_num(argv[3])); out(" as a new version\n"); }
+        else if (rc == SAND_E_PERM) out(C_BAD "mimir: the write label denies this" C_RESET "\n");
+        else out(C_BAD "mimir: no such file or version" C_RESET "\n");
+    } else if (!strcmp(sub, "verify")) {
+        struct sand_fsscrub sc;
+        if (sand_fs_scrub(&sc) != 0) { out(C_BAD "mimir: no volume" C_RESET "\n"); return; }
+        out("scrubbed "); sh_putu(sc.blocks); out(" blocks: ");
+        if (sc.bad == 0) out(C_GOOD "all hashes and the chain match" C_RESET "\n");
+        else { out(C_BAD); sh_putu(sc.bad); out(" damaged, first at block "); sh_putu(sc.first_bad); out(C_RESET "\n"); }
+    } else if (!strcmp(sub, "ebb")) {
+        struct sand_fsseal a, b;
+        (void)sand_fs_seal(&a);
+        if (sand_fs_ebb() != 0) { out(C_BAD "mimir: ebb failed" C_RESET "\n"); return; }
+        (void)sand_fs_seal(&b);
+        out(C_GOOD "ebb done: " C_RESET); out("tide "); sh_putu(a.tide); out(" -> "); sh_putu(b.tide); out(", blocks "); sh_putu(a.used_blocks); out(" -> "); sh_putu(b.used_blocks); out("\n");
+    } else if (!strcmp(sub, "label") && argc > 4) {
+        int32_t rc = sand_fs_label(argv[2], parse_num(argv[3]), parse_num(argv[4]));
+        if (rc == 0) { out(C_GOOD "labelled " C_RESET); out(argv[2]); out(" read "); put_mask(parse_num(argv[3])); out(" write "); put_mask(parse_num(argv[4])); out("\n"); }
+        else out(C_BAD "mimir: label failed" C_RESET "\n");
+    } else out(C_WARN "usage: mimir [seal | stat <f> | log <f> | undo <f> <ver> | verify | ebb | label <f> <read> <write>]" C_RESET "\n");
 }
 static void cmd_veyra(void)
 {
-    static const uint32_t ids[] = { SAND_VEYRA_IF_FILES, SAND_VEYRA_IF_IPC, SAND_VEYRA_IF_NOTIFY, SAND_VEYRA_IF_NET, SAND_VEYRA_IF_NAMES };
+    static const uint32_t ids[] = { SAND_VEYRA_IF_FILES, SAND_VEYRA_IF_IPC, SAND_VEYRA_IF_NOTIFY, SAND_VEYRA_IF_NET, SAND_VEYRA_IF_NAMES, SAND_VEYRA_IF_STORE };
     out(C_MUTED "  ID      INTERFACE           REV  PERM  LIMITS" C_RESET "\n");
-    for (uint32_t i = 0; i < 5; ++i) {
+    for (uint32_t i = 0; i < 6; ++i) {
         struct sand_veyra_subsystem_abi v;
         int32_t rc = sand_veyra_query(ids[i], &v);
         out("  0x0"); sh_putu(ids[i] >> 8); out("0"); sh_putu(ids[i] & 15u); out("  "); out(veyra_name(ids[i])); pad(strlen(veyra_name(ids[i])), 20);
@@ -408,6 +476,7 @@ static int execute(char *line)
     else if (!strcmp(c, "run")) { if (argc < 2) out(C_WARN "usage: run <app>" C_RESET "\n"); else cmd_run(argv[1]); }
     else if (!strcmp(c, "ps")) cmd_ps();
     else if (!strcmp(c, "veyra")) cmd_veyra();
+    else if (!strcmp(c, "mimir")) cmd_mimir(argc, argv);
     else if (!strcmp(c, "net")) cmd_net();
     else if (!strcmp(c, "huginn")) cmd_huginn(argc, argv);
     else if (!strcmp(c, "skald")) cmd_skald(argc, argv);
