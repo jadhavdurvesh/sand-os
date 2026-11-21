@@ -11,7 +11,8 @@
 #include "sand/proc/diskapps.h"
 #include "sand/mm/frame.h"
 #include "sand/mm/heap.h"
-#include "sand/fs/sandfs.h"
+#include "sand/fs/mimir.h"
+#include "sand/kernel/perms.h"
 #include "sand/abi.h"
 
 static volatile uint32_t settings_dirty_since;           /* 0 = clean; else tick of the last change (never 0) */
@@ -132,10 +133,10 @@ int sand_desktop_win_draw(int32_t id, const struct sand_draw *cmds, uint32_t cou
 int sand_desktop_win_event(int32_t id, struct sand_event *out) { return desktop_ready ? sand_ui_win_event(&ui, id, process_current(), out) : SAND_E_NOSYS; }
 int sand_desktop_win_blit(int32_t id, const struct sand_blit *b, const uint32_t *pixels) { return desktop_ready ? sand_ui_win_blit(&ui, id, process_current(), b, pixels) : SAND_E_NOSYS; }
 int sand_desktop_win_resizable(int32_t id, int32_t min_w, int32_t min_h) { return desktop_ready ? sand_ui_win_resizable(&ui, id, process_current(), min_w, min_h) : SAND_E_NOSYS; }
-/* ---- settings persistence: tiny text file "system.cfg" in SANDFS ("accent=N\nmotion=N\nclock24=N\n") ---- */
+/* ---- settings persistence: tiny text file "system.cfg" in MIMIR ("accent=N\nmotion=N\nclock24=N\n") ---- */
 static void settings_load(void) {
     char buf[64]; uint32_t len = 0;
-    if (sandfs_read("system.cfg", buf, sizeof(buf) - 1u, &len) != 0 || len == 0u || len >= sizeof(buf)) return;
+    if (mimir_read("system.cfg", buf, sizeof(buf) - 1u, &len) != 0 || len == 0u || len >= sizeof(buf)) return;
     buf[len] = 0;
     for (char *p = buf; *p;) {
         char *e = p; while (*e && *e != '\n') ++e;
@@ -152,7 +153,7 @@ static void settings_save(void) {
     buf[7] = (char)('0' + sand_ui_setting_get(&ui, SAND_SET_ACCENT));
     buf[16] = (char)('0' + sand_ui_setting_get(&ui, SAND_SET_REDUCED_MOTION));
     buf[26] = (char)('0' + sand_ui_setting_get(&ui, SAND_SET_CLOCK_24H));
-    (void)sandfs_write("system.cfg", buf, 28u);
+    (void)mimir_write_labeled("system.cfg", buf, 28u, 0u, SAND_PERM_SETTINGS);   /* MIMIR label: only settings.write may change it */
 }
 int sand_desktop_setting_get(uint32_t key) { return desktop_ready ? sand_ui_setting_get(&ui, key) : SAND_E_NOSYS; }
 int sand_desktop_setting_set(uint32_t key, uint32_t value) {

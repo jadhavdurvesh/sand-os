@@ -5,10 +5,10 @@
 #include <stdint.h>
 #include "sand/proc/diskapps.h"
 #include "sand/kernel/perms.h"
-#include "sand/fs/sandfs.h"
-int sandfs_is_mounted(void) { return 0; }
-int sandfs_read(const char *n, void *d, uint32_t c, uint32_t *l) { (void)n; (void)d; (void)c; (void)l; return -1; }
-int sandfs_list(uint32_t o, char *n, uint32_t c, uint32_t *l) { (void)o; (void)n; (void)c; (void)l; return -1; }
+#include "sand/fs/mimir.h"
+int mimir_is_mounted(void) { return 0; }
+int mimir_read(const char *n, void *d, uint32_t c, uint32_t *l) { (void)n; (void)d; (void)c; (void)l; return -1; }
+int mimir_list(uint32_t o, char *n, uint32_t c, uint32_t *l) { (void)o; (void)n; (void)c; (void)l; return -1; }
 void *kmalloc(uint32_t s) { return malloc(s); }
 
 #include "sand/proc/apps.h"

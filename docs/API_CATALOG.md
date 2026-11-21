@@ -32,7 +32,7 @@ Veyra implementation rules:
 | Physical memory / paging | `include/sand/mm/`, `include/sand/arch/x86/paging.h` | Frame allocator, non-PAE paging and early heap | Bring-up implementation; bounded frame window and no heap free |
 | Block storage | `include/sand/storage/block.h`, `kernel/storage/block.c` | SAND-owned sector read/write callback registration | Fixed early interface; no general device lifecycle, async I/O, queueing or partition manager |
 | ATA PIO | `include/sand/arch/x86/ata_pio.h`, `kernel/arch/x86/ata_pio.c` | Primary-master ATA PIO backend | Hardware-specific initial driver; not a general bus or storage stack |
-| Filesystem | `include/sand/fs/sandfs.h`, `kernel/fs/sandfs.c` | SANDFS v1 format, mount, read and write | One-sector-per-file prototype; not a mature hierarchical filesystem or POSIX VFS |
+| Filesystem (MIMIR) | `include/sand/fs/mimir.h`, `kernel/fs/mimir.c`, `docs/MIMIR.md` | Content-addressed, versioned, hash-sealed store: format, mount, read, write, history, rollback, scrub, ebb, labels | Flat namespace of 32 files up to 64 KiB, history cut by an ebb, integrity not authenticity; not a hierarchical filesystem or POSIX VFS |
 | Display | `include/sand/graphics/framebuffer.h`, `include/sand/arch/x86/vbe.h` | Framebuffer and drawing primitives; VBE setup | Single early display backend; no general display-device framework |
 | Input | `include/sand/arch/x86/input.h`, `kernel/arch/x86/ps2.c` | Raw keyboard and pointer events via polling | Prototype. No normalized event queue, IRQ-driven delivery or desktop event loop |
 | Window management | `include/sand/graphics/window.h`, `kernel/graphics/window.c` | Bounded window records, focus/z-order, basic pointer dragging and rendering | Prototype only; no compositor, app surfaces, input integration, close controls or full desktop |
@@ -42,7 +42,8 @@ Veyra implementation rules:
 
 | Area | Interface / location | What exists | Maturity and limits |
 |---|---|---|---|
-| Files (BEDROCK) | `0x0101`, `kernel/arch/x86/syscall.c`, `kernel/fs/sandfs.c` | Whole-file read/write up to 64 KiB through the FS syscalls; kernel loaded above 1 MiB (RIDGELINE, up to 1 MiB) | Contiguous files, 15 entries, no directories or file handles |
+| Files (BEDROCK) | `0x0101`, `kernel/arch/x86/syscall.c`, `kernel/fs/mimir.c` | Whole-file read/write up to 64 KiB through the FS syscalls, label-checked; kernel loaded above 1 MiB (RIDGELINE, up to 1 MiB) | 32 files, no directories or file handles |
+| Store (MIMIR) | `0x0106`, `kernel/fs/mimir.c`, syscalls 42-48 | Versions, rollback, seal, scrub, ebb, labels (ABI v12) | Developer profile: labels are only as strong as the caller permissions; see docs/MIMIR.md |
 | IPC (TIDEWAY) | `0x0102`, `include/sand/ipc/tideway.h`, `kernel/ipc/tideway.c` | 8 named channels x 8 messages x 112 bytes, kernel-stamped sender pid, `ipc.channel` | Global by name (a capability, not per-pair isolation); non-blocking; never destroyed |
 | Notify (HERALD) | `0x0103`, `apps/herald`, `sand_ui_toast` | Window-less timer service over TIDEWAY; desktop toast card with the sender's kernel-stamped name | Not persistent across reboot; one toast at a time; no click action |
 | Network (DRIFTNET) | `0x0104`, `include/sand/net/driftnet.h`, `kernel/net/driftnet.c` | PCI scan, RTL8139 driver (polled), DHCP client (falls back to the static QEMU defaults), ARP, IPv4, ICMP echo, UDP (4 sockets, 512-byte datagrams), a TCP **client** (one connection, stop-and-wait, 2 KiB receive ring, in-order only), egress audit, `net.access` | No listen/accept, window management, congestion control, DNS, TLS, IPv6, fragmentation, lease renewal or interrupts; one NIC; verified only on QEMU's user network |
@@ -74,7 +75,7 @@ Integration means implementing an adapter against a documented SAND interface. I
 | DATAGRAM | UDP transport engine | Network interface, IP/UDP stack or a clearly defined lower transport adapter | Future networking integration; do not pretend sockets exist yet |
 | DUSRM | Architecture responsibility and contract validation | Documented subsystem boundaries, ownership and conformance checks | Use as an architecture governance method; it is not a driver or runtime |
 | EREBUS | Firewall/policy engine | Packet/flow hook, network stack, isolated service runtime and fail-safe enforcement | Future privileged service, not kernel source |
-| ANANTA | Database engine for structured application/system data | Files, memory, process runtime and storage reliability | User-space service/library; never substitute for SANDFS/VFS |
+| ANANTA | Database engine for structured application/system data | Files, memory, process runtime and storage reliability | User-space service/library; never substitute for MIMIR/VFS |
 | CONTRACT | API/service framework | User runtime, networking, process isolation and language runtime | Independent framework; a future Veyra adapter may expose native SAND facilities |
 | NOCTIS | Native browser | Graphics, input, processes, networking, TLS and storage | Application, not OS core |
 | MAINTAIN AI | Device management / industrial telemetry UI and service | Device enumeration, IPC, networking, graphics and storage | Application/service; device contracts should be designed generically |

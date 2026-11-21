@@ -79,6 +79,13 @@ static inline int32_t sand_tcp_recv(void *buf, uint32_t cap) { return sand_sysca
 static inline int32_t sand_tcp_close(void) { return sand_syscall0(SAND_SYS_TCP_CLOSE); }
 static inline int32_t sand_net_udp_send(const struct sand_udp *d) { return sand_syscall1(SAND_SYS_NET_UDP_SEND, (uint32_t)d); }
 static inline int32_t sand_net_udp_recv(uint16_t port, struct sand_udp *d) { return sand_syscall2(SAND_SYS_NET_UDP_RECV, port, (uint32_t)d); }
+static inline int32_t sand_fs_stat(const char *name, struct sand_fsstat *out) { return sand_syscall2(SAND_SYS_FS_STAT, (uint32_t)name, (uint32_t)out); }
+static inline int32_t sand_fs_history(const char *name, uint32_t index, struct sand_fsver *out) { return sand_syscall3(SAND_SYS_FS_HISTORY, (uint32_t)name, index, (uint32_t)out); }
+static inline int32_t sand_fs_rollback(const char *name, uint32_t version) { return sand_syscall2(SAND_SYS_FS_ROLLBACK, (uint32_t)name, version); }
+static inline int32_t sand_fs_seal(struct sand_fsseal *out) { return sand_syscall1(SAND_SYS_FS_SEAL, (uint32_t)out); }
+static inline int32_t sand_fs_scrub(struct sand_fsscrub *out) { return sand_syscall1(SAND_SYS_FS_SCRUB, (uint32_t)out); }
+static inline int32_t sand_fs_label(const char *name, uint32_t read_perm, uint32_t write_perm) { return sand_syscall3(SAND_SYS_FS_LABEL, (uint32_t)name, read_perm, write_perm); }
+static inline int32_t sand_fs_ebb(void) { return sand_syscall0(SAND_SYS_FS_EBB); }
 static inline int32_t sand_time_get(struct sand_time *out) { return sand_syscall1(SAND_SYS_TIME_GET, (uint32_t)out); }
 static inline int32_t sand_win_resizable(int32_t id, int32_t min_w, int32_t min_h) { return sand_syscall2(SAND_SYS_WIN_RESIZABLE, (uint32_t)id, ((uint32_t)min_w << 16) | (uint32_t)min_h); }
 static inline int32_t sand_device_list(uint32_t index, struct sand_devinfo *out) { return sand_syscall2(SAND_SYS_DEVICE_LIST, index, (uint32_t)out); }

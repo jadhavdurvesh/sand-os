@@ -18,12 +18,12 @@ EMBEDDED_APPS := sandsh hello abitest spin crash locus locusc quanta chronos cai
 # ... and apps stored only in SANDFS inside the disk image (loaded by diskapps.c, permissions from their manifest).
 DISK_APPS := jail lumen
 APPS := $(EMBEDDED_APPS) $(DISK_APPS)
-SANDFS_LBA := 2112
-SANDFS_SECTORS := 2048
+MIMIR_LBA := 2112
+MIMIR_SECTORS := 8192
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
 APP_OBJECTS := $(foreach a,$(EMBEDDED_APPS),$(APP_BUILD)/$(a)-image.o)
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/appinstall.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/sandfs.o $(BUILD)/tideway.o $(BUILD)/driftnet.o $(BUILD)/veyra-registry.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/appinstall.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/mimir.o $(BUILD)/tideway.o $(BUILD)/driftnet.o $(BUILD)/veyra-registry.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
 .PHONY: run-serial all clean kernel disk run check apps test ui-preview
 apps: $(foreach a,$(APPS),$(APP_BUILD)/$(a).sapp)
 $(APP_BUILD):
@@ -119,11 +119,11 @@ $(BUILD)/block.o: kernel/storage/block.c include/sand/storage/block.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/ata-pio.o: kernel/arch/x86/ata_pio.c include/sand/arch/x86/ata_pio.h include/sand/storage/block.h include/sand/drivers/device.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
-$(BUILD)/appinstall.o: kernel/proc/appinstall.c include/sand/proc/appinstall.h include/sand/proc/apps.h include/sand/fs/sandfs.h include/sand/security/launch_gate.h $(ABI_H) | $(BUILD)
+$(BUILD)/appinstall.o: kernel/proc/appinstall.c include/sand/proc/appinstall.h include/sand/proc/apps.h include/sand/fs/mimir.h include/sand/security/launch_gate.h $(ABI_H) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
-$(BUILD)/diskapps.o: kernel/proc/diskapps.c include/sand/proc/diskapps.h include/sand/kernel/perms.h include/sand/fs/sandfs.h | $(BUILD)
+$(BUILD)/diskapps.o: kernel/proc/diskapps.c include/sand/proc/diskapps.h include/sand/kernel/perms.h include/sand/fs/mimir.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
-$(BUILD)/sandfs.o: kernel/fs/sandfs.c include/sand/fs/sandfs.h include/sand/storage/block.h | $(BUILD)
+$(BUILD)/mimir.o: kernel/fs/mimir.c include/sand/fs/mimir.h include/sand/storage/block.h include/sand/crypto/sha256.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/tideway.o: kernel/ipc/tideway.c include/sand/ipc/tideway.h $(ABI_H) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -197,13 +197,13 @@ $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
 	test $$(stat -c%s $@) -le 1048576
 kernel: $(KERNEL_BIN)
-disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUILD)/$(a).sapp) tools/mksandfs.py
-	dd if=/dev/zero of=$(DISK) bs=512 count=4352 status=none
+disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUILD)/$(a).sapp) tools/mkmimir.py
+	dd if=/dev/zero of=$(DISK) bs=512 count=10304 status=none
 	dd if=$(BOOT_SECTOR) of=$(DISK) conv=notrunc status=none
 	dd if=$(STAGE2) of=$(DISK) bs=512 seek=1 conv=notrunc status=none
 	dd if=$(KERNEL_BIN) of=$(DISK) bs=512 seek=17 conv=notrunc status=none
-	$(PYTHON) tools/mksandfs.py $(DISK) $(SANDFS_LBA) $(SANDFS_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(APP_BUILD)/$(a).sapp)
-	test $$(stat -c%s $(DISK)) -eq 2228224
+	$(PYTHON) tools/mkmimir.py $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(APP_BUILD)/$(a).sapp)
+	test $$(stat -c%s $(DISK)) -eq 5275648
 run-serial: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M -serial tcp:127.0.0.1:4555,server=on,wait=off
 
@@ -211,7 +211,7 @@ run: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M
 check: disk
 	@echo "SAND boot, memory, paging, heap, PIT, preemptive scheduler and synchronization built."
-host-test: apps
+host-test: apps disk
 	mkdir -p $(BUILD)
 	cc -std=c11 -Wall -Wextra -Werror -Iinclude -Ikernel/crypto -o $(BUILD)/ed25519-kat tests/veyra/ed25519_kat_test.c kernel/crypto/sha512.c kernel/crypto/ed25519.c kernel/crypto/sha256.c kernel/security/stci.c
 	./$(BUILD)/ed25519-kat
@@ -221,11 +221,15 @@ host-test: apps
 	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude -o $(BUILD)/diskapps-perm tests/veyra/diskapps_perm_test.c kernel/proc/diskapps.c
 	./$(BUILD)/diskapps-perm $(APP_BUILD)/jail.sapp 0x01 $(APP_BUILD)/lumen.sapp 0x20 $(APP_BUILD)/locus.sapp 0x2C $(APP_BUILD)/keystone.sapp 0x60
 	$(PYTHON) tests/tools/test_gen_app_table.py
+	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude -o $(BUILD)/mimir-test tests/fs/mimir_test.c kernel/fs/mimir.c kernel/crypto/sha256.c kernel/storage/block.c
+	./$(BUILD)/mimir-test
+	./$(BUILD)/mimir-test $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) jail.sapp=$(APP_BUILD)/jail.sapp lumen.sapp=$(APP_BUILD)/lumen.sapp
 test: disk host-test
 	$(PYTHON) tests/qemu/test_shell.py
 	$(PYTHON) tests/qemu/test_desktop.py
 	$(PYTHON) tests/qemu/test_install_tool.py
 	$(PYTHON) tests/qemu/test_net.py
+	$(PYTHON) tests/qemu/test_mimir.py
 ui-preview:
 	$(CC) -O2 -Wall -Iinclude -Isdk/sapp/include -o $(BUILD)/ui_preview tools/ui_preview.c kernel/graphics/ui.c kernel/graphics/ui_wall.c kernel/graphics/gfx.c kernel/graphics/font.c kernel/graphics/font_data.c
 	./$(BUILD)/ui_preview $(BUILD)/ui.ppm

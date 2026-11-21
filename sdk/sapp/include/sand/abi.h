@@ -8,7 +8,7 @@
  *
  * Calling convention (x86-32): int 0x80, number in EAX, arguments in
  * EBX, ECX, EDX, result in EAX. Negative results are errors. */
-#define SAND_ABI_VERSION 11u
+#define SAND_ABI_VERSION 12u
 
 enum sand_syscall_number {
     SAND_SYS_EXIT = 1,        /* exit(status)                         */
@@ -54,6 +54,13 @@ enum sand_syscall_number {
     SAND_SYS_NET_INFO = 32,      /* net_info(sand_netinfo*) -> 0, SAND_E_NODEV without a NIC; needs net.access */
     SAND_SYS_NET_PING = 33,      /* net_ping(ip, timeout_ms) -> round-trip ms (blocks), SAND_E_TIMEOUT, SAND_E_NODEV; ip = bytes a,b,c,d as a little-endian u32 */
     SAND_SYS_NET_UDP_SEND = 34,  /* net_udp_send(sand_udp*) -> 0; data <= 512 bytes */
+    SAND_SYS_FS_STAT = 42,       /* fs_stat(name, sand_fsstat*) -> 0, SAND_E_NOENT; size, version, labels, newest-version id */
+    SAND_SYS_FS_HISTORY = 43,    /* fs_history(name, index, sand_fsver*) -> 0 (index 0 = newest version), SAND_E_NOENT past the oldest kept version */
+    SAND_SYS_FS_ROLLBACK = 44,   /* fs_rollback(name, version) -> 0: appends a new version with the old content (history is never rewritten); obeys the write label */
+    SAND_SYS_FS_SEAL = 45,       /* fs_seal(sand_fsseal*) -> 0: the volume's generation, tide, epoch, usage and hash-chain head */
+    SAND_SYS_FS_SCRUB = 46,      /* fs_scrub(sand_fsscrub*) -> 0: rechecks every stored block and the chain; reports damaged blocks */
+    SAND_SYS_FS_LABEL = 47,      /* fs_label(name, read_perm, write_perm) -> 0: sets the Veyra labels (SAND_PERM_* masks) a caller must hold; needs system.install */
+    SAND_SYS_FS_EBB = 48,        /* fs_ebb() -> 0: copies the live files into the other tide (frees space, drops old history) */
     SAND_SYS_NET_UDP_RECV = 35,  /* net_udp_recv(port, sand_udp*) -> 1 datagram, 0 none (non-blocking); the first call binds the port */
 };
 
@@ -67,6 +74,13 @@ enum sand_syscall_number {
 #define SAND_E_TIMEOUT (-7)   /* a network wait expired */
 #define SAND_E_NODEV   (-8)   /* no such device (no NIC) */
 #define SAND_E_CLOSED  (-9)   /* the TCP peer closed or reset the connection */
+#define SAND_E_CORRUPT (-10)  /* MIMIR: a stored block no longer matches its hash; the data is not returned */
+
+/* MIMIR (SAND's filesystem) ABI structures; layout identical to include/sand/fs/mimir.h. */
+struct sand_fsstat  { uint32_t size, version, read_perm, write_perm, chunks, flags; uint8_t id[32]; };
+struct sand_fsver   { uint32_t version, size, flags, reserved; uint8_t id[32]; };   /* flags bit 0: this version deleted the file */
+struct sand_fsseal  { uint32_t generation, tide, epoch, used_blocks, tide_blocks, files, versions, reserved; uint8_t chain[32]; };
+struct sand_fsscrub { uint32_t blocks, bad, first_bad, reserved; };
 struct sand_netinfo { uint8_t mac[6]; uint8_t ip[4]; uint8_t gateway[4]; uint8_t mask[4]; uint32_t rx_frames; uint32_t tx_frames; uint32_t flags; };   /* flags bit 0: address came from DHCP */
 struct sand_udp { uint32_t ip; uint16_t src_port; uint16_t dst_port; uint32_t length; uint8_t data[512]; };
 
@@ -82,6 +96,7 @@ struct sand_veyra_subsystem_abi {
 #define SAND_VEYRA_IF_NOTIFY 0x0103u
 #define SAND_VEYRA_IF_NET    0x0104u
 #define SAND_VEYRA_IF_NAMES  0x0105u
+#define SAND_VEYRA_IF_STORE  0x0106u
 
 /* TIDEWAY message as delivered by chan_recv. */
 struct sand_chan_msg { uint32_t from; uint32_t length; uint8_t data[112]; };

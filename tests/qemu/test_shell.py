@@ -100,8 +100,8 @@ class ShellTest(unittest.TestCase):
         self.assertNotIn("beta.txt", ls)
         self.cmd("rm alpha.txt")
 
-    def test_11_apps_load_from_sandfs(self):
-        """jail and lumen are not in the kernel image: they live in SANDFS (multi-sector files) and are
+    def test_11_apps_load_from_mimir(self):
+        """jail and lumen are not in the kernel image: they live in MIMIR (multi-sector files) and are
         loaded on demand, with their permissions taken from the manifest inside the image."""
         apps = self.cmd("apps")
         for name in ("hello", "jail", "lumen"):
@@ -128,7 +128,7 @@ class ShellTest(unittest.TestCase):
         return self.vm.serial_text[mark:]
 
     def test_12_install_an_app_from_the_shell(self):
-        """Install a SAPP image at run time: it is stored in SANDFS, then runs with its manifest permissions."""
+        """Install a SAPP image at run time: it is stored in MIMIR, then runs with its manifest permissions."""
         import pathlib
         image = pathlib.Path("build/apps/hello.sapp").read_bytes()
         out = self._install("greeter", image)
@@ -159,7 +159,7 @@ class ShellTest(unittest.TestCase):
         self.assertIn("accent=0", self.cmd("settings"))              # nor did the settings write
 
     def test_09_system_settings_and_persistence(self):
-        """ABI v5 settings: validated by the kernel, readable back, persisted to system.cfg on SANDFS."""
+        """ABI v5 settings: validated by the kernel, readable back, persisted to system.cfg on MIMIR."""
         out = self.vm.run_command("settings")
         self.assertRegex(out, r"accent=0\s+motion=0\s+clock24=1")
         self.vm.run_command("settings accent 2")

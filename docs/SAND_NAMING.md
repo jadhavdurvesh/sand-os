@@ -46,7 +46,7 @@ Rules:
 | SAND Prism | Compositor | Surface composition, clipping, damage tracking and presentation | Not implemented |
 | SAND Aether | Window manager | Window lifecycle, focus, z-order, placement and workspaces | Small kernel prototype; not interactive desktop-ready |
 | SAND Horizon | Desktop environment | Shell, panel, launcher, settings and workspace experience | Static boot desktop prototype |
-| SAND Terra | Native filesystem | Persistent files, directories, metadata and mount semantics | SANDFS v1 prototype |
+| SAND Terra | Native filesystem | Persistent files, directories, metadata and mount semantics | MIMIR (docs/MIMIR.md) |
 | SAND Resonance | Audio subsystem | Audio device and stream interfaces | Not implemented |
 | SAND Terminal | Command shell | Interactive command interpreter and system tools | Not implemented as a full shell |
 

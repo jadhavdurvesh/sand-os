@@ -1,5 +1,5 @@
 #include "sand/libsand.h"
-/* LOCUS: windowed file explorer for SANDFS, painted through the SAND window service. */
+/* LOCUS: windowed file explorer for MIMIR, painted through the SAND window service. */
 #define JADE 0x82C8ADu
 #define CORAL 0xE8836Bu
 #define TEXTC 0xEDE9F7u
@@ -47,7 +47,7 @@ static void draw(void) {
     text(SAND_FACE_SMALL, 0, 18, 70, MUTEC, "VOLUME");
     rrect(10, 80, 120, 30, 9, 0x2A2560u, 255);
     cmd(SAND_DRAW_CIRCLE, 0, 0, 0, 27, 95, 0, 0, 4, 0, JADE, 0, 0);
-    text(SAND_FACE_SANS, 0, 40, 100, TEXTC, "SANDFS");
+    text(SAND_FACE_SANS, 0, 40, 100, TEXTC, "MIMIR");
     uint32_t total = 0; for (int i = 0; i < count; ++i) total += files[i].length;
     p = sand_utoa((uint32_t)count, b); p[0] = ' '; p[1] = 'f'; p[2] = 'i'; p[3] = 'l'; p[4] = 'e'; p[5] = count == 1 ? 0 : 's'; p[6] = 0;
     text(SAND_FACE_SMALL, 0, 18, 140, MUTEC, b);

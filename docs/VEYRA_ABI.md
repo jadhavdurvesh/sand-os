@@ -52,12 +52,12 @@ Five SAND-built subsystems now publish a `struct sand_veyra_subsystem_info` (`in
 
 | Id | Subsystem | Name | Permission | limit[0..3] |
 |---|---|---|---|---|
-| `0x0101` | FILES | BEDROCK: whole-file read/write on SANDFS | `fs.read`+`fs.write` | max file bytes (65536), entries (15), name length (31), 0 |
+| `0x0101` | FILES | BEDROCK: whole-file read/write (on MIMIR, label-checked) | `fs.read`+`fs.write` | max file bytes (65536), files (32), name length (23), 0 |
 | `0x0102` | IPC | TIDEWAY: named channels | `ipc.channel` | channels (8), queue depth (8), message bytes (112), name length (15) |
 | `0x0103` | NOTIFY | HERALD: toasts and background timers over the `herald.*` channels | `ipc.channel` | pending timers (8), text bytes (60), toast seconds (5), longest timer seconds (86400) |
 | `0x0104` | NET | DRIFTNET: Ethernet, ARP, IPv4, ICMP echo, UDP | `net.access` | datagram bytes (512), UDP sockets (4), concurrent pings (1), concurrent TCP connections (1); revision 2 |
-
 | `0x0105` | NAMES | HUGINN: DNS resolver (A records over UDP) | `net.access` | longest name (63), cache entries (4), cached lifetime cap seconds (300), concurrent lookups (1) |
+| `0x0106` | STORE | MIMIR: versions, rollback, seal, scrub, ebb, labels (syscalls 42-48, ABI v12; see docs/MIMIR.md) | `fs.read` (`system.install` to relabel) | versions per tide (192), chunk bytes (4016), files (32), label bit mask (0x3ff) |
 
 HUGINN (named for Odin's raven that flies out and brings information back) is called through `NAME_RESOLVE` (41). It takes the resolver from DHCP option 6 (default 10.0.2.3, QEMU's), or an explicit server and port in the request. It validates names (lowercase letters, digits, `-`, `_`, dots; labels up to 63, whole name up to 63 in this implementation), retries each second until the 4-second budget ends, returns the first A record (CNAME chains are skipped, not followed), maps NXDOMAIN and answers without an A record to "no such name", and keeps a 4-entry cache whose lifetime is the record TTL capped at 5 minutes. Every lookup is audited as `NET_RESOLVE <name> <ip>`. Limits: no TCP fallback for truncated answers, no IPv6/AAAA, no search domains, no DNSSEC, no check that a reply came from the queried port beyond address, id and flag matching (a spoofing host on the same network could race the answer).
 
