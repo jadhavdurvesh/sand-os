@@ -15,7 +15,7 @@
  * Layout and byte formats: docs/MIMIR.md. tools/mkmimir.py writes the same format.
  */
 #define MIMIR_NAME_MAX 24u
-#define MIMIR_FILE_MAX 65536u
+#define MIMIR_FILE_MAX 262144u
 #define MIMIR_FILES 32u
 #define MIMIR_E_CORRUPT (-2)
 
