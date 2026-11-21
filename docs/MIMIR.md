@@ -49,10 +49,10 @@ Kernel API `include/sand/fs/mimir.h`; syscalls 8-11 (read/write/list/remove, now
 
 ## Limits (honest)
 
-- 32 files, 192 versions per tide, names up to 23 printable ASCII characters, files up to 64 KiB (a rune could address ~490 KB; the syscall buffers are the limit). One flat namespace, no directories, no file handles, no partial reads or writes.
+- 32 files, 192 versions per tide, names up to 23 printable ASCII characters, files up to 256 KiB (a rune record could address ~490 KB; three kernel buffers of that size are allocated once and never freed, which is the limit). One flat namespace, no directories, no file handles, no partial reads or writes.
 - History lives only inside the active tide: an ebb drops it. The volume is 4 MiB (2 tides of 511 blocks); live data must fit in one tide.
 - The hash chain proves integrity, not authenticity: anyone who can write the disk can rebuild a consistent chain. Signing the seal with the STCI/Ed25519 machinery is a possible next step, not done.
 - Labels are enforced in the syscall layer; kernel code (desktop settings, installer) writes directly. There is no encryption.
-- Single CPU, interrupts off, polling ATA PIO; every sector write is synchronous, so writes are slow (a 64 KiB file is 17 blocks of 8 sector writes). A failed update reloads state from disk.
+- Single CPU, interrupts off, polling ATA PIO; every sector write is synchronous, so writes are slow (a 256 KiB file is 66 blocks of 8 sector writes). A failed update reloads state from disk.
 - A mount failure on a disk that is not MIMIR formats the volume (as the earlier boot code did). Existing SANDFS volumes are not converted: the image builder always writes MIMIR.
 - Evidence is host tests (RAM disk with fault injection, ASan/UBSan) and QEMU; no real hardware.

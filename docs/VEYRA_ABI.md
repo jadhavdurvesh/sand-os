@@ -52,7 +52,7 @@ Five SAND-built subsystems now publish a `struct sand_veyra_subsystem_info` (`in
 
 | Id | Subsystem | Name | Permission | limit[0..3] |
 |---|---|---|---|---|
-| `0x0101` | FILES | BEDROCK: whole-file read/write (on MIMIR, label-checked) | `fs.read`+`fs.write` | max file bytes (65536), files (32), name length (23), 0 |
+| `0x0101` | FILES | BEDROCK: whole-file read/write (on MIMIR, label-checked) | `fs.read`+`fs.write` | max file bytes (262144), files (32), name length (23), 0 |
 | `0x0102` | IPC | TIDEWAY: named channels | `ipc.channel` | channels (8), queue depth (8), message bytes (112), name length (15) |
 | `0x0103` | NOTIFY | HERALD: toasts and background timers over the `herald.*` channels | `ipc.channel` | pending timers (8), text bytes (60), toast seconds (5), longest timer seconds (86400) |
 | `0x0104` | NET | DRIFTNET: Ethernet, ARP, IPv4, ICMP echo, UDP | `net.access` | datagram bytes (512), UDP sockets (4), concurrent pings (1), concurrent TCP connections (1); revision 2 |

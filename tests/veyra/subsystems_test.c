@@ -32,7 +32,7 @@ int main(void)
         for (unsigned j = 0; j < i; ++j) assert(ids[j] != ids[i]);            /* ids are unique */
     }
     /* documented limits */
-    veyra_query(SAND_VEYRA_IF_FILES, &d); assert(d.limit[0] == 65536u);
+    veyra_query(SAND_VEYRA_IF_FILES, &d); assert(d.limit[0] == 262144u);
     veyra_query(SAND_VEYRA_IF_IPC, &d);   assert(d.limit[0] == 8u && d.limit[1] == 8u && d.limit[2] == 112u);
     veyra_query(SAND_VEYRA_IF_NET, &d);   assert(d.limit[0] == 512u && d.limit[3] == 1u && d.revision == 2u && (d.base.capabilities & SAND_VEYRA_CAP_SEND));
 

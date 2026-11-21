@@ -36,14 +36,14 @@ extern void x86_syscall_entry(void);
 /* Syscalls run with interrupts disabled on a single CPU, so shared scratch
  * buffers are safe and keep the small per-process kernel stack shallow. */
 static uint8_t scratch[512];
-/* Whole-file FS transfers: the 512-byte scratch serves small ones, a lazily allocated 64 KiB buffer the rest. */
+/* Whole-file FS transfers: the 512-byte scratch serves small ones, a buffer of MIMIR_FILE_MAX (256 KiB) the rest. */
 static uint8_t *fs_big;
 static uint8_t *fs_buffer(uint32_t need) {
     if(need<=sizeof(scratch)) return scratch;
     if(fs_big==0) fs_big=(uint8_t *)kmalloc(MIMIR_FILE_MAX);
     return fs_big;
 }
-void syscall_init(void) { idt_set_syscall(x86_syscall_entry); idt_load(); (void)fs_buffer(sizeof(scratch)+1u); /* allocate the 64 KiB FS buffer up front: frame accounting stays stable */ }
+void syscall_init(void) { idt_set_syscall(x86_syscall_entry); idt_load(); (void)fs_buffer(sizeof(scratch)+1u); /* allocate the 256 KiB FS buffer up front: frame accounting stays stable */ }
 static char name_buffer[NAME_LIMIT];
 
 static int user_ok(uint32_t address,uint32_t length,int writable) {
@@ -198,7 +198,7 @@ uint32_t syscall_dispatch(uint32_t frame) {
     case SAND_SYS_FS_READ: {
         if(copy_name(a)!=0) { result=SAND_E_FAULT; break; }
         if(b==0u || c==0u) { result=SAND_E_FAULT; break; }
-        uint32_t cap=c>MIMIR_FILE_MAX?MIMIR_FILE_MAX:c;      /* BEDROCK: whole files up to 64 KiB, not just 512 bytes */
+        uint32_t cap=c>MIMIR_FILE_MAX?MIMIR_FILE_MAX:c;      /* BEDROCK: whole files up to 256 KiB, not just 512 bytes */
         if(!user_ok(b,cap,1)) { result=SAND_E_FAULT; break; }
         uint8_t *buf=fs_buffer(cap); if(buf==0) { result=SAND_E_FAIL; break; }
         uint32_t length=0u;
