@@ -43,6 +43,7 @@ static uint8_t in_block[BLOCK_BYTES];     /* chunk / generic reads */
 static uint8_t rune_block[BLOCK_BYTES];   /* rune record being read */
 static uint8_t rune_new[BLOCK_BYTES];     /* rune payload being built */
 static uint8_t new_ids[CHUNKS_MAX][32];
+static void wards_refresh(void);
 
 static uint32_t get32(const uint8_t *p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
 static void put32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24); }
@@ -166,6 +167,7 @@ static int mount_device(void) {
     vol_sectors = get32(b + 20); tide_blocks = geometry(vol_sectors); generation = best_gen; active = get32(b + 12); epoch = get32(b + 24);
     uint8_t head[32]; copy(head, b + 32, 32u);
     if(load_state(active, get32(b + 16)) != 0 || !same(chain, head, 32u)) { state_clear(); dev = 0; return -1; }
+    wards_refresh();
     return 0;
 }
 int mimir_mount(uint32_t device_index, uint32_t start_lba) {
@@ -176,6 +178,62 @@ int mimir_mount(uint32_t device_index, uint32_t start_lba) {
 }
 int mimir_is_mounted(void) { return dev != 0; }
 static void reload(void) { if(dev != 0 && mount_device() != 0) dev = 0; }   /* drop un-sealed work after a failed update */
+
+/* WARDS: "ward.rules" is an ordinary MIMIR file (so it has history, rollback and a hash chain); its lines give new files default labels. */
+#define WARDS_MAX 8u
+#define WARD_FILE "ward.rules"
+struct ward { char pattern[MIMIR_NAME_MAX]; uint8_t suffix; uint32_t read_perm, write_perm; };
+static struct ward wards[WARDS_MAX];
+static uint32_t ward_total, ward_have;
+static uint8_t ward_id[32];
+static int file_find(const char *name);
+static int wards_number(const uint8_t *p, const uint8_t *end, uint32_t *out) {
+    uint32_t v = 0u; int digits = 0;
+    if(end - p > 2 && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+        for(p += 2; p < end; ++p) { uint32_t d = *p >= '0' && *p <= '9' ? (uint32_t)(*p - '0') : *p >= 'a' && *p <= 'f' ? (uint32_t)(*p - 'a' + 10) : *p >= 'A' && *p <= 'F' ? (uint32_t)(*p - 'A' + 10) : 16u; if(d > 15u || digits >= 8) return -1; v = v * 16u + d; ++digits; }
+    } else {
+        for(; p < end; ++p) { if(*p < '0' || *p > '9' || digits >= 9) return -1; v = v * 10u + (uint32_t)(*p - '0'); ++digits; }
+    }
+    if(digits == 0) return -1;
+    *out = v; return 0;
+}
+static void wards_parse(const uint8_t *t, uint32_t len) {
+    ward_total = 0u;
+    uint32_t i = 0u;
+    while(i < len && ward_total < WARDS_MAX) {
+        uint32_t e = i; while(e < len && t[e] != '\n') ++e;
+        const uint8_t *tok[3]; const uint8_t *tend[3]; uint32_t n = 0u, p = i;
+        while(p < e && n < 3u) { while(p < e && (t[p] == ' ' || t[p] == '\t' || t[p] == '\r')) ++p; if(p >= e) break; tok[n] = t + p; while(p < e && t[p] != ' ' && t[p] != '\t' && t[p] != '\r') ++p; tend[n++] = t + p; }
+        if(n == 3u && tok[0][0] != '#') {
+            struct ward w; uint32_t plen = (uint32_t)(tend[0] - tok[0]), skip = tok[0][0] == '*' ? 1u : 0u;
+            if(plen > skip && plen - skip < MIMIR_NAME_MAX && wards_number(tok[1], tend[1], &w.read_perm) == 0 && wards_number(tok[2], tend[2], &w.write_perm) == 0) {
+                zero(w.pattern, MIMIR_NAME_MAX); copy(w.pattern, tok[0] + skip, plen - skip); w.suffix = (uint8_t)skip;
+                wards[ward_total++] = w;
+            }
+        }
+        i = e + 1u;
+    }
+}
+/* Reload the rules when the newest version of ward.rules changed (compared by content id). Called after mount and after every commit. */
+static void wards_refresh(void) {
+    static uint8_t text[1025]; uint32_t len = 0u;
+    int f = file_find(WARD_FILE), h = f >= 0 ? files[f].head : -1;
+    if(h < 0 || (recs[h].flags & FLAG_TOMBSTONE)) { ward_total = 0u; ward_have = 0u; return; }
+    if(ward_have && same(ward_id, recs[h].id, 32u)) return;
+    copy(ward_id, recs[h].id, 32u); ward_have = 1u; ward_total = 0u;
+    if(recs[h].size > 1024u || mimir_read(WARD_FILE, text, 1024u, &len) != 0) return;   /* unreadable or oversized rules grant nothing */
+    wards_parse(text, len);
+}
+int mimir_ward_lookup(const char *name, uint32_t *read_perm, uint32_t *write_perm) {
+    if(name == 0 || !valid_name(name)) return 0;
+    uint32_t nlen = 0u; while(name[nlen] != '\0') ++nlen;
+    for(uint32_t i = 0; i < ward_total; ++i) {
+        uint32_t plen = 0u; while(wards[i].pattern[plen] != '\0') ++plen;
+        int hit = wards[i].suffix ? (nlen >= plen && name_eq(name + (nlen - plen), wards[i].pattern)) : name_eq(name, wards[i].pattern);
+        if(hit) { if(read_perm) *read_perm = wards[i].read_perm; if(write_perm) *write_perm = wards[i].write_perm; return 1; }
+    }
+    return 0;
+}
 
 static int file_find(const char *name) {
     for(uint32_t i = 0; i < MIMIR_FILES; ++i) if(files[i].used && name_eq(files[i].name, name)) return (int)i;
@@ -258,7 +316,10 @@ static int write_common(const char *name, const void *data, uint32_t length, int
     for(uint32_t c = 0; c < nchunks; ++c) { uint32_t off = c * PAYLOAD_MAX, n = length - off > PAYLOAD_MAX ? PAYLOAD_MAX : length - off; sand_sha256(src + off, n, new_ids[c]); }
     for(int attempt = 0; attempt < 2; ++attempt) {
         int f = file_find(name), head = f >= 0 ? files[f].head : -1;
-        if(!labeled) { rp = head >= 0 ? recs[head].read_perm : 0u; wp = head >= 0 ? recs[head].write_perm : 0u; }
+        if(!labeled) {   /* a live file keeps its labels; a new (or re-created) one takes the ward labels, if a rule matches */
+            if(head >= 0 && !(recs[head].flags & FLAG_TOMBSTONE)) { rp = recs[head].read_perm; wp = recs[head].write_perm; }
+            else { rp = 0u; wp = 0u; (void)mimir_ward_lookup(name, &rp, &wp); }
+        }
         if(head >= 0 && !(recs[head].flags & FLAG_TOMBSTONE) && recs[head].size == length && recs[head].read_perm == rp && recs[head].write_perm == wp && recs[head].chunks == nchunks) {
             if(rune_load(&recs[head]) != 0) return MIMIR_E_CORRUPT;
             int equal = 1; for(uint32_t c = 0; c < nchunks; ++c) if(!same(rune_block + HDR_BYTES + RUNE_FIXED + 32u * c, new_ids[c], 32u)) equal = 0;
@@ -282,6 +343,7 @@ static int write_common(const char *name, const void *data, uint32_t length, int
         }
         uint32_t version = head >= 0 ? recs[head].version + 1u : 1u;
         if(rune_append(name, version, length, rp, wp, 0u, nchunks, &new_ids[0][0], head >= 0 ? recs[head].id : 0) != 0 || seal_commit() != 0) { reload(); return -1; }
+        wards_refresh();
         return 0;
     }
     return -1;
@@ -323,6 +385,7 @@ static int new_version(int h, uint32_t flags, uint32_t rp, uint32_t wp, int copy
     uint8_t parent[32]; copy(parent, head->id, 32u);
     char name[MIMIR_NAME_MAX]; copy(name, files[head->file].name, MIMIR_NAME_MAX);
     if(rune_append(name, head->version + 1u, size, rp, wp, flags, n, ids, parent) != 0 || seal_commit() != 0) { reload(); return -1; }
+    wards_refresh();
     return 0;
 }
 static int mutate(const char *name, int kind, uint32_t a, uint32_t b) {

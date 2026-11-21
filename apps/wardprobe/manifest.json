@@ -1,0 +1,1 @@
+{"id":"org.sand.wardprobe","name":"Ward probe","version":"0.1.0","vendor":"SAND","description":"MIMIR ward probe: holds fs.rw and console.write, tries to create protected files","permissions":["console.write","fs.rw"],"dependencies":[]}
