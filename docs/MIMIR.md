@@ -93,3 +93,19 @@ The signature (platform key, same as SIGIL) covers `"MIMIR-OATH-V1\0"` plus ever
 Build: `make signed-images` creates `build/sand-os-signed.img` (require-signed, one root, v2-signed disk apps via `tools/sapp_sign.py`) and `build/sand-os-badoath.img` (damaged signature).
 
 Honest limits: the platform key is a throw-away developer key; anyone who can replace kernel and disk can replace it; the profile is read only at boot; the RTC is not a trusted clock for certificate validity; the default image stays on the developer profile; evidence is QEMU/host only.
+
+## RUNELIB (app-facing library)
+
+`sdk/sapp/include/sand/rune.h` is a header-only helper layer over the MIMIR syscalls, so apps do not call them raw. It adds no privilege: every call is still gated by `fs.read`/`fs.write`, the file's labels and the wards.
+
+| Call | What it does |
+|---|---|
+| `sand_rune_put / put_text / get` | store and read a whole file |
+| `sand_rune_version(name)` | newest version number |
+| `sand_rune_same(a, b, scratch, cap)` | byte-compare two files (rune ids include name and version, so content is compared directly; `scratch` needs 2 x size) |
+| `sand_rune_undo(name)` | roll back to the previous live version (appends a new version; history is kept) |
+| `sand_rune_protect(name, r, w)` | set labels (needs `system.install`) |
+| `sand_rune_walk(branch, fn, user)` | list direct children of a branch, deeper levels collapsed, up to 16 distinct sub-branches per call |
+| `sand_rune_healthy()` | full scrub, 1 when clean |
+
+`apps/runetest` (a disk app) exercises all of it; `tests/qemu/test_mimir.py::test_05b_runelib_in_a_real_app` runs it in QEMU. Evidence is QEMU only.

@@ -16,7 +16,7 @@ SAPP := sdk/sapp
 # Built into the kernel image (launcher + boot-time needs) ...
 EMBEDDED_APPS := sandsh hello abitest spin crash locus locusc quanta chronos cairn keystone citadel herald netecho netget
 # ... and apps stored only in SANDFS inside the disk image (loaded by diskapps.c, permissions from their manifest).
-DISK_APPS := jail lumen wardprobe
+DISK_APPS := jail lumen wardprobe runetest
 APPS := $(EMBEDDED_APPS) $(DISK_APPS)
 MIMIR_LBA := 2112
 MIMIR_SECTORS := 8192
@@ -246,7 +246,7 @@ host-test: apps disk
 	$(PYTHON) tests/tools/test_gen_app_table.py
 	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude -o $(BUILD)/mimir-test tests/fs/mimir_test.c kernel/fs/mimir.c kernel/crypto/sha256.c kernel/crypto/sha512.c kernel/crypto/ed25519.c kernel/storage/block.c
 	./$(BUILD)/mimir-test
-	./$(BUILD)/mimir-test $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) jail.sapp=$(APP_BUILD)/jail.sapp lumen.sapp=$(APP_BUILD)/lumen.sapp wardprobe.sapp=$(APP_BUILD)/wardprobe.sapp $(SIGIL)/sigil-pub.bin
+	./$(BUILD)/mimir-test $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) jail.sapp=$(APP_BUILD)/jail.sapp lumen.sapp=$(APP_BUILD)/lumen.sapp wardprobe.sapp=$(APP_BUILD)/wardprobe.sapp runetest.sapp=$(APP_BUILD)/runetest.sapp $(SIGIL)/sigil-pub.bin
 test: disk host-test signed-images
 	$(PYTHON) tests/qemu/test_shell.py
 	$(PYTHON) tests/qemu/test_desktop.py

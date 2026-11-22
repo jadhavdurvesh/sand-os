@@ -104,6 +104,12 @@ class MimirTest(unittest.TestCase):
         self.assertIn("SAND_AUDIT:MIMIR_LABEL_DENIED write system.cfg", self.vm.debug_log())
         self.assertRegex(self.cmd("mimir log ward.rules"), r"v1 ")                      # the rules have history like any file
 
+    def test_05b_runelib_in_a_real_app(self):
+        out = self.cmd("run runetest", timeout=30)                                     # sand/rune.h: versions, undo, dedupe, branches, scrub
+        self.assertIn("RUNETEST:PASS", out)
+        self.assertNotIn("RUNETEST:FAIL", out)
+        self.assertIn("exited with status 0", out)
+        self.assertNotRegex(self.cmd("ls"), r"rt/")                                    # the app cleaned up its branch
 
     def test_06_sigil_factory_manifest(self):
         self.assertIn("SAND_TEST:M6_SIGIL_VALID", self.vm.debug_log())
