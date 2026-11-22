@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Write a MIMIR volume (seals, chunk and rune records of tide 0) into a disk image.
 
-Usage: mkmimir.py <image> <start_lba> <sector_count> <name>=<file>[@<read_perm>,<write_perm>] [...]
+Usage: mkmimir.py [--sigil-key <ed25519.pem>] <image> <start_lba> <sector_count> <name>=<file>[@<read_perm>,<write_perm>] [...]
 Format: docs/MIMIR.md and kernel/fs/mimir.c. Files ending in .sapp get write label 0x80 (system.install)
 unless a label is given, the same rule the kernel's installer applies."""
-import hashlib, struct, sys
+import hashlib, struct, subprocess, sys, tempfile
 from pathlib import Path
 
 BLOCK, HDR = 4096, 80
@@ -17,7 +17,8 @@ WRITE_INSTALL = 0x80
 DEFAULT_WARDS = (b"# MIMIR wards: <name or *suffix> <read mask> <write mask>; first match wins; applies to files created later.\n"
                  b"*.sapp 0x0 0x80\n"        # only system.install may create or replace an app
                  b"system.cfg 0x0 0x40\n"    # only settings.write may change the settings file
-                 b"ward.rules 0x0 0x80\n")   # and only system.install may change the rules themselves
+                 b"ward.rules 0x0 0x80\n"     # and only system.install may change the rules themselves
+                 b"factory.sigil 0x0 0x80\n")
 
 
 def sha(b):
@@ -57,7 +58,28 @@ def build(files, sectors):
     return b"".join(out), len(out), chain
 
 
+def content_id(data):
+    """SHA-256 of the file's chunk ids (= of its data); identical to the kernel's rec.content."""
+    return sha(b"".join(sha(data[o:o + PAYLOAD]) for o in range(0, len(data), PAYLOAD)))
+
+
+def sigil(files, key):
+    """Signed factory manifest (docs/MIMIR.md): every file's content id and labels, Ed25519 over a domain-separated text."""
+    body = b"MIMIR-SIGIL 1\n" + b"".join(
+        f"{name} {content_id(data).hex()} {rp:#x} {wp:#x}\n".encode() for name, data, rp, wp in sorted(files))
+    with tempfile.TemporaryDirectory() as d:
+        msg, out = Path(d) / "m", Path(d) / "s"
+        msg.write_bytes(b"MIMIR-SIGIL-V1\0" + body)
+        subprocess.run(["openssl", "pkeyutl", "-sign", "-rawin", "-inkey", key, "-in", str(msg), "-out", str(out)], check=True)
+        return body + b"sig " + out.read_bytes().hex().encode() + b"\n"
+
+
 def main():
+    args = sys.argv[1:]
+    key = None
+    if len(args) >= 2 and args[0] == "--sigil-key":
+        key, args = args[1], args[2:]
+    sys.argv = [sys.argv[0]] + args
     if len(sys.argv) < 4:
         sys.exit(__doc__)
     image, start, sectors = Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
@@ -76,6 +98,8 @@ def main():
         files.append((name, data, rp, wp))
     if "ward.rules" not in {f[0] for f in files}:
         files.append(("ward.rules", DEFAULT_WARDS, 0, WRITE_INSTALL))
+    if key:
+        files.append(("factory.sigil", sigil(files, key), 0, WRITE_INSTALL))
     if len({f[0] for f in files}) != len(files) or len(files) > 32:
         sys.exit("mkmimir: duplicate names or too many files")
     blob, tail, chain = build(files, sectors)

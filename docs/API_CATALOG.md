@@ -43,6 +43,7 @@ Veyra implementation rules:
 | Area | Interface / location | What exists | Maturity and limits |
 |---|---|---|---|
 | Files (BEDROCK) | `0x0101`, `kernel/arch/x86/syscall.c`, `kernel/fs/mimir.c` | Whole-file read/write up to 256 KiB through the FS syscalls, label-checked; kernel loaded above 1 MiB (RIDGELINE, up to 1 MiB) | 32 files, no directories or file handles |
+| Store (MIMIR) sigil | `kernel/fs/mimir.c`, `kernel/fs/sigil_key.c`, `tools/mkmimir.py` | Signed factory manifest; `sand_fsstat.flags` 2/4, `sand_fsseal.sigil` | Throw-away developer key; factory files only; no secure boot |
 | Store (MIMIR) | `0x0106`, `kernel/fs/mimir.c`, syscalls 42-48 | Versions, rollback, seal, scrub, ebb, labels (ABI v12) | Developer profile: labels and wards are only as strong as the caller permissions (and apps still declare their own permissions); see docs/MIMIR.md |
 | IPC (TIDEWAY) | `0x0102`, `include/sand/ipc/tideway.h`, `kernel/ipc/tideway.c` | 8 named channels x 8 messages x 112 bytes, kernel-stamped sender pid, `ipc.channel` | Global by name (a capability, not per-pair isolation); non-blocking; never destroyed |
 | Notify (HERALD) | `0x0103`, `apps/herald`, `sand_ui_toast` | Window-less timer service over TIDEWAY; desktop toast card with the sender's kernel-stamped name | Not persistent across reboot; one toast at a time; no click action |

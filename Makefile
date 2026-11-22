@@ -23,7 +23,7 @@ MIMIR_SECTORS := 8192
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
 APP_OBJECTS := $(foreach a,$(EMBEDDED_APPS),$(APP_BUILD)/$(a)-image.o)
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/appinstall.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/mimir.o $(BUILD)/tideway.o $(BUILD)/driftnet.o $(BUILD)/veyra-registry.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/appinstall.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/mimir.o $(BUILD)/sigil-key.o $(BUILD)/sigil-pub.o $(BUILD)/tideway.o $(BUILD)/driftnet.o $(BUILD)/veyra-registry.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
 .PHONY: run-serial all clean kernel disk run check apps test ui-preview
 apps: $(foreach a,$(APPS),$(APP_BUILD)/$(a).sapp)
 $(APP_BUILD):
@@ -197,12 +197,22 @@ $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
 	test $$(stat -c%s $@) -le 1048576
 kernel: $(KERNEL_BIN)
-disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUILD)/$(a).sapp) tools/mkmimir.py
+# SIGIL: throw-away developer key pair for the factory manifest; the public half is linked into the kernel, the private half signs the image.
+SIGIL := $(BUILD)/sigil
+$(SIGIL)/sigil.key: | $(BUILD)
+	mkdir -p $(SIGIL) && openssl genpkey -algorithm ED25519 -out $@
+$(SIGIL)/sigil-pub.bin: $(SIGIL)/sigil.key
+	openssl pkey -in $< -pubout -outform DER | tail -c 32 > $@
+$(BUILD)/sigil-pub.o: $(SIGIL)/sigil-pub.bin
+	cd $(SIGIL) && $(OBJCOPY) -I binary -O elf32-i386 -B i386 sigil-pub.bin ../sigil-pub.o
+$(BUILD)/sigil-key.o: kernel/fs/sigil_key.c include/sand/fs/mimir.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUILD)/$(a).sapp) tools/mkmimir.py $(SIGIL)/sigil.key
 	dd if=/dev/zero of=$(DISK) bs=512 count=10304 status=none
 	dd if=$(BOOT_SECTOR) of=$(DISK) conv=notrunc status=none
 	dd if=$(STAGE2) of=$(DISK) bs=512 seek=1 conv=notrunc status=none
 	dd if=$(KERNEL_BIN) of=$(DISK) bs=512 seek=17 conv=notrunc status=none
-	$(PYTHON) tools/mkmimir.py $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(APP_BUILD)/$(a).sapp)
+	$(PYTHON) tools/mkmimir.py --sigil-key $(SIGIL)/sigil.key $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(APP_BUILD)/$(a).sapp)
 	test $$(stat -c%s $(DISK)) -eq 5275648
 run-serial: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M -serial tcp:127.0.0.1:4555,server=on,wait=off
@@ -221,9 +231,9 @@ host-test: apps disk
 	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude -o $(BUILD)/diskapps-perm tests/veyra/diskapps_perm_test.c kernel/proc/diskapps.c
 	./$(BUILD)/diskapps-perm $(APP_BUILD)/jail.sapp 0x01 $(APP_BUILD)/lumen.sapp 0x20 $(APP_BUILD)/locus.sapp 0x2C $(APP_BUILD)/keystone.sapp 0x60
 	$(PYTHON) tests/tools/test_gen_app_table.py
-	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude -o $(BUILD)/mimir-test tests/fs/mimir_test.c kernel/fs/mimir.c kernel/crypto/sha256.c kernel/storage/block.c
+	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude -o $(BUILD)/mimir-test tests/fs/mimir_test.c kernel/fs/mimir.c kernel/crypto/sha256.c kernel/crypto/sha512.c kernel/crypto/ed25519.c kernel/storage/block.c
 	./$(BUILD)/mimir-test
-	./$(BUILD)/mimir-test $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) jail.sapp=$(APP_BUILD)/jail.sapp lumen.sapp=$(APP_BUILD)/lumen.sapp wardprobe.sapp=$(APP_BUILD)/wardprobe.sapp
+	./$(BUILD)/mimir-test $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) jail.sapp=$(APP_BUILD)/jail.sapp lumen.sapp=$(APP_BUILD)/lumen.sapp wardprobe.sapp=$(APP_BUILD)/wardprobe.sapp $(SIGIL)/sigil-pub.bin
 test: disk host-test
 	$(PYTHON) tests/qemu/test_shell.py
 	$(PYTHON) tests/qemu/test_desktop.py

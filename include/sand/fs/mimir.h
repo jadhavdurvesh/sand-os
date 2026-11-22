@@ -20,9 +20,16 @@
 #define MIMIR_FILES 32u
 #define MIMIR_E_CORRUPT (-2)
 
+/* SIGIL: the factory manifest "factory.sigil" is signed at build time (Ed25519). mimir_stat reports, per file:
+ * MIMIR_F_FACTORY = content and labels exactly as signed, MIMIR_F_DRIFT = listed in the manifest but changed since. */
+#define MIMIR_F_FACTORY 2u
+#define MIMIR_F_DRIFT 4u
+#define MIMIR_SIGIL_NONE 0u      /* no factory.sigil in the volume (or no key built in) */
+#define MIMIR_SIGIL_VALID 1u     /* signature checks out against the key built into the kernel */
+#define MIMIR_SIGIL_INVALID 2u   /* present but unsigned, malformed or signed by another key: nothing is trusted */
 struct mimir_info { uint32_t size, version, read_perm, write_perm, chunks, flags; uint8_t id[32]; };
 struct mimir_ver  { uint32_t version, size, flags, reserved; uint8_t id[32]; };
-struct mimir_seal { uint32_t generation, tide, epoch, used_blocks, tide_blocks, files, versions, reserved; uint8_t chain[32]; };
+struct mimir_seal { uint32_t generation, tide, epoch, used_blocks, tide_blocks, files, versions, sigil;   /* sigil: MIMIR_SIGIL_* state */ uint8_t chain[32]; };
 struct mimir_scrub { uint32_t blocks, bad, first_bad, reserved; };
 
 int mimir_format(uint32_t device_index, uint32_t start_lba, uint32_t sector_count);
@@ -44,5 +51,9 @@ int mimir_scrub(struct mimir_scrub *out);
 int mimir_ebb(void);
 /* WARDS: the file "ward.rules" (itself a versioned, hash-chained MIMIR file) lists "<name or *suffix> <read mask> <write mask>" lines;
  * a new file whose name matches takes those labels. Returns 1 and fills the masks when a rule matches, else 0. */
+/* Provided by the embedder: the 32-byte Ed25519 public key that signs factory.sigil (NULL = none). */
+const uint8_t *mimir_sigil_pubkey(void);
+/* Counts of files listed in the signed manifest: still intact, changed since, no longer present. Returns the MIMIR_SIGIL_* state. */
+uint32_t mimir_sigil_summary(uint32_t *listed, uint32_t *intact, uint32_t *changed, uint32_t *missing);
 int mimir_ward_lookup(const char *name, uint32_t *read_perm, uint32_t *write_perm);
 #endif
