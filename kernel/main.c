@@ -11,6 +11,7 @@
 #include "sand/mm/heap.h"
 #include "sand/mm/memory_map.h"
 #include "sand/arch/x86/ata_pio.h"
+#include "sand/storage/bifrost.h"
 #include "sand/fs/mimir.h"
 #include "sand/security/oath.h"
 #include "sand/arch/x86/vbe.h"
@@ -232,6 +233,8 @@ void kernel_main(void) {
     for(uint32_t i=0;i<storage_length;++i) if(storage_readback[i]!=storage_message[i]) { debug_text("SAND_TEST:M6_VERIFY_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     debug_text("SAND_TEST:M6_ATA_IDENTIFY_PASS\n");
     drivers_storage_report();
+    if(bifrost_init()>0) debug_text(bifrost_self_test(0u)==0?"SAND_TEST:M13_BIFROST_PASS\n":"SAND_TEST:M13_BIFROST_FAIL\n"); else debug_text("SAND_TEST:M13_BIFROST_NONE\n");
+    if(bifrost_seed_present(0u)) debug_text("SAND_TEST:M13_BIFROST_SEED_READ\n");
     debug_text("SAND_TEST:M6_MIMIR_FORMAT_PASS\n");
     { uint32_t sg=mimir_sigil_summary(0,0,0,0); debug_text(sg==MIMIR_SIGIL_VALID?"SAND_TEST:M6_SIGIL_VALID\n":sg==MIMIR_SIGIL_INVALID?"SAND_TEST:M6_SIGIL_INVALID\n":"SAND_TEST:M6_SIGIL_NONE\n"); }
     debug_text("SAND_TEST:M6_FILE_READ_WRITE_PASS\n");

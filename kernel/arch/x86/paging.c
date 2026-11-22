@@ -12,6 +12,10 @@
 #define USER_DIRECTORY_LAST 768u
 static uint32_t kernel_directory[PAGE_DIRECTORY_ENTRIES] __attribute__((aligned(4096)));
 static uint32_t identity_tables[IDENTITY_TABLE_COUNT][PAGE_TABLE_ENTRIES] __attribute__((aligned(4096)));
+/* Static page table for the kernel MMIO window at 0xF0000000 (device registers, e.g. BIFROST's AHCI controller). It exists from
+ * paging_init on, so every address space created afterwards shares it and later mappings need no new table. */
+#define MMIO_WINDOW_DIRECTORY_INDEX 960u
+static uint32_t mmio_table[PAGE_TABLE_ENTRIES] __attribute__((aligned(4096)));
 static uint32_t active_directory;
 static int paging_active;
 static void zero_words(uint32_t *memory,uint32_t count) { for(uint32_t i=0;i<count;++i) memory[i]=0u; }
@@ -42,6 +46,7 @@ int paging_init(void) {
         }
         kernel_directory[t]=(uint32_t)&identity_tables[t][0]|PAGE_PRESENT|PAGE_WRITABLE;
     }
+    kernel_directory[MMIO_WINDOW_DIRECTORY_INDEX]=(uint32_t)&mmio_table[0]|PAGE_PRESENT|PAGE_WRITABLE;
     active_directory=(uint32_t)&kernel_directory[0];
     __asm__ volatile("mov %0, %%cr3"::"r"(active_directory):"memory");
     uint32_t cr0; __asm__ volatile("mov %%cr0,%0":"=r"(cr0));
