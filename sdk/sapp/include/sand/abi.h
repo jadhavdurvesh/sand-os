@@ -77,9 +77,9 @@ enum sand_syscall_number {
 #define SAND_E_CORRUPT (-10)  /* MIMIR: a stored block no longer matches its hash; the data is not returned */
 
 /* MIMIR (SAND's filesystem) ABI structures; layout identical to include/sand/fs/mimir.h. */
-struct sand_fsstat  { uint32_t size, version, read_perm, write_perm, chunks, flags; uint8_t id[32]; };
+struct sand_fsstat  { uint32_t size, version, read_perm, write_perm, chunks, flags; uint8_t id[32]; };   /* flags: 2 = unchanged since the signed factory manifest, 4 = listed there but changed */
 struct sand_fsver   { uint32_t version, size, flags, reserved; uint8_t id[32]; };   /* flags bit 0: this version deleted the file */
-struct sand_fsseal  { uint32_t generation, tide, epoch, used_blocks, tide_blocks, files, versions, reserved; uint8_t chain[32]; };
+struct sand_fsseal  { uint32_t generation, tide, epoch, used_blocks, tide_blocks, files, versions, sigil; uint8_t chain[32]; };   /* sigil: 0 none, 1 signed factory manifest valid, 2 invalid */
 struct sand_fsscrub { uint32_t blocks, bad, first_bad, reserved; };
 struct sand_netinfo { uint8_t mac[6]; uint8_t ip[4]; uint8_t gateway[4]; uint8_t mask[4]; uint32_t rx_frames; uint32_t tx_frames; uint32_t flags; };   /* flags bit 0: address came from DHCP */
 struct sand_udp { uint32_t ip; uint16_t src_port; uint16_t dst_port; uint32_t length; uint8_t data[512]; };

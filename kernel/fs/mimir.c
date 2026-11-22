@@ -1,6 +1,7 @@
 #include "sand/fs/mimir.h"
 #include "sand/storage/block.h"
 #include "sand/crypto/sha256.h"
+#include "sand/crypto/ed25519.h"
 
 /* MIMIR on-disk format (see docs/MIMIR.md). All integers are little-endian.
  *  block   = 8 sectors = 4096 bytes. Block 0 of the volume holds the two seals (sector 0 = slot 0, sector 1 = slot 1).
@@ -24,7 +25,7 @@
 #define SECTORS_MAX (BLOCK_SECTORS * (1u + 2u * TIDE_MAX))
 #define FLAG_TOMBSTONE 1u
 
-struct rec { uint16_t block; uint8_t file; uint8_t flags; uint16_t chunks; uint16_t pad; uint32_t version, size, read_perm, write_perm; uint8_t id[32]; };
+struct rec { uint16_t block; uint8_t file; uint8_t flags; uint16_t chunks; uint16_t pad; uint32_t version, size, read_perm, write_perm; uint8_t id[32]; uint8_t content[32]; };
 struct file { char name[MIMIR_NAME_MAX]; int16_t head; uint8_t used; };
 
 static const struct sand_block_device *dev;
@@ -43,7 +44,8 @@ static uint8_t in_block[BLOCK_BYTES];     /* chunk / generic reads */
 static uint8_t rune_block[BLOCK_BYTES];   /* rune record being read */
 static uint8_t rune_new[BLOCK_BYTES];     /* rune payload being built */
 static uint8_t new_ids[CHUNKS_MAX][32];
-static void wards_refresh(void);
+static void policy_refresh(void);
+static void policy_remount(void);
 
 static uint32_t get32(const uint8_t *p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
 static void put32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24); }
@@ -94,6 +96,7 @@ static int rune_register(uint32_t block, const uint8_t *p, uint32_t len, const u
     struct rec *r = &recs[rec_total];
     r->block = (uint16_t)block; r->file = (uint8_t)slot; r->flags = (uint8_t)flags; r->chunks = (uint16_t)nchunks; r->pad = 0u;
     r->version = version; r->size = size; r->read_perm = rp; r->write_perm = wp; copy(r->id, id, 32u);
+    sand_sha256(p + RUNE_FIXED, 32u * nchunks, r->content);   /* content id: hash of the chunk ids, i.e. of the file data */
     files[slot].head = (int16_t)rec_total; ++rec_total;
     return 0;
 }
@@ -167,7 +170,7 @@ static int mount_device(void) {
     vol_sectors = get32(b + 20); tide_blocks = geometry(vol_sectors); generation = best_gen; active = get32(b + 12); epoch = get32(b + 24);
     uint8_t head[32]; copy(head, b + 32, 32u);
     if(load_state(active, get32(b + 16)) != 0 || !same(chain, head, 32u)) { state_clear(); dev = 0; return -1; }
-    wards_refresh();
+    policy_remount();
     return 0;
 }
 int mimir_mount(uint32_t device_index, uint32_t start_lba) {
@@ -233,6 +236,85 @@ int mimir_ward_lookup(const char *name, uint32_t *read_perm, uint32_t *write_per
         if(hit) { if(read_perm) *read_perm = wards[i].read_perm; if(write_perm) *write_perm = wards[i].write_perm; return 1; }
     }
     return 0;
+}
+
+/* SIGIL: "factory.sigil" is a text manifest signed at build time:
+ *   MIMIR-SIGIL 1\n  then one "<name> <content id hex> <read mask> <write mask>\n" per factory file,  then  "sig <128 hex>\n".
+ * The signature covers "MIMIR-SIGIL-V1\0" plus every byte before the "sig" line. The content id is SHA-256 of the file's chunk ids, so it
+ * survives versions, ebbs and the log chain being rebuilt; it changes when the file's data or labels change.
+ * Integrity of factory files is thereby anchored in a key the kernel carries, not just in the (rewritable) hash chain. */
+#define SIGIL_FILE "factory.sigil"
+#define SIGIL_MAX 32u
+struct sigil_entry { char name[MIMIR_NAME_MAX]; uint8_t content[32]; uint32_t read_perm, write_perm; };
+static struct sigil_entry sigil_entries[SIGIL_MAX];
+static uint32_t sigil_total, sigil_state, sigil_have;
+static uint8_t sigil_id[32];
+static int hex_bytes(const uint8_t *p, uint32_t count, uint8_t *out) {
+    for(uint32_t i = 0; i < count; ++i) {
+        uint32_t v = 0u;
+        for(uint32_t k = 0; k < 2u; ++k) { uint8_t c = p[2u * i + k]; uint32_t d = c >= '0' && c <= '9' ? (uint32_t)(c - '0') : c >= 'a' && c <= 'f' ? (uint32_t)(c - 'a' + 10) : 16u; if(d > 15u) return -1; v = v * 16u + d; }
+        out[i] = (uint8_t)v;
+    }
+    return 0;
+}
+static int sigil_parse_and_verify(const uint8_t *t, uint32_t len) {
+    static const char head[] = "MIMIR-SIGIL 1\n"; static const uint8_t domain[] = "MIMIR-SIGIL-V1";
+    const uint8_t *key = mimir_sigil_pubkey();
+    uint32_t i = sizeof(head) - 1u; sigil_total = 0u;
+    if(key == 0 || len < i || !same(t, (const uint8_t *)head, i)) return -1;
+    for(;;) {
+        if(i >= len) return -1;
+        uint32_t e = i; while(e < len && t[e] != '\n') ++e;
+        if(e >= len) return -1;
+        if(e - i == 4u + 128u && t[i] == 's' && t[i + 1u] == 'i' && t[i + 2u] == 'g' && t[i + 3u] == ' ') {
+            uint8_t sig[64];
+            if(hex_bytes(t + i + 4u, 64u, sig) != 0 || e + 1u != len) return -1;
+            return sand_ed25519_verify2(sig, key, domain, sizeof(domain), t, i) == 1 ? 0 : -1;   /* the NUL after "V1" is part of the domain */
+        }
+        const uint8_t *tok[4]; const uint8_t *tend[4]; uint32_t n = 0u, p = i;
+        while(p < e && n < 4u) { while(p < e && t[p] == ' ') ++p; if(p >= e) break; tok[n] = t + p; while(p < e && t[p] != ' ') ++p; tend[n++] = t + p; }
+        if(n != 4u || sigil_total >= SIGIL_MAX || tend[1] - tok[1] != 64) return -1;
+        struct sigil_entry *s = &sigil_entries[sigil_total];
+        uint32_t nl = (uint32_t)(tend[0] - tok[0]); if(nl == 0u || nl >= MIMIR_NAME_MAX) return -1;
+        zero(s->name, MIMIR_NAME_MAX); copy(s->name, tok[0], nl);
+        if(!valid_name(s->name) || hex_bytes(tok[1], 32u, s->content) != 0 || wards_number(tok[2], tend[2], &s->read_perm) != 0 || wards_number(tok[3], tend[3], &s->write_perm) != 0) return -1;
+        ++sigil_total; i = e + 1u;
+    }
+}
+static void sigil_refresh(void) {
+    static uint8_t text[4097]; uint32_t len = 0u;
+    int f = file_find(SIGIL_FILE), h = f >= 0 ? files[f].head : -1;
+    if(h < 0 || (recs[h].flags & FLAG_TOMBSTONE)) { sigil_state = MIMIR_SIGIL_NONE; sigil_total = 0u; sigil_have = 0u; return; }
+    if(sigil_have && same(sigil_id, recs[h].id, 32u)) return;
+    copy(sigil_id, recs[h].id, 32u); sigil_have = 1u; sigil_total = 0u;
+    if(mimir_sigil_pubkey() == 0) { sigil_state = MIMIR_SIGIL_NONE; return; }
+    if(recs[h].size > 4096u || mimir_read(SIGIL_FILE, text, 4096u, &len) != 0 || sigil_parse_and_verify(text, len) != 0) { sigil_total = 0u; sigil_state = MIMIR_SIGIL_INVALID; return; }
+    sigil_state = MIMIR_SIGIL_VALID;
+}
+static void policy_refresh(void) { wards_refresh(); sigil_refresh(); }
+static void policy_remount(void) { ward_have = 0u; sigil_have = 0u; policy_refresh(); }   /* a (re)mount judges the policy files afresh */
+static uint32_t sigil_flags(const struct rec *r) {
+    if(sigil_state != MIMIR_SIGIL_VALID) return 0u;
+    for(uint32_t i = 0; i < sigil_total; ++i) {
+        if(!name_eq(sigil_entries[i].name, files[r->file].name)) continue;
+        return same(sigil_entries[i].content, r->content, 32u) && sigil_entries[i].read_perm == r->read_perm && sigil_entries[i].write_perm == r->write_perm ? MIMIR_F_FACTORY : MIMIR_F_DRIFT;
+    }
+    return 0u;
+}
+uint32_t mimir_sigil_summary(uint32_t *listed, uint32_t *intact, uint32_t *changed, uint32_t *missing) {
+    uint32_t l = 0u, a = 0u, c = 0u, m = 0u;
+    if(dev != 0 && sigil_state == MIMIR_SIGIL_VALID) {
+        for(uint32_t i = 0; i < sigil_total; ++i) {
+            ++l; int f = file_find(sigil_entries[i].name);
+            if(f < 0 || files[f].head < 0 || (recs[files[f].head].flags & FLAG_TOMBSTONE)) { ++m; continue; }
+            if(sigil_flags(&recs[files[f].head]) == MIMIR_F_FACTORY) ++a; else ++c;
+        }
+    }
+    if(listed) *listed = l;
+    if(intact) *intact = a;
+    if(changed) *changed = c;
+    if(missing) *missing = m;
+    return dev != 0 ? sigil_state : MIMIR_SIGIL_NONE;
 }
 
 static int file_find(const char *name) {
@@ -343,7 +425,7 @@ static int write_common(const char *name, const void *data, uint32_t length, int
         }
         uint32_t version = head >= 0 ? recs[head].version + 1u : 1u;
         if(rune_append(name, version, length, rp, wp, 0u, nchunks, &new_ids[0][0], head >= 0 ? recs[head].id : 0) != 0 || seal_commit() != 0) { reload(); return -1; }
-        wards_refresh();
+        policy_refresh();
         return 0;
     }
     return -1;
@@ -385,7 +467,7 @@ static int new_version(int h, uint32_t flags, uint32_t rp, uint32_t wp, int copy
     uint8_t parent[32]; copy(parent, head->id, 32u);
     char name[MIMIR_NAME_MAX]; copy(name, files[head->file].name, MIMIR_NAME_MAX);
     if(rune_append(name, head->version + 1u, size, rp, wp, flags, n, ids, parent) != 0 || seal_commit() != 0) { reload(); return -1; }
-    wards_refresh();
+    policy_refresh();
     return 0;
 }
 static int mutate(const char *name, int kind, uint32_t a, uint32_t b) {
@@ -410,7 +492,7 @@ int mimir_set_labels(const char *name, uint32_t read_perm, uint32_t write_perm) 
 int mimir_stat(const char *name, struct mimir_info *out) {
     int h = live_head(name); if(h < 0 || out == 0) return -1;
     const struct rec *r = &recs[h];
-    out->size = r->size; out->version = r->version; out->read_perm = r->read_perm; out->write_perm = r->write_perm; out->chunks = r->chunks; out->flags = r->flags; copy(out->id, r->id, 32u);
+    out->size = r->size; out->version = r->version; out->read_perm = r->read_perm; out->write_perm = r->write_perm; out->chunks = r->chunks; out->flags = r->flags | sigil_flags(r); copy(out->id, r->id, 32u);
     return 0;
 }
 int mimir_history(const char *name, uint32_t index, struct mimir_ver *out) {
@@ -426,7 +508,7 @@ int mimir_history(const char *name, uint32_t index, struct mimir_ver *out) {
 }
 int mimir_seal_info(struct mimir_seal *out) {
     if(dev == 0 || out == 0) return -1;
-    out->generation = generation; out->tide = active; out->epoch = epoch; out->used_blocks = tail; out->tide_blocks = tide_blocks; out->reserved = 0u;
+    out->generation = generation; out->tide = active; out->epoch = epoch; out->used_blocks = tail; out->tide_blocks = tide_blocks; out->sigil = dev != 0 ? sigil_state : 0u;
     out->files = 0u; for(uint32_t i = 0; i < MIMIR_FILES; ++i) if(files[i].used && files[i].head >= 0 && !(recs[files[i].head].flags & FLAG_TOMBSTONE)) ++out->files;
     out->versions = rec_total; copy(out->chain, chain, 32u);
     return 0;

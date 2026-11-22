@@ -13,6 +13,8 @@ static int ram_write(uint32_t lba, const uint8_t *b) { if(lba >= ram_sectors || 
 static const struct sand_block_device disk = { "ram", 0, ram_read, ram_write };
 static struct sand_block_device mutable_disk;
 static int failures;
+static uint8_t sigil_key[32];
+const uint8_t *mimir_sigil_pubkey(void) { return sigil_key; }
 #define CHECK(c) do { if(!(c)) { printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #c); ++failures; } } while(0)
 
 static void fresh(void) { memset(ram, 0, (size_t)ram_sectors * 512u); writes_left = -1; CHECK(mimir_format(0, base_lba, SECTORS) == 0); CHECK(mimir_mount(0, base_lba) == 0); }
@@ -80,6 +82,14 @@ static void test_wards(void) {
     CHECK(mimir_remove("ward.rules") == 0); CHECK(mimir_ward_lookup("q.sapp", &rp, &wp) == 0);
     static char big[2000]; memset(big, ' ', sizeof(big)); memcpy(big, "*.sapp 0 1\n", 12);
     CHECK(mimir_write("ward.rules", big, sizeof(big)) == 0); CHECK(mimir_ward_lookup("q.sapp", &rp, &wp) == 0);   /* oversized rules grant nothing */
+}
+static void test_sigil_without_key(void) {
+    fresh(); CHECK(mimir_sigil_summary(0, 0, 0, 0) == MIMIR_SIGIL_NONE);
+    memset(sigil_key, 7, 32);
+    CHECK(mimir_write("factory.sigil", "MIMIR-SIGIL 1\nnot signed\n", 25) == 0); CHECK(mimir_sigil_summary(0, 0, 0, 0) == MIMIR_SIGIL_INVALID);   /* unsigned or wrongly signed */
+    CHECK(mimir_write("factory.sigil", "garbage", 7) == 0); CHECK(mimir_sigil_summary(0, 0, 0, 0) == MIMIR_SIGIL_INVALID);
+    CHECK(mimir_remove("factory.sigil") == 0); CHECK(mimir_sigil_summary(0, 0, 0, 0) == MIMIR_SIGIL_NONE);
+    memset(sigil_key, 0, 32);
 }
 static void test_remount_and_seal(void) {
     static uint8_t a[20000]; fill(a, sizeof(a), 5); fresh(); CHECK(mimir_write("a", a, sizeof(a)) == 0); CHECK(mimir_write("b", "bb", 2) == 0);
@@ -157,12 +167,34 @@ static int image_check(int argc, char **argv) {
     mutable_disk = disk; mutable_disk.sector_count = ram_sectors; (void)mutable_disk;
     uint32_t start = (uint32_t)strtoul(argv[2], 0, 0);
     CHECK(mimir_mount(0, start) == 0);
+    for(int i = 4; i < argc; ++i) {   /* an argument without '=' is the raw 32-byte sigil public key */
+        if(!strchr(argv[i], '=')) { FILE *k = fopen(argv[i], "rb"); if(!k || fread(sigil_key, 1, 32, k) != 32) { perror("sigil key"); return 1; } fclose(k); }
+    }
+    CHECK(mimir_mount(0, start) == 0);   /* remount so the sigil is judged with the key now loaded */
     for(int i = 4; i < argc; ++i) {
         char *eq = strchr(argv[i], '='); if(!eq) continue; *eq = 0; FILE *g = fopen(eq + 1, "rb"); if(!g) { perror(eq + 1); return 1; }
         static uint8_t want[MIMIR_FILE_MAX]; size_t n = fread(want, 1, sizeof(want), g); fclose(g);
         CHECK(read_eq(argv[i], want, (uint32_t)n));
         struct mimir_info in; CHECK(mimir_stat(argv[i], &in) == 0 && in.version == 1u);
         if(strstr(argv[i], ".sapp")) CHECK(in.write_perm == 0x80);
+    }
+    { uint32_t listed, intact, changed, missing;
+      CHECK(mimir_sigil_summary(&listed, &intact, &changed, &missing) == MIMIR_SIGIL_VALID && listed == intact && changed == 0 && missing == 0 && listed >= 4u);
+      struct mimir_info si; CHECK(mimir_stat("jail.sapp", &si) == 0 && (si.flags & MIMIR_F_FACTORY) && !(si.flags & MIMIR_F_DRIFT));
+      struct mimir_seal ss; CHECK(mimir_seal_info(&ss) == 0 && ss.sigil == MIMIR_SIGIL_VALID);
+      CHECK(mimir_write("jail.sapp", "tampered", 8) == 0);                                   /* a new version of a factory file is drift */
+      CHECK(mimir_stat("jail.sapp", &si) == 0 && (si.flags & MIMIR_F_DRIFT) && !(si.flags & MIMIR_F_FACTORY));
+      CHECK(mimir_sigil_summary(&listed, &intact, &changed, &missing) == MIMIR_SIGIL_VALID && changed == 1u);
+      CHECK(mimir_rollback("jail.sapp", 1) == 0); CHECK(mimir_stat("jail.sapp", &si) == 0 && (si.flags & MIMIR_F_FACTORY));   /* same data and labels again: sealed again */
+      CHECK(mimir_set_labels("lumen.sapp", 0, 0) == 0); CHECK(mimir_stat("lumen.sapp", &si) == 0 && (si.flags & MIMIR_F_DRIFT));   /* label changes count too */
+      CHECK(mimir_remove("wardprobe.sapp") == 0); CHECK(mimir_sigil_summary(&listed, &intact, &changed, &missing) == MIMIR_SIGIL_VALID && missing == 1u);
+      CHECK(mimir_ebb() == 0); CHECK(mimir_stat("jail.sapp", &si) == 0 && (si.flags & MIMIR_F_FACTORY));                 /* an ebb keeps the seal: ids are content addresses */
+      static uint8_t sg[4096]; uint32_t sl; CHECK(mimir_read("factory.sigil", sg, sizeof(sg), &sl) == 0);
+      sg[20] ^= 1; CHECK(mimir_write("factory.sigil", sg, sl) == 0);                                                      /* any edit to the manifest breaks the signature */
+      CHECK(mimir_sigil_summary(&listed, &intact, &changed, &missing) == MIMIR_SIGIL_INVALID && listed == 0u);
+      CHECK(mimir_stat("jail.sapp", &si) == 0 && !(si.flags & (MIMIR_F_FACTORY | MIMIR_F_DRIFT)));                         /* an invalid sigil vouches for nothing */
+      CHECK(mimir_rollback("factory.sigil", 1) == 0); CHECK(mimir_sigil_summary(&listed, &intact, &changed, &missing) == MIMIR_SIGIL_VALID);   /* and rolling it back restores trust */
+      CHECK(mimir_remove("factory.sigil") == 0); CHECK(mimir_sigil_summary(0, 0, 0, 0) == MIMIR_SIGIL_NONE);
     }
     { uint32_t r, w; CHECK(mimir_ward_lookup("any.sapp", &r, &w) == 1 && w == 0x80); CHECK(mimir_ward_lookup("system.cfg", &r, &w) == 1 && w == 0x40); }   /* the image ships the default wards */
     struct mimir_scrub sc; CHECK(mimir_scrub(&sc) == 0 && sc.bad == 0 && sc.blocks > 0);
@@ -174,6 +206,6 @@ int main(int argc, char **argv) {
     mutable_disk = disk; mutable_disk.sector_count = ram_sectors;
     if(block_register(&mutable_disk) != 0) return 2;
     if(argc >= 4) return image_check(argc, argv);
-    test_basic(); test_versions(); test_labels(); test_wards(); test_remount_and_seal(); test_corruption(); test_torn_writes(); test_ebb(); test_crash_during_ebb();
+    test_basic(); test_versions(); test_labels(); test_wards(); test_sigil_without_key(); test_remount_and_seal(); test_corruption(); test_torn_writes(); test_ebb(); test_crash_during_ebb();
     printf("mimir host tests: %s\n", failures ? "FAILED" : "ok"); free(ram); return failures != 0;
 }

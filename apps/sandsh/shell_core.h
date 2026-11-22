@@ -42,7 +42,7 @@ static void cmd_help(void)
         {"echo <text>", "print text"},
         {"clear", "clear the screen"},
         {"ls", "list files on MIMIR"},
-        {"mimir [sub]", "seal | stat f | log f | undo f v | verify | ebb | label f r w"},
+        {"mimir [sub]", "seal | sigil | stat f | log f | undo f v | verify | ebb | label f r w"},
         {"install", "install <name>: store an app sent as hex lines"},
         {"cat <file>", "print a file"},
         {"write <file> <text>", "create or replace a file"},
@@ -183,6 +183,22 @@ static void cmd_mimir(int argc, char **argv)
         out(C_ACCENT "MIMIR" C_RESET " generation "); sh_putu(s.generation); out("  tide "); sh_putu(s.tide); out("  epoch "); sh_putu(s.epoch);
         out("  blocks "); sh_putu(s.used_blocks); out("/"); sh_putu(s.tide_blocks); out("  files "); sh_putu(s.files); out("  versions "); sh_putu(s.versions); out("\n");
         out("  chain "); put_hex(s.chain, 32); out("\n");
+        out("  sigil "); out(s.sigil == 1 ? C_GOOD "valid (factory manifest signed)" C_RESET : s.sigil == 2 ? C_BAD "INVALID (nothing is vouched for)" C_RESET : C_MUTED "none" C_RESET); out("\n");
+    } else if (!strcmp(sub, "sigil")) {
+        struct sand_fsseal s; struct sand_dirent de; uint32_t sealed = 0, drift = 0, user = 0;
+        if (sand_fs_seal(&s) != 0) { out(C_BAD "mimir: no volume" C_RESET "\n"); return; }
+        if (s.sigil != 1) { out(s.sigil == 2 ? C_BAD "sigil INVALID: the factory manifest does not verify; no file is vouched for" C_RESET "\n" : C_MUTED "no factory sigil in this volume" C_RESET "\n"); return; }
+        for (uint32_t i = 0; sand_fs_list(i, &de) == 0; ++i) {
+            struct sand_fsstat st;
+            if (sand_fs_stat(de.name, &st) != 0) continue;
+            out("  "); out(de.name);
+            if (st.flags & 2u) { out(C_GOOD "  sealed" C_RESET); ++sealed; }
+            else if (st.flags & 4u) { out(C_WARN "  CHANGED since the factory image" C_RESET); ++drift; }
+            else if (!strcmp(de.name, "factory.sigil")) out(C_MUTED "  (the signed manifest itself)" C_RESET);
+            else { out(C_MUTED "  user file" C_RESET); ++user; }
+            out("\n");
+        }
+        sh_putu(sealed); out(" sealed, "); sh_putu(drift); out(" changed, "); sh_putu(user); out(" user files\n");
     } else if (!strcmp(sub, "stat") && argc > 2) {
         struct sand_fsstat st;
         if (sand_fs_stat(argv[2], &st) != 0) { out(C_BAD "mimir: no such file: " C_RESET); out(argv[2]); out("\n"); return; }

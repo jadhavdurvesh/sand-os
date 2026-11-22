@@ -232,6 +232,7 @@ void kernel_main(void) {
     debug_text("SAND_TEST:M6_ATA_IDENTIFY_PASS\n");
     drivers_storage_report();
     debug_text("SAND_TEST:M6_MIMIR_FORMAT_PASS\n");
+    { uint32_t sg=mimir_sigil_summary(0,0,0,0); debug_text(sg==MIMIR_SIGIL_VALID?"SAND_TEST:M6_SIGIL_VALID\n":sg==MIMIR_SIGIL_INVALID?"SAND_TEST:M6_SIGIL_INVALID\n":"SAND_TEST:M6_SIGIL_NONE\n"); }
     debug_text("SAND_TEST:M6_FILE_READ_WRITE_PASS\n");
     if(sapp_loader_self_test()!=0) { debug_text("SAND_TEST:SAPP_LOADER_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     debug_text("SAND_TEST:SAPP_NATIVE_LOADER_PASS\n");

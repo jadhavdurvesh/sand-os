@@ -105,6 +105,25 @@ class MimirTest(unittest.TestCase):
         self.assertRegex(self.cmd("mimir log ward.rules"), r"v1 ")                      # the rules have history like any file
 
 
+    def test_06_sigil_factory_manifest(self):
+        self.assertIn("SAND_TEST:M6_SIGIL_VALID", self.vm.debug_log())
+        self.assertIn("sigil valid", self.cmd("mimir seal"))
+        listing = self.cmd("mimir sigil")
+        self.assertRegex(listing, r"jail\.sapp\s+sealed")
+        self.assertRegex(listing, r"ward\.rules\s+sealed")
+        self.cmd("write note.txt not a factory file")
+        self.assertRegex(self.cmd("mimir sigil"), r"note\.txt\s+user file")
+        self.cmd("write lumen.sapp replaced by somebody")                      # system.install holder replaces a factory app
+        self.assertRegex(self.cmd("mimir sigil"), r"lumen\.sapp\s+CHANGED since the factory image")
+        self.assertIn("restored lumen.sapp", self.cmd("mimir undo lumen.sapp 1"))
+        self.assertRegex(self.cmd("mimir sigil"), r"lumen\.sapp\s+sealed")      # same bytes and labels again
+        self.cmd("write factory.sigil forged manifest")                          # an edited manifest cannot verify
+        self.assertIn("INVALID", self.cmd("mimir seal"))
+        self.assertIn("no file is vouched for", self.cmd("mimir sigil"))
+        self.assertIn("restored factory.sigil", self.cmd("mimir undo factory.sigil 1"))
+        self.assertIn("sigil valid", self.cmd("mimir seal"))
+        self.cmd("rm note.txt")
+
 
 class MimirBitRotTest(unittest.TestCase):
     def test_flipped_bit_is_detected_not_returned(self):
