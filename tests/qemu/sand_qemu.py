@@ -14,7 +14,8 @@ import time
 
 
 class SandVM:
-    def __init__(self, image, extra_disks=(), memory="128M", workdir=None, nic=None, ahci_disks=()):
+    def __init__(self, image, extra_disks=(), memory="128M", workdir=None, nic=None, ahci_disks=(), boot_ahci=False):
+        self.boot_ahci = boot_ahci
         self.ahci_disks = list(ahci_disks)
         self.image = image
         self.extra_disks = list(extra_disks)
@@ -34,14 +35,20 @@ class SandVM:
             if os.path.exists(path):
                 os.unlink(path)
         s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
-        cmd = ["qemu-system-i386", "-machine", "pc", "-m", self.memory,
-               "-drive", f"file={self.image},format=raw,if=ide,index=0"]
+        cmd = ["qemu-system-i386", "-machine", "pc", "-m", self.memory]
+        if self.boot_ahci:                       # the boot image itself sits behind the AHCI controller (no IDE disk at all)
+            cmd += ["-device", "ich9-ahci,id=ahci", "-drive", f"file={self.image},format=raw,if=none,id=bootsata",
+                    "-device", "ide-hd,drive=bootsata,bus=ahci.0,bootindex=0"]
+        else:
+            cmd += ["-drive", f"file={self.image},format=raw,if=ide,index=0"]
         for i, disk in enumerate(self.extra_disks, start=1):
             cmd += ["-drive", f"file={disk},format=raw,if=ide,index={i}"]
         if self.ahci_disks:
-            cmd += ["-device", "ich9-ahci,id=ahci"]
+            if not self.boot_ahci:
+                cmd += ["-device", "ich9-ahci,id=ahci"]
+            first = 1 if self.boot_ahci else 0
             for i, disk in enumerate(self.ahci_disks):
-                cmd += ["-drive", f"file={disk},format=raw,if=none,id=sata{i}", "-device", f"ide-hd,drive=sata{i},bus=ahci.{i}"]
+                cmd += ["-drive", f"file={disk},format=raw,if=none,id=sata{i}", "-device", f"ide-hd,drive=sata{i},bus=ahci.{first + i}"]
         if self.nic:
             cmd += ["-nic", self.nic]
         cmd += ["-display", "none", "-no-reboot",

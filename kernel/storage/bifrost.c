@@ -158,3 +158,4 @@ int bifrost_seed_present(uint32_t index) {
     for (uint32_t i = 0; i + 1u < sizeof(seed); ++i) if (b[i] != (uint8_t)seed[i]) return 0;
     return 1;
 }
+uint32_t bifrost_disk_count(void) { return disk_total; }

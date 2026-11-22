@@ -24,10 +24,10 @@ def make_disk(path):
 
 
 class BifrostTest(unittest.TestCase):
-    def boot(self, tmp, ahci):
+    def boot(self, tmp, ahci, boot_ahci=False):
         img = os.path.join(tmp, "os.img")
         shutil.copyfile(IMAGE, img)
-        vm = SandVM(img, ahci_disks=ahci).start()
+        vm = SandVM(img, ahci_disks=ahci, boot_ahci=boot_ahci).start()
         self.assertTrue(vm.wait_marker("SAND_TEST:M9_SHELL_STARTED", 60), vm.debug_log()[-500:])
         return vm
 
@@ -46,6 +46,28 @@ class BifrostTest(unittest.TestCase):
             data = open(disk, "rb").read()
             self.assertEqual(data[-512:], LAST_ORIG)                          # pattern written, read back, then restored
             self.assertTrue(data.startswith(b"BIFROST-SEED"))
+
+    def test_boot_and_store_from_sata(self):
+        """No IDE disk at all: SeaBIOS boots the image from the AHCI disk, the kernel finds the MIMIR store there, apps run."""
+        with tempfile.TemporaryDirectory() as tmp:
+            vm = self.boot(tmp, [], boot_ahci=True)
+            try:
+                log = vm.debug_log()
+                self.assertIn("SAND_TEST:M13_SATA_BOOT_DISK", log)
+                self.assertIn("SAND_TEST:M13_BIFROST_STORE_DISK_UNTOUCHED", log)
+                self.assertIn("SAND_TEST:M6_MIMIR_FORMAT_PASS", log)
+                self.assertIn("exited with status 0", vm.run_command("run jail", 20))       # a disk app loaded from the store on SATA
+                self.assertIn("sealed", vm.run_command("mimir sigil"))
+                vm.run_command("write sata.txt stored-on-sata")
+                self.assertIn("stored-on-sata", vm.run_command("cat sata.txt"))
+            finally:
+                vm.stop()
+            vm = SandVM(os.path.join(tmp, "os.img"), boot_ahci=True).start()                  # reboot the same SATA image: the write was durable
+            try:
+                self.assertTrue(vm.wait_marker("SAND_TEST:M9_SHELL_STARTED", 60))
+                self.assertIn("stored-on-sata", vm.run_command("cat sata.txt"))
+            finally:
+                vm.stop()
 
     def test_no_controller_is_not_an_error(self):
         with tempfile.TemporaryDirectory() as tmp:
