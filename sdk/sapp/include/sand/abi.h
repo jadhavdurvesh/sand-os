@@ -8,7 +8,7 @@
  *
  * Calling convention (x86-32): int 0x80, number in EAX, arguments in
  * EBX, ECX, EDX, result in EAX. Negative results are errors. */
-#define SAND_ABI_VERSION 12u
+#define SAND_ABI_VERSION 13u
 
 enum sand_syscall_number {
     SAND_SYS_EXIT = 1,        /* exit(status)                         */
@@ -60,6 +60,7 @@ enum sand_syscall_number {
     SAND_SYS_FS_SEAL = 45,       /* fs_seal(sand_fsseal*) -> 0: the volume's generation, tide, epoch, usage and hash-chain head */
     SAND_SYS_FS_SCRUB = 46,      /* fs_scrub(sand_fsscrub*) -> 0: rechecks every stored block and the chain; reports damaged blocks */
     SAND_SYS_FS_LABEL = 47,      /* fs_label(name, read_perm, write_perm) -> 0: sets the Veyra labels (SAND_PERM_* masks) a caller must hold; needs system.install */
+    SAND_SYS_FS_LIST_EX = 49,    /* fs_list_ex(index, sand_dirent_ex*) -> 0, SAND_E_NOENT past the end: names up to 47 characters; FS_LIST (24-byte names) skips longer ones */
     SAND_SYS_FS_EBB = 48,        /* fs_ebb() -> 0: copies the live files into the other tide (frees space, drops old history) */
     SAND_SYS_NET_UDP_RECV = 35,  /* net_udp_recv(port, sand_udp*) -> 1 datagram, 0 none (non-blocking); the first call binds the port */
 };
@@ -151,6 +152,8 @@ struct sand_blit { const uint32_t *pixels; int32_t x, y, w, h, scale; };
 
 #define SAND_NAME_MAX 24u
 struct sand_dirent { char name[SAND_NAME_MAX]; uint32_t length; };
+#define SAND_NAME_MAX_EX 48u
+struct sand_dirent_ex { char name[SAND_NAME_MAX_EX]; uint32_t length; };   /* MIMIR names may be up to 47 characters ("/" makes branches) */
 struct sand_sysinfo {
     uint32_t abi_version, ticks, tick_hz;
     uint32_t free_frames, total_frames, heap_used;

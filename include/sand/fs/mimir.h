@@ -15,7 +15,7 @@
  *  - Veyra labels: every file version carries a read mask and a write mask of SAND_PERM_* bits that a caller must hold.
  * Layout and byte formats: docs/MIMIR.md. tools/mkmimir.py writes the same format.
  */
-#define MIMIR_NAME_MAX 24u
+#define MIMIR_NAME_MAX 48u   /* 47 printable ASCII characters; "/" is an ordinary character that gives names a branch structure */
 #define MIMIR_FILE_MAX 262144u
 #define MIMIR_FILES 32u
 #define MIMIR_E_CORRUPT (-2)

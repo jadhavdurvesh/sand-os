@@ -19,8 +19,16 @@
 #define MAGIC_RUNE 0x4E55524Du   /* "MRUN" */
 #define TIDE_MAX 512u
 #define RECS_MAX 192u
-#define CHUNKS_MAX 123u          /* (4016 - 80) / 32 chunk ids fit in one rune record */
-#define RUNE_FIXED 80u
+/* rune payload: name[MIMIR_NAME_MAX] then version size read_perm write_perm flags nchunks (u32 each), parent id (32), chunk ids (32 each) */
+#define R_VERSION (MIMIR_NAME_MAX)
+#define R_SIZE (MIMIR_NAME_MAX + 4u)
+#define R_READ (MIMIR_NAME_MAX + 8u)
+#define R_WRITE (MIMIR_NAME_MAX + 12u)
+#define R_FLAGS (MIMIR_NAME_MAX + 16u)
+#define R_NCHUNKS (MIMIR_NAME_MAX + 20u)
+#define R_PARENT (MIMIR_NAME_MAX + 24u)
+#define RUNE_FIXED (MIMIR_NAME_MAX + 56u)
+#define CHUNKS_MAX 122u          /* (4016 - 104) / 32 chunk ids fit in one rune record */
 #define SECTORS_MIN 80u
 #define SECTORS_MAX (BLOCK_SECTORS * (1u + 2u * TIDE_MAX))
 #define FLAG_TOMBSTONE 1u
@@ -82,7 +90,7 @@ static void state_clear(void) {
 static int rune_register(uint32_t block, const uint8_t *p, uint32_t len, const uint8_t id[32]) {
     char name[MIMIR_NAME_MAX]; copy(name, p, MIMIR_NAME_MAX);
     if(len < RUNE_FIXED || name[MIMIR_NAME_MAX - 1u] != '\0' || !valid_name(name) || rec_total >= RECS_MAX) return -1;
-    uint32_t version = get32(p + 24), size = get32(p + 28), rp = get32(p + 32), wp = get32(p + 36), flags = get32(p + 40), nchunks = get32(p + 44);
+    uint32_t version = get32(p + R_VERSION), size = get32(p + R_SIZE), rp = get32(p + R_READ), wp = get32(p + R_WRITE), flags = get32(p + R_FLAGS), nchunks = get32(p + R_NCHUNKS);
     if(nchunks > CHUNKS_MAX || len != RUNE_FIXED + 32u * nchunks || flags > FLAG_TOMBSTONE || version == 0u || size > MIMIR_FILE_MAX) return -1;
     if(nchunks != (size + PAYLOAD_MAX - 1u) / PAYLOAD_MAX) return -1;
     if((flags & FLAG_TOMBSTONE) != 0u && size != 0u) return -1;
@@ -185,7 +193,7 @@ static void reload(void) { if(dev != 0 && mount_device() != 0) dev = 0; }   /* d
 /* WARDS: "ward.rules" is an ordinary MIMIR file (so it has history, rollback and a hash chain); its lines give new files default labels. */
 #define WARDS_MAX 8u
 #define WARD_FILE "ward.rules"
-struct ward { char pattern[MIMIR_NAME_MAX]; uint8_t suffix; uint32_t read_perm, write_perm; };
+struct ward { char pattern[MIMIR_NAME_MAX]; uint8_t suffix, prefix; uint32_t read_perm, write_perm; };
 static struct ward wards[WARDS_MAX];
 static uint32_t ward_total, ward_have;
 static uint8_t ward_id[32];
@@ -208,9 +216,10 @@ static void wards_parse(const uint8_t *t, uint32_t len) {
         const uint8_t *tok[3]; const uint8_t *tend[3]; uint32_t n = 0u, p = i;
         while(p < e && n < 3u) { while(p < e && (t[p] == ' ' || t[p] == '\t' || t[p] == '\r')) ++p; if(p >= e) break; tok[n] = t + p; while(p < e && t[p] != ' ' && t[p] != '\t' && t[p] != '\r') ++p; tend[n++] = t + p; }
         if(n == 3u && tok[0][0] != '#') {
-            struct ward w; uint32_t plen = (uint32_t)(tend[0] - tok[0]), skip = tok[0][0] == '*' ? 1u : 0u;
+            struct ward w; uint32_t plen = (uint32_t)(tend[0] - tok[0]), skip = tok[0][0] == '*' ? 1u : 0u, tail_star = (plen > 1u && tok[0][plen - 1u] == '*' && !skip) ? 1u : 0u;
+            plen -= tail_star;                                    /* a trailing star ("branch/" + star) matches everything under the branch */
             if(plen > skip && plen - skip < MIMIR_NAME_MAX && wards_number(tok[1], tend[1], &w.read_perm) == 0 && wards_number(tok[2], tend[2], &w.write_perm) == 0) {
-                zero(w.pattern, MIMIR_NAME_MAX); copy(w.pattern, tok[0] + skip, plen - skip); w.suffix = (uint8_t)skip;
+                zero(w.pattern, MIMIR_NAME_MAX); copy(w.pattern, tok[0] + skip, plen - skip); w.suffix = (uint8_t)skip; w.prefix = (uint8_t)tail_star;
                 wards[ward_total++] = w;
             }
         }
@@ -232,7 +241,10 @@ int mimir_ward_lookup(const char *name, uint32_t *read_perm, uint32_t *write_per
     uint32_t nlen = 0u; while(name[nlen] != '\0') ++nlen;
     for(uint32_t i = 0; i < ward_total; ++i) {
         uint32_t plen = 0u; while(wards[i].pattern[plen] != '\0') ++plen;
-        int hit = wards[i].suffix ? (nlen >= plen && name_eq(name + (nlen - plen), wards[i].pattern)) : name_eq(name, wards[i].pattern);
+        int hit;
+        if(wards[i].suffix) hit = nlen >= plen && name_eq(name + (nlen - plen), wards[i].pattern);
+        else if(wards[i].prefix) { hit = nlen >= plen; for(uint32_t k = 0; hit && k < plen; ++k) if(name[k] != wards[i].pattern[k]) hit = 0; }
+        else hit = name_eq(name, wards[i].pattern);
         if(hit) { if(read_perm) *read_perm = wards[i].read_perm; if(write_perm) *write_perm = wards[i].write_perm; return 1; }
     }
     return 0;
@@ -348,8 +360,8 @@ static int rune_append(const char *name, uint32_t version, uint32_t size, uint32
     uint32_t len = RUNE_FIXED + 32u * nchunks; uint8_t id[32];
     zero(rune_new, BLOCK_BYTES);
     for(uint32_t i = 0; name[i] != '\0' && i < MIMIR_NAME_MAX - 1u; ++i) rune_new[i] = (uint8_t)name[i];
-    put32(rune_new + 24, version); put32(rune_new + 28, size); put32(rune_new + 32, rp); put32(rune_new + 36, wp); put32(rune_new + 40, flags); put32(rune_new + 44, nchunks);
-    if(parent) copy(rune_new + 48, parent, 32u);
+    put32(rune_new + R_VERSION, version); put32(rune_new + R_SIZE, size); put32(rune_new + R_READ, rp); put32(rune_new + R_WRITE, wp); put32(rune_new + R_FLAGS, flags); put32(rune_new + R_NCHUNKS, nchunks);
+    if(parent) copy(rune_new + R_PARENT, parent, 32u);
     if(nchunks) copy(rune_new + RUNE_FIXED, ids, 32u * nchunks);
     sand_sha256(rune_new, len, id);
     uint32_t block = tail;
@@ -368,7 +380,7 @@ static int ebb_run(void) {
     for(uint32_t k = 0; k < lives; ++k) {
         uint32_t len;
         if(block_check(old_tide, live[k], rune_block, &len) != MAGIC_RUNE) return -1;
-        uint32_t nchunks = get32(rune_block + HDR_BYTES + 44);
+        uint32_t nchunks = get32(rune_block + HDR_BYTES + R_NCHUNKS);
         static uint8_t keep[RUNE_FIXED + 32u * CHUNKS_MAX]; uint8_t rid[32]; copy(keep, rune_block + HDR_BYTES, len);
         for(uint32_t c = 0; c < nchunks; ++c) {
             const uint8_t *cid = keep + RUNE_FIXED + 32u * c;
@@ -451,11 +463,13 @@ int mimir_read(const char *name, void *data, uint32_t capacity, uint32_t *length
     *length_out = r->size; return 0;
 }
 int mimir_list(uint32_t ordinal, char *name_out, uint32_t name_capacity, uint32_t *length_out) {
-    if(dev == 0 || name_out == 0 || name_capacity < MIMIR_NAME_MAX || length_out == 0) return -1;
+    if(dev == 0 || name_out == 0 || name_capacity == 0u || length_out == 0) return -1;
     for(uint32_t i = 0; i < MIMIR_FILES; ++i) {
         if(!files[i].used || files[i].head < 0 || (recs[files[i].head].flags & FLAG_TOMBSTONE)) continue;
+        uint32_t nl = 0u; while(files[i].name[nl] != '\0') ++nl;
+        if(nl >= name_capacity) continue;           /* an old caller's small buffer cannot hold this name: skip it (FS_LIST_EX sees all) */
         if(ordinal-- != 0u) continue;
-        copy(name_out, files[i].name, MIMIR_NAME_MAX); *length_out = recs[files[i].head].size; return 0;
+        copy(name_out, files[i].name, nl + 1u); *length_out = recs[files[i].head].size; return 0;
     }
     return -1;
 }

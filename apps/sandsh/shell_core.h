@@ -41,7 +41,7 @@ static void cmd_help(void)
         {"version", "kernel / ABI / shell versions"},
         {"echo <text>", "print text"},
         {"clear", "clear the screen"},
-        {"ls", "list files on MIMIR"},
+        {"ls [branch/]", "list files on MIMIR (\"/\" in a name makes branches)"},
         {"mimir [sub]", "seal | sigil | stat f | log f | undo f v | verify | ebb | label f r w"},
         {"install", "install <name>: store an app sent as hex lines"},
         {"cat <file>", "print a file"},
@@ -76,14 +76,27 @@ static void cmd_version(void)
     if (sand_sysinfo(&si) == 0) { out("syscall ABI v"); sh_putu(si.abi_version); out("\n"); }
 }
 
-static void cmd_ls(void)
+/* ls [branch/]: MIMIR has no directory objects; a branch is just a name prefix ending in "/". Names below the branch are listed,
+ * and deeper branches are shown once as "name/" with a file count. */
+static void cmd_ls(const char *branch)
 {
-    struct sand_dirent e;
-    uint32_t n = 0;
-    for (uint32_t i = 0; sand_fs_list(i, &e) == 0; ++i) {
-        out("  " C_ACCENT); out(e.name); pad(strlen(e.name), 26); out(C_RESET);
+    struct sand_dirent_ex e;
+    static char seen[8][48]; static uint32_t seen_n[8];
+    uint32_t n = 0, groups = 0, plen = strlen(branch);
+    for (uint32_t i = 0; sand_fs_list_ex(i, &e) == 0; ++i) {
+        if (strncmp(e.name, branch, plen) != 0) continue;
+        const char *rest = e.name + plen; uint32_t slash = 0;
+        while (rest[slash] && rest[slash] != '/') ++slash;
+        if (rest[slash] == '/' && slash > 0) {
+            uint32_t g = 0; while (g < groups && (strncmp(seen[g], rest, slash + 1) != 0 || seen[g][slash + 1] != '\0')) ++g;
+            if (g == groups && groups < 8) { for (uint32_t k = 0; k <= slash; ++k) seen[g][k] = rest[k]; seen[g][slash + 1] = '\0'; seen_n[g] = 0; ++groups; }
+            if (g < 8) ++seen_n[g];
+            continue;
+        }
+        out("  " C_ACCENT); out(rest); pad(strlen(rest), 26); out(C_RESET);
         sh_putu(e.length); out(" bytes\n"); ++n;
     }
+    for (uint32_t g = 0; g < groups; ++g) { out("  " C_WARN); out(seen[g]); pad(strlen(seen[g]), 26); out(C_RESET "branch, "); sh_putu(seen_n[g]); out(seen_n[g] == 1 ? " file\n" : " files\n"); ++n; }
     if (n == 0) out(C_MUTED "  (no files)" C_RESET "\n");
 }
 
@@ -185,10 +198,10 @@ static void cmd_mimir(int argc, char **argv)
         out("  chain "); put_hex(s.chain, 32); out("\n");
         out("  sigil "); out(s.sigil == 1 ? C_GOOD "valid (factory manifest signed)" C_RESET : s.sigil == 2 ? C_BAD "INVALID (nothing is vouched for)" C_RESET : C_MUTED "none" C_RESET); out("\n");
     } else if (!strcmp(sub, "sigil")) {
-        struct sand_fsseal s; struct sand_dirent de; uint32_t sealed = 0, drift = 0, user = 0;
+        struct sand_fsseal s; struct sand_dirent_ex de; uint32_t sealed = 0, drift = 0, user = 0;
         if (sand_fs_seal(&s) != 0) { out(C_BAD "mimir: no volume" C_RESET "\n"); return; }
         if (s.sigil != 1) { out(s.sigil == 2 ? C_BAD "sigil INVALID: the factory manifest does not verify; no file is vouched for" C_RESET "\n" : C_MUTED "no factory sigil in this volume" C_RESET "\n"); return; }
-        for (uint32_t i = 0; sand_fs_list(i, &de) == 0; ++i) {
+        for (uint32_t i = 0; sand_fs_list_ex(i, &de) == 0; ++i) {
             struct sand_fsstat st;
             if (sand_fs_stat(de.name, &st) != 0) continue;
             out("  "); out(de.name);
@@ -477,7 +490,7 @@ static int execute(char *line)
         out(p); out("\n");
     }
     else if (!strcmp(c, "clear")) out("\x1b[2J\x1b[H");
-    else if (!strcmp(c, "ls")) cmd_ls();
+    else if (!strcmp(c, "ls")) cmd_ls(argc > 1 ? argv[1] : "");
     else if (!strcmp(c, "install")) cmd_install(argc > 1 ? argv[1] : "");
     else if (!strcmp(c, "cat")) { if (argc < 2) out(C_WARN "usage: cat <file>" C_RESET "\n"); else cmd_cat(argv[1]); }
     else if (!strcmp(c, "write")) cmd_write(argv, argc, raw);
