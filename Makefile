@@ -23,7 +23,7 @@ MIMIR_SECTORS := 8192
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
 APP_OBJECTS := $(foreach a,$(EMBEDDED_APPS),$(APP_BUILD)/$(a)-image.o)
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/appinstall.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/mimir.o $(BUILD)/sigil-key.o $(BUILD)/sigil-pub.o $(BUILD)/tideway.o $(BUILD)/driftnet.o $(BUILD)/veyra-registry.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/oath.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/appinstall.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/bifrost.o $(BUILD)/mimir.o $(BUILD)/sigil-key.o $(BUILD)/sigil-pub.o $(BUILD)/tideway.o $(BUILD)/driftnet.o $(BUILD)/veyra-registry.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/oath.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
 .PHONY: run-serial all clean kernel disk run check apps test ui-preview
 apps: $(foreach a,$(APPS),$(APP_BUILD)/$(a).sapp)
 $(APP_BUILD):
@@ -116,6 +116,8 @@ $(BUILD)/user-space.o: kernel/user/user_space.c include/sand/kernel/user.h inclu
 $(BUILD)/process.o: kernel/proc/process.c include/sand/kernel/process.h include/sand/kernel/perms.h include/sand/arch/x86/paging.h include/sand/arch/x86/gdt.h $(ABI_H) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/block.o: kernel/storage/block.c include/sand/storage/block.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/bifrost.o: kernel/storage/bifrost.c include/sand/storage/bifrost.h include/sand/storage/block.h include/sand/arch/x86/paging.h include/sand/drivers/device.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/ata-pio.o: kernel/arch/x86/ata_pio.c include/sand/arch/x86/ata_pio.h include/sand/storage/block.h include/sand/drivers/device.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -254,6 +256,7 @@ test: disk host-test signed-images
 	$(PYTHON) tests/qemu/test_net.py
 	$(PYTHON) tests/qemu/test_mimir.py
 	$(PYTHON) tests/qemu/test_oath.py
+	$(PYTHON) tests/qemu/test_bifrost.py
 ui-preview:
 	$(CC) -O2 -Wall -Iinclude -Isdk/sapp/include -o $(BUILD)/ui_preview tools/ui_preview.c kernel/graphics/ui.c kernel/graphics/ui_wall.c kernel/graphics/gfx.c kernel/graphics/font.c kernel/graphics/font_data.c
 	./$(BUILD)/ui_preview $(BUILD)/ui.ppm

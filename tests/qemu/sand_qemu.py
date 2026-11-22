@@ -14,7 +14,8 @@ import time
 
 
 class SandVM:
-    def __init__(self, image, extra_disks=(), memory="128M", workdir=None, nic=None):
+    def __init__(self, image, extra_disks=(), memory="128M", workdir=None, nic=None, ahci_disks=()):
+        self.ahci_disks = list(ahci_disks)
         self.image = image
         self.extra_disks = list(extra_disks)
         self.memory = memory
@@ -37,6 +38,10 @@ class SandVM:
                "-drive", f"file={self.image},format=raw,if=ide,index=0"]
         for i, disk in enumerate(self.extra_disks, start=1):
             cmd += ["-drive", f"file={disk},format=raw,if=ide,index={i}"]
+        if self.ahci_disks:
+            cmd += ["-device", "ich9-ahci,id=ahci"]
+            for i, disk in enumerate(self.ahci_disks):
+                cmd += ["-drive", f"file={disk},format=raw,if=none,id=sata{i}", "-device", f"ide-hd,drive=sata{i},bus=ahci.{i}"]
         if self.nic:
             cmd += ["-nic", self.nic]
         cmd += ["-display", "none", "-no-reboot",
