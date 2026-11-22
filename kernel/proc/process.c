@@ -155,7 +155,10 @@ static int sapp_ranges_overlap(uint32_t a,uint32_t alen,uint32_t b,uint32_t blen
 }
 int process_create_sapp(const char *name,const void *image,uint32_t image_size,sand_pid_t *pid_out) {
     if(name==0 || image==0 || pid_out==0 || image_size<SAPP_HEADER_SIZE) return -1;
-    if(sand_launch_gate(name,image,image_size)!=0) return -1;       /* nothing is parsed, mapped or run before the gate allows it */
+    { const uint8_t *builtin; uint32_t builtin_size;   /* apps embedded in the kernel image are covered by the kernel's own integrity: same bytes, same pointer */
+      if(apps_find(name,&builtin,&builtin_size)==0 && builtin==(const uint8_t *)image && builtin_size==image_size) sand_audit("LAUNCH_BUILTIN");
+      else if(sand_launch_gate(name,image,image_size)!=0) return -1;   /* nothing else is parsed, mapped or run before the gate allows it */
+    }
     const uint8_t *bytes=(const uint8_t *)image;
     const struct sapp_header *h=(const struct sapp_header *)bytes;
     /* v2: the signature block (already verified by the gate) sits after every payload; v1: no signature fields */

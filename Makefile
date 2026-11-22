@@ -23,7 +23,7 @@ MIMIR_SECTORS := 8192
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
 APP_OBJECTS := $(foreach a,$(EMBEDDED_APPS),$(APP_BUILD)/$(a)-image.o)
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/appinstall.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/mimir.o $(BUILD)/sigil-key.o $(BUILD)/sigil-pub.o $(BUILD)/tideway.o $(BUILD)/driftnet.o $(BUILD)/veyra-registry.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/appinstall.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/mimir.o $(BUILD)/sigil-key.o $(BUILD)/sigil-pub.o $(BUILD)/tideway.o $(BUILD)/driftnet.o $(BUILD)/veyra-registry.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/oath.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
 .PHONY: run-serial all clean kernel disk run check apps test ui-preview
 apps: $(foreach a,$(APPS),$(APP_BUILD)/$(a).sapp)
 $(APP_BUILD):
@@ -179,6 +179,8 @@ $(BUILD)/sha256.o: kernel/crypto/sha256.c include/sand/crypto/sha256.h | $(BUILD
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/launch-gate.o: kernel/security/launch_gate.c include/sand/security/launch_gate.h include/sand/security/stci.h include/sand/arch/x86/rtc.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/oath.o: kernel/security/oath.c include/sand/security/oath.h include/sand/security/launch_gate.h include/sand/fs/mimir.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/stci-gate.o: kernel/selftest/stci_gate.c include/sand/security/launch_gate.h include/sand/security/stci.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 # Throw-away test root + publisher, generated per build (never committed, never in the default trust store).
@@ -214,6 +216,17 @@ disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUIL
 	dd if=$(KERNEL_BIN) of=$(DISK) bs=512 seek=17 conv=notrunc status=none
 	$(PYTHON) tools/mkmimir.py --sigil-key $(SIGIL)/sigil.key $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(APP_BUILD)/$(a).sapp)
 	test $$(stat -c%s $(DISK)) -eq 5275648
+# OATH test images: the same disk, but with a signed boot profile (require-signed, one trust root) and v2-signed disk apps.
+OATH_DIR := $(BUILD)/oath
+SIGNED_IMG := $(BUILD)/sand-os-signed.img
+BADOATH_IMG := $(BUILD)/sand-os-badoath.img
+signed-images: disk tools/sapp_sign.py tools/mkmimir.py
+	$(PYTHON) tools/sapp_sign.py init $(OATH_DIR)
+	mkdir -p $(OATH_DIR)/apps
+	for a in $(DISK_APPS); do $(PYTHON) tools/sapp_sign.py sign $(OATH_DIR) $(APP_BUILD)/$$a.sapp $(OATH_DIR)/apps/$$a.sapp; done
+	cp $(DISK) $(SIGNED_IMG) && cp $(DISK) $(BADOATH_IMG)
+	$(PYTHON) tools/mkmimir.py --sigil-key $(SIGIL)/sigil.key --oath require-signed:$(OATH_DIR)/root.pem $(SIGNED_IMG) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(OATH_DIR)/apps/$(a).sapp)
+	$(PYTHON) tools/mkmimir.py --sigil-key $(SIGIL)/sigil.key --oath require-signed:$(OATH_DIR)/root.pem --oath-bad-signature $(BADOATH_IMG) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(OATH_DIR)/apps/$(a).sapp)
 run-serial: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M -serial tcp:127.0.0.1:4555,server=on,wait=off
 
@@ -234,12 +247,13 @@ host-test: apps disk
 	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude -o $(BUILD)/mimir-test tests/fs/mimir_test.c kernel/fs/mimir.c kernel/crypto/sha256.c kernel/crypto/sha512.c kernel/crypto/ed25519.c kernel/storage/block.c
 	./$(BUILD)/mimir-test
 	./$(BUILD)/mimir-test $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) jail.sapp=$(APP_BUILD)/jail.sapp lumen.sapp=$(APP_BUILD)/lumen.sapp wardprobe.sapp=$(APP_BUILD)/wardprobe.sapp $(SIGIL)/sigil-pub.bin
-test: disk host-test
+test: disk host-test signed-images
 	$(PYTHON) tests/qemu/test_shell.py
 	$(PYTHON) tests/qemu/test_desktop.py
 	$(PYTHON) tests/qemu/test_install_tool.py
 	$(PYTHON) tests/qemu/test_net.py
 	$(PYTHON) tests/qemu/test_mimir.py
+	$(PYTHON) tests/qemu/test_oath.py
 ui-preview:
 	$(CC) -O2 -Wall -Iinclude -Isdk/sapp/include -o $(BUILD)/ui_preview tools/ui_preview.c kernel/graphics/ui.c kernel/graphics/ui_wall.c kernel/graphics/gfx.c kernel/graphics/font.c kernel/graphics/font_data.c
 	./$(BUILD)/ui_preview $(BUILD)/ui.ppm

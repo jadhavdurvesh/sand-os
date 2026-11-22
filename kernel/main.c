@@ -12,6 +12,7 @@
 #include "sand/mm/memory_map.h"
 #include "sand/arch/x86/ata_pio.h"
 #include "sand/fs/mimir.h"
+#include "sand/security/oath.h"
 #include "sand/arch/x86/vbe.h"
 #include "sand/graphics/desktop.h"
 #include "sand/storage/block.h"
@@ -250,6 +251,7 @@ void kernel_main(void) {
     /* M7: ring-3 applications run as scheduler threads, each in its own address space. */
     debug_text("SAND_TEST:RING3_ENTER\n");
     if(userland_selftest()!=0) { debug_text("SAND_TEST:M7_USERLAND_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    (void)sand_oath_load();   /* boot profile: provisions the launch gate once the boot self-tests are done */
     sand_framebuffer_t framebuffer;
     int desktop_rc=-1;
     if(vbe_framebuffer_init(&framebuffer)==0 && (desktop_rc=sand_desktop_start(&framebuffer))==0) {
