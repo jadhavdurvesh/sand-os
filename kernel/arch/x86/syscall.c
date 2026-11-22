@@ -27,7 +27,7 @@ enum { R_EDI, R_ESI, R_EBP, R_ESP, R_EBX, R_EDX, R_ECX, R_EAX, R_EIP, R_CS, R_EF
 #define INT80_LENGTH 2u
 #define WRITE_CHUNK 128u
 #define WRITE_LIMIT 4096u
-#define NAME_LIMIT 32u
+#define NAME_LIMIT 64u
 
 static inline void debug_char(char c) { __asm__ volatile ("outb %0, $0xE9" : : "a"(c)); }
 static void debug_text(const char *text) { while(*text) debug_char(*text++); }
@@ -90,7 +90,7 @@ static uint32_t required_permission(uint32_t number,uint32_t a) {
     switch(number) {
     case SAND_SYS_WRITE: return SAND_PERM_CONSOLE_WRITE;
     case SAND_SYS_READ: return SAND_PERM_CONSOLE_READ;
-    case SAND_SYS_FS_READ: case SAND_SYS_FS_LIST: case SAND_SYS_FS_STAT: case SAND_SYS_FS_HISTORY: case SAND_SYS_FS_SEAL: case SAND_SYS_FS_SCRUB: return SAND_PERM_FS_READ;
+    case SAND_SYS_FS_READ: case SAND_SYS_FS_LIST: case SAND_SYS_FS_LIST_EX: case SAND_SYS_FS_STAT: case SAND_SYS_FS_HISTORY: case SAND_SYS_FS_SEAL: case SAND_SYS_FS_SCRUB: return SAND_PERM_FS_READ;
     case SAND_SYS_FS_WRITE: case SAND_SYS_FS_REMOVE: case SAND_SYS_FS_ROLLBACK: case SAND_SYS_FS_EBB: return SAND_PERM_FS_WRITE;
     case SAND_SYS_FS_LABEL: return SAND_PERM_INSTALL;
     case SAND_SYS_SPAWN: return SAND_PERM_SPAWN;
@@ -300,6 +300,11 @@ uint32_t syscall_dispatch(uint32_t frame) {
         result=appinstall_commit(process_current(),name_buffer); break;
     case SAND_SYS_FS_LIST: {
         struct sand_dirent entry; uint32_t length=0u;
+        if(!user_ok(b,sizeof(entry),1)) { result=SAND_E_FAULT; break; }
+        if(mimir_list(a,entry.name,sizeof(entry.name),&length)!=0) { result=SAND_E_NOENT; break; }
+        entry.length=length; (void)copy_out(b,&entry,sizeof(entry)); result=0; break; }
+    case SAND_SYS_FS_LIST_EX: {
+        struct sand_dirent_ex entry; uint32_t length=0u;
         if(!user_ok(b,sizeof(entry),1)) { result=SAND_E_FAULT; break; }
         if(mimir_list(a,entry.name,sizeof(entry.name),&length)!=0) { result=SAND_E_NOENT; break; }
         entry.length=length; (void)copy_out(b,&entry,sizeof(entry)); result=0; break; }

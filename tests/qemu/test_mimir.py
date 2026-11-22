@@ -43,7 +43,7 @@ class MimirTest(unittest.TestCase):
         veyra = self.cmd("veyra")
         self.assertIn("STORE   (MIMIR)", veyra)
         self.assertRegex(veyra, r"0x0106\s+STORE")
-        self.assertIn("ABI v12", self.cmd("version"))
+        self.assertIn("ABI v13", self.cmd("version"))
 
     def test_02_history_rollback_and_noop_rewrite(self):
         for text in ("first draft", "second draft", "third draft"):
@@ -123,6 +123,32 @@ class MimirTest(unittest.TestCase):
         self.assertIn("restored factory.sigil", self.cmd("mimir undo factory.sigil 1"))
         self.assertIn("sigil valid", self.cmd("mimir seal"))
         self.cmd("rm note.txt")
+
+    def test_07_branches_long_names_and_branch_wards(self):
+        for name in ("notes/2026/idea.txt", "notes/2026/plan.txt", "notes/todo.txt"):
+            self.assertIn("saved", self.cmd("write " + name + " x"))
+        long_name = "projects/sand/very-long-file-name-number-1.txt"            # 45 characters
+        self.assertIn("saved", self.cmd("write " + long_name + " long"))
+        self.assertIn("long", self.cmd("cat " + long_name))
+        self.assertNotIn("saved", self.cmd("write " + "z" * 48 + " too long"))
+        top = self.cmd("ls")
+        self.assertRegex(top, r"notes/\s+branch, 3 files")
+        self.assertRegex(top, r"projects/\s+branch, 1 file")
+        inside = self.cmd("ls notes/")
+        self.assertRegex(inside, r"2026/\s+branch, 2 files")
+        self.assertRegex(inside, r"todo\.txt\s+\d+ bytes")
+        self.assertNotIn("idea.txt", inside)
+        self.assertRegex(self.cmd("ls notes/2026/"), r"idea\.txt")
+        self.assertIn("(no files)", self.cmd("ls nothing/"))
+        self.cmd("write ward.rules notes/private/* 0x400 0x0")                 # branch ward: files created there need read bit 0x400 (nobody holds it)
+        self.cmd("write notes/private/key s3cret")
+        self.assertRegex(self.cmd("mimir stat notes/private/key"), r"read 0x400\s+write 0x0")
+        self.assertIn("no such file", self.cmd("cat notes/private/key"))        # the branch's read label hides it from the shell
+        self.assertIn("restored ward.rules", self.cmd("mimir undo ward.rules 1"))
+        self.cmd("mimir label notes/private/key 0 0")
+        for name in ("notes/private/key", "notes/2026/idea.txt", "notes/2026/plan.txt", "notes/todo.txt", long_name):
+            self.cmd("rm " + name)
+        self.assertIn("(no files)", self.cmd("ls notes/"))
 
 
 class MimirBitRotTest(unittest.TestCase):

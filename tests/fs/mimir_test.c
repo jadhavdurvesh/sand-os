@@ -37,6 +37,29 @@ static void test_basic(void) {
     uint8_t tiny[4]; CHECK(mimir_read("a.bin", tiny, 4, &len) != 0);                                              /* capacity too small */
     CHECK(mimir_read("nope", tiny, 4, &len) != 0);
 }
+static void test_branches(void) {
+    fresh();
+    char n47[48], n48[49]; memset(n47, 'a', 47); n47[47] = 0; n47[10] = '/'; memset(n48, 'b', 48); n48[48] = 0;
+    CHECK(mimir_write(n47, "long", 4) == 0); CHECK(mimir_write(n48, "toolong", 7) != 0);                        /* 47 characters fit, 48 do not */
+    CHECK(mimir_write("notes/2026/idea.txt", "i", 1) == 0); CHECK(mimir_write("notes/todo", "t", 1) == 0); CHECK(mimir_write("top.txt", "x", 1) == 0);
+    CHECK(read_eq(n47, (const uint8_t *)"long", 4)); CHECK(read_eq("notes/2026/idea.txt", (const uint8_t *)"i", 1));
+    char small[24]; uint32_t len, shown = 0;
+    while(mimir_list(shown, small, sizeof(small), &len) == 0) ++shown;                                           /* old 24-byte callers skip the long name */
+    CHECK(shown == 3u);
+    char big[MIMIR_NAME_MAX]; uint32_t all = 0; while(mimir_list(all, big, sizeof(big), &len) == 0) ++all;
+    CHECK(all == 4u);
+    const char *rules = "notes/private/* 0x400 0x400\nnotes/* 0 0x2\n";                                         /* branch wards: first match wins */
+    CHECK(mimir_write("ward.rules", rules, (uint32_t)strlen(rules)) == 0);
+    uint32_t rp = 9, wp = 9;
+    CHECK(mimir_ward_lookup("notes/private/key", &rp, &wp) == 1 && rp == 0x400 && wp == 0x400);
+    CHECK(mimir_ward_lookup("notes/other/x", &rp, &wp) == 1 && rp == 0 && wp == 2u);
+    CHECK(mimir_ward_lookup("notes/", &rp, &wp) == 1 && wp == 2u);
+    CHECK(mimir_ward_lookup("notesx", &rp, &wp) == 0 && mimir_ward_lookup("note", &rp, &wp) == 0);              /* the prefix includes the slash */
+    CHECK(mimir_write("notes/private/key", "k", 1) == 0);
+    struct mimir_info in; CHECK(mimir_stat("notes/private/key", &in) == 0 && in.read_perm == 0x400);
+    CHECK(mimir_ebb() == 0); CHECK(read_eq(n47, (const uint8_t *)"long", 4));
+    CHECK(mimir_mount(0, base_lba) == 0); CHECK(read_eq(n47, (const uint8_t *)"long", 4));
+}
 static void test_versions(void) {
     fresh(); static uint8_t v[3][9000];
     for(int i = 0; i < 3; ++i) { fill(v[i], sizeof(v[i]), 10u + (uint32_t)i); CHECK(mimir_write("doc", v[i], sizeof(v[i])) == 0); }
@@ -206,6 +229,6 @@ int main(int argc, char **argv) {
     mutable_disk = disk; mutable_disk.sector_count = ram_sectors;
     if(block_register(&mutable_disk) != 0) return 2;
     if(argc >= 4) return image_check(argc, argv);
-    test_basic(); test_versions(); test_labels(); test_wards(); test_sigil_without_key(); test_remount_and_seal(); test_corruption(); test_torn_writes(); test_ebb(); test_crash_during_ebb();
+    test_basic(); test_branches(); test_versions(); test_labels(); test_wards(); test_sigil_without_key(); test_remount_and_seal(); test_corruption(); test_torn_writes(); test_ebb(); test_crash_during_ebb();
     printf("mimir host tests: %s\n", failures ? "FAILED" : "ok"); free(ram); return failures != 0;
 }
