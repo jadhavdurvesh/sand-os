@@ -82,7 +82,7 @@ class ShellTest(unittest.TestCase):
         self.vm.send("run locusc\r")
         self.assertIsNotNone(self.vm.expect(r"LOCUS.*alpha\.txt", 10, start=mark), self.vm.serial_text[mark:][-400:])
         mark = len(self.vm.serial_text)
-        for _ in range(6):                     # disk apps and m6-test.txt come first; walk down to alpha.txt
+        for _ in range(12):                     # disk apps and m6-test.txt come first; walk down to alpha.txt
             self.vm.send("j")
             if self.vm.expect(r"first-file-body", 2, start=mark) is not None:
                 break

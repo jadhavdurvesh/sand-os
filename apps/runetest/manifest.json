@@ -1,0 +1,1 @@
+{"id":"org.sand.runetest","name":"Rune test","version":"0.1.0","vendor":"SAND","description":"RUNELIB self-check: versions, undo, dedupe, branches, integrity","permissions":["console.write","fs.rw"],"dependencies":[]}
