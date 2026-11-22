@@ -223,8 +223,17 @@ void kernel_main(void) {
     debug_text("SAND_TEST:M5_TERMINATE_DESTROY_PASS\n");
     if(process_activate(first)!=0) { debug_text("SAND_TEST:M5_REACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     debug_text("SAND_TEST:M6_STORAGE_INIT\n");
-    if(ata_pio_init()!=0 || block_count()<1u) { debug_text("SAND_TEST:M6_ATA_INIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
-    if(mimir_mount(0u,SAND_MIMIR_START_LBA)!=0 && (mimir_format(0u,SAND_MIMIR_START_LBA,SAND_MIMIR_SECTORS)!=0 || mimir_mount(0u,SAND_MIMIR_START_LBA)!=0)) { debug_text("SAND_TEST:M6_FORMAT_MOUNT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    (void)ata_pio_init(); (void)bifrost_init();
+    if(block_count()<1u) { debug_text("SAND_TEST:M6_ATA_INIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    /* The store lives on whichever disk the BIOS booted from, ATA or SATA: pick the first disk whose store seal ("MIMR") is present. */
+    uint32_t store_disk=0u;
+    for(uint32_t d=0u; d<block_count(); ++d) {
+        static uint8_t seal_probe[512]; const struct sand_block_device *bd=block_get(d);
+        if(bd==0 || bd->read(SAND_MIMIR_START_LBA,seal_probe)!=0) continue;
+        if(seal_probe[0]=='M' && seal_probe[1]=='I' && seal_probe[2]=='M' && seal_probe[3]=='R') { store_disk=d; break; }
+    }
+    if(block_get(store_disk)->name[0]=='s') debug_text("SAND_TEST:M13_SATA_BOOT_DISK\n");
+    if(mimir_mount(store_disk,SAND_MIMIR_START_LBA)!=0 && (mimir_format(store_disk,SAND_MIMIR_START_LBA,SAND_MIMIR_SECTORS)!=0 || mimir_mount(store_disk,SAND_MIMIR_START_LBA)!=0)) { debug_text("SAND_TEST:M6_FORMAT_MOUNT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     static const char storage_message[]="SAND native storage read/write verified";
     char storage_readback[64]; uint32_t storage_length=0u;
     if(mimir_write("m6-test.txt",storage_message,sizeof(storage_message))!=0 ||
@@ -233,8 +242,15 @@ void kernel_main(void) {
     for(uint32_t i=0;i<storage_length;++i) if(storage_readback[i]!=storage_message[i]) { debug_text("SAND_TEST:M6_VERIFY_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     debug_text("SAND_TEST:M6_ATA_IDENTIFY_PASS\n");
     drivers_storage_report();
-    if(bifrost_init()>0) debug_text(bifrost_self_test(0u)==0?"SAND_TEST:M13_BIFROST_PASS\n":"SAND_TEST:M13_BIFROST_FAIL\n"); else debug_text("SAND_TEST:M13_BIFROST_NONE\n");
-    if(bifrost_seed_present(0u)) debug_text("SAND_TEST:M13_BIFROST_SEED_READ\n");
+    { /* the self-test writes (and restores) a sector, so it never runs on the disk that holds the store */
+      uint32_t tested=0u, sata_total=bifrost_disk_count(); const char *store_name=block_get(store_disk)->name;
+      for(uint32_t i=0u;i<sata_total;++i) {
+          const struct sand_block_device *bd=0; for(uint32_t d=0u; d<block_count(); ++d) { const struct sand_block_device *c=block_get(d); if(c && c->name[0]=='s' && c->name[4]==(char)('0'+i)) bd=c; }
+          if(bd==0 || bd->name==store_name) continue;
+          debug_text(bifrost_self_test(i)==0?"SAND_TEST:M13_BIFROST_PASS\n":"SAND_TEST:M13_BIFROST_FAIL\n"); ++tested;
+          if(bifrost_seed_present(i)) debug_text("SAND_TEST:M13_BIFROST_SEED_READ\n");
+      }
+      if(sata_total==0u) debug_text("SAND_TEST:M13_BIFROST_NONE\n"); else if(tested==0u) debug_text("SAND_TEST:M13_BIFROST_STORE_DISK_UNTOUCHED\n"); }
     debug_text("SAND_TEST:M6_MIMIR_FORMAT_PASS\n");
     { uint32_t sg=mimir_sigil_summary(0,0,0,0); debug_text(sg==MIMIR_SIGIL_VALID?"SAND_TEST:M6_SIGIL_VALID\n":sg==MIMIR_SIGIL_INVALID?"SAND_TEST:M6_SIGIL_INVALID\n":"SAND_TEST:M6_SIGIL_NONE\n"); }
     debug_text("SAND_TEST:M6_FILE_READ_WRITE_PASS\n");

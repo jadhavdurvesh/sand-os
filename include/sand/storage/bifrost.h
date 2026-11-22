@@ -10,4 +10,5 @@ int bifrost_init(void);                      /* number of disks registered; 0 if
  * verifies, then restores the original. 0 on success. */
 int bifrost_self_test(uint32_t index);
 int bifrost_seed_present(uint32_t index);   /* 1 when sector 0 starts with "BIFROST-SEED" (host-seeded test disk) */
+uint32_t bifrost_disk_count(void);
 #endif
