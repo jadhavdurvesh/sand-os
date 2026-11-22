@@ -75,3 +75,21 @@ Kernel API `include/sand/fs/mimir.h`; syscalls 8-11 (read/write/list/remove, now
 - Single CPU, interrupts off, polling ATA PIO; every sector write is synchronous, so writes are slow (a 256 KiB file is 66 blocks of 8 sector writes). A failed update reloads state from disk.
 - A mount failure on a disk that is not MIMIR formats the volume (as the earlier boot code did). Existing SANDFS volumes are not converted: the image builder always writes MIMIR.
 - Evidence is host tests (RAM disk with fault injection, ASan/UBSan) and QEMU; no real hardware.
+
+## OATH boot profile
+
+`boot.oath` is an ordinary MIMIR file (ward `0x0 0x80`, part of the sealed factory manifest) that provisions the STCI launch gate at boot:
+
+```
+MIMIR-OATH 1
+policy require-signed|developer
+root <key-id 64 hex> <ed25519 public key 64 hex>     (up to 8)
+revoke <key-id 64 hex>                               (up to 8)
+sig <128 hex>
+```
+
+The signature (platform key, same as SIGIL) covers `"MIMIR-OATH-V1\0"` plus every byte before the `sig` line. Outcomes, each audited: no file -> `OATH_ABSENT` (developer profile, no roots); valid -> `OATH_LOADED policy=… roots=N rev=M`; invalid -> `OATH_INVALID`, fail closed (require-signed, no roots). Apps embedded in the kernel image are exempt (`LAUNCH_BUILTIN`, pointer-equality with the embedded table); disk apps go through the gate.
+
+Build: `make signed-images` creates `build/sand-os-signed.img` (require-signed, one root, v2-signed disk apps via `tools/sapp_sign.py`) and `build/sand-os-badoath.img` (damaged signature).
+
+Honest limits: the platform key is a throw-away developer key; anyone who can replace kernel and disk can replace it; the profile is read only at boot; the RTC is not a trusted clock for certificate validity; the default image stays on the developer profile; evidence is QEMU/host only.

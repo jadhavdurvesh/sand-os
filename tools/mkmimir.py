@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write a MIMIR volume (seals, chunk and rune records of tide 0) into a disk image.
 
-Usage: mkmimir.py [--sigil-key <ed25519.pem>] <image> <start_lba> <sector_count> <name>=<file>[@<read_perm>,<write_perm>] [...]
+Usage: mkmimir.py [--sigil-key <ed25519.pem>] [--oath <require-signed|developer>:<root.pem>[,<root.pem>...>] [--oath-bad-signature] <image> <start_lba> <sector_count> <name>=<file>[@<read_perm>,<write_perm>] [...]
 Format: docs/MIMIR.md and kernel/fs/mimir.c. Files ending in .sapp get write label 0x80 (system.install)
 unless a label is given, the same rule the kernel's installer applies."""
 import hashlib, struct, subprocess, sys, tempfile
@@ -18,7 +18,8 @@ DEFAULT_WARDS = (b"# MIMIR wards: <name or *suffix> <read mask> <write mask>; fi
                  b"*.sapp 0x0 0x80\n"        # only system.install may create or replace an app
                  b"system.cfg 0x0 0x40\n"    # only settings.write may change the settings file
                  b"ward.rules 0x0 0x80\n"     # and only system.install may change the rules themselves
-                 b"factory.sigil 0x0 0x80\n")
+                 b"factory.sigil 0x0 0x80\n"
+                 b"boot.oath 0x0 0x80\n")
 
 
 def sha(b):
@@ -74,11 +75,36 @@ def sigil(files, key):
         return body + b"sig " + out.read_bytes().hex().encode() + b"\n"
 
 
+def oath(policy, roots, key, bad_signature=False):
+    """Signed boot profile (docs/MIMIR.md, include/sand/security/oath.h): launch policy + STCI trust roots, signed with the platform key."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import stci_fixtures as fx
+    body = b"MIMIR-OATH 1\n" + f"policy {policy}\n".encode()
+    for pem in roots:
+        pub = fx.pub_pem(Path(pem))
+        body += f"root {fx.key_id(pub)} {fx.raw_pub(pub).hex()}\n".encode()
+    with tempfile.TemporaryDirectory() as d:
+        msg, out = Path(d) / "m", Path(d) / "s"
+        msg.write_bytes(b"MIMIR-OATH-V1\0" + body)
+        subprocess.run(["openssl", "pkeyutl", "-sign", "-rawin", "-inkey", key, "-in", str(msg), "-out", str(out)], check=True)
+        sig = bytearray(out.read_bytes())
+        if bad_signature:
+            sig[5] ^= 0x01
+        return body + b"sig " + bytes(sig).hex().encode() + b"\n"
+
+
 def main():
     args = sys.argv[1:]
-    key = None
-    if len(args) >= 2 and args[0] == "--sigil-key":
-        key, args = args[1], args[2:]
+    key, oath_spec, oath_bad = None, None, False
+    while args and args[0].startswith("--"):
+        if args[0] == "--sigil-key" and len(args) >= 2:
+            key, args = args[1], args[2:]
+        elif args[0] == "--oath" and len(args) >= 2:
+            oath_spec, args = args[1], args[2:]
+        elif args[0] == "--oath-bad-signature":
+            oath_bad, args = True, args[1:]
+        else:
+            sys.exit(__doc__)
     sys.argv = [sys.argv[0]] + args
     if len(sys.argv) < 4:
         sys.exit(__doc__)
@@ -96,6 +122,13 @@ def main():
             sys.exit(f"mkmimir: {path}: size {len(data)} outside 1..{FILE_MAX}")
         rp, wp = (int(x, 0) for x in labels.split(",")) if labels else (0, WRITE_INSTALL if name.endswith(".sapp") else 0)   # same result as the default wards
         files.append((name, data, rp, wp))
+    if oath_spec:
+        if not key:
+            sys.exit("mkmimir: --oath needs --sigil-key (the platform key signs the profile)")
+        policy, _, roots = oath_spec.partition(":")
+        if policy not in ("require-signed", "developer"):
+            sys.exit("mkmimir: --oath policy must be require-signed or developer")
+        files.append(("boot.oath", oath(policy, [r for r in roots.split(",") if r], key, oath_bad), 0, WRITE_INSTALL))
     if "ward.rules" not in {f[0] for f in files}:
         files.append(("ward.rules", DEFAULT_WARDS, 0, WRITE_INSTALL))
     if key:
