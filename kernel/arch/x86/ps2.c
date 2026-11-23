@@ -121,6 +121,17 @@ int ps2_input_init(void) {
     if(mouse_ok && irq_install(12u,mouse_irq)!=0) return -1;
     return keyboard_ok?0:-1;
 }
+/* Polled service of the controller for code that runs with interrupts off (the boot splash waiting on the score). */
+void ps2_input_pump(void) {
+    uint32_t flags; __asm__ volatile("pushfl; popl %0; cli":"=r"(flags)::"memory");
+    for(uint32_t guard=0;guard<16u;++guard) {
+        uint8_t status=in_port(PS2_STATUS);
+        if((status&1u)==0u) break;
+        uint8_t data=in_port(PS2_DATA);
+        if((status&0x20u)!=0u) mouse_byte(data); else keyboard_byte(data);
+    }
+    if(flags&0x200u) __asm__ volatile("sti":::"memory");
+}
 int ps2_input_poll(sand_input_event_t *event) {
     if(event==0) return 0;
     uint32_t flags; __asm__ volatile("pushfl; popl %0; cli":"=r"(flags)::"memory");

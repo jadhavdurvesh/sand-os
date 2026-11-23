@@ -2,6 +2,7 @@
 #include "sand/graphics/desktop.h"
 #include "sand/graphics/ui.h"
 #include "sand/graphics/dawn.h"
+#include "sand/audio/gjallar.h"
 #include "sand/arch/x86/input.h"
 #include "sand/arch/x86/rtc.h"
 #include "sand/arch/x86/timer.h"
@@ -109,6 +110,7 @@ static void desktop_thread(void *arg) {
     for (;;) {
         sand_input_event_t e; int moved = 0; int32_t dx = 0, dy = 0; uint8_t buttons = ui.buttons;
         while (ps2_input_poll(&e)) {
+            if ((e.type == SAND_INPUT_KEY && e.pressed) || (e.type == SAND_INPUT_POINTER && e.buttons != 0u)) gjallar_fade_out();   /* the score gives way to the user */
             if (e.type == SAND_INPUT_KEY) {
                 if (e.pressed && e.ascii != 0u && !sand_ui_key(&ui, (uint8_t)e.ascii) && e.ascii < 0x80u) console_input_push((uint8_t)e.ascii);
                 continue;
@@ -119,6 +121,7 @@ static void desktop_thread(void *arg) {
         }
         if (moved || buttons != ui.buttons) { sand_ui_pointer(&ui, dx, dy, buttons); if (++pointer_events == 1u) debug_text("SAND_TEST:M11_POINTER_EVENT\n"); }
         herald_poll();
+        gjallar_service();
         present_frame();
         if (settings_dirty_since && timer_ticks() - settings_dirty_since >= 50u) { settings_dirty_since = 0u; settings_save(); }   /* debounced write, IRQs on */
         __asm__ volatile("sti; hlt");

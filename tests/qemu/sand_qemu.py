@@ -14,7 +14,8 @@ import time
 
 
 class SandVM:
-    def __init__(self, image, extra_disks=(), memory="128M", workdir=None, nic=None, ahci_disks=(), boot_ahci=False):
+    def __init__(self, image, extra_disks=(), memory="128M", workdir=None, nic=None, ahci_disks=(), boot_ahci=False, audio_wav=None):
+        self.audio_wav = audio_wav
         self.boot_ahci = boot_ahci
         self.ahci_disks = list(ahci_disks)
         self.image = image
@@ -49,6 +50,8 @@ class SandVM:
             first = 1 if self.boot_ahci else 0
             for i, disk in enumerate(self.ahci_disks):
                 cmd += ["-drive", f"file={disk},format=raw,if=none,id=sata{i}", "-device", f"ide-hd,drive=sata{i},bus=ahci.{first + i}"]
+        if self.audio_wav:                       # Intel HD Audio, output captured to a WAV file by QEMU's wav backend
+            cmd += ["-audiodev", f"wav,id=snd0,path={self.audio_wav}", "-device", "intel-hda,id=hda", "-device", "hda-output,bus=hda.0,audiodev=snd0"]
         if self.nic:
             cmd += ["-nic", self.nic]
         cmd += ["-display", "none", "-no-reboot",
