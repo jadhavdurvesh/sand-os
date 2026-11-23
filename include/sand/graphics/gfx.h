@@ -24,6 +24,8 @@ void gfx_rrect(gfx_t *g, int32_t x, int32_t y, int32_t w, int32_t h, int32_t r, 
 /* Rounded rectangle with a vertical colour gradient. */
 void gfx_rrect_gradient(gfx_t *g, int32_t x, int32_t y, int32_t w, int32_t h, int32_t r, uint32_t top, uint32_t bottom, uint32_t alpha);
 void gfx_rrect_ring(gfx_t *g, int32_t x, int32_t y, int32_t w, int32_t h, int32_t r, int32_t thickness, uint32_t color, uint32_t alpha);
+/* Scaled blit of straight-alpha 0xAARRGGBB pixels (bilinear), honouring the clip. */
+void gfx_blit_argb(gfx_t *g, const uint32_t *src, int32_t sw, int32_t sh, int32_t x, int32_t y, int32_t dw, int32_t dh, uint32_t alpha);
 void gfx_circle(gfx_t *g, int32_t cx, int32_t cy, int32_t r, uint32_t color, uint32_t alpha);
 void gfx_line(gfx_t *g, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t width16, uint32_t color, uint32_t alpha);
 /* Soft drop shadow outside a rounded rectangle (interior is left untouched). */

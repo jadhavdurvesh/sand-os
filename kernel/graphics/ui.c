@@ -279,6 +279,27 @@ static int top_window(const sand_ui_t *ui) {
     return -1;
 }
 
+/* ---- system icons ---- */
+static const char *const icon_names[9] = { "CITADEL", "CAIRN", "LOCUS", "QUANTA", "CHRONOS", "KEYSTONE", "LUMEN", "System Console", "About SAND" };
+void sand_ui_set_icons(sand_ui_t *ui, const uint32_t *pixels, int32_t count, int32_t size) { ui->icons = pixels; ui->icon_count = count; ui->icon_size = size; }
+static int same_name(const char *a, const char *b) {
+    for (;; ++a, ++b) {
+        char x = *a, y = *b;
+        if (x >= 'a' && x <= 'z') x = (char)(x - 32);
+        if (y >= 'a' && y <= 'z') y = (char)(y - 32);
+        if (x != y) return 0;
+        if (x == 0) return 1;
+    }
+}
+static int icon_index(const sand_ui_t *ui, const char *name) {
+    if (!ui->icons || !name) return -1;
+    for (int i = 0; i < 9 && i < ui->icon_count; ++i) if (same_name(icon_names[i], name)) return i;
+    return -1;
+}
+static void draw_icon(sand_ui_t *ui, int idx, int32_t x, int32_t y, int32_t size) {
+    gfx_blit_argb(&ui->g, ui->icons + (int32_t)idx * ui->icon_size * ui->icon_size, ui->icon_size, ui->icon_size, x, y, size, size, 255u);
+}
+
 /* ---- drawing ---- */
 static void draw_dock(sand_ui_t *ui) {
     gfx_t *g = &ui->g; int32_t dx, dy, dw, dh; dock_rect(ui, &dx, &dy, &dw, &dh);
@@ -299,6 +320,10 @@ static void draw_dock(sand_ui_t *ui) {
             static const int8_t ray[8][4] = { {0,-11,0,-16}, {8,-8,11,-11}, {11,0,16,0}, {8,8,11,11}, {0,11,0,16}, {-8,8,-11,11}, {-11,0,-16,0}, {-8,-8,-11,-11} };
             for (int q = 0; q < 8; ++q) gfx_line(g, x + 27 + ray[q][0], y + 27 + ray[q][1], x + 27 + ray[q][2], y + 27 + ray[q][3], 26, 0xFFE2B0u, (ui->launcher_open && !ui->launcher_menu) ? 255u : 190u);
             if (ui->launcher_open && !ui->launcher_menu) gfx_rrect_ring(g, x, y, c, c, 14, 2, C_CHAMP, 200u);
+        } else if (icon_index(ui, i == 0 ? "System Console" : i == 1 ? "About SAND" : ui->win[i].title_buf) >= 0) {
+            draw_icon(ui, icon_index(ui, i == 0 ? "System Console" : i == 1 ? "About SAND" : ui->win[i].title_buf), x, y, c);
+            if (ui->win[i].visible) gfx_circle(g, x + c / 2, dy + dh - 8, 2, C_CHAMP, 230u);
+            continue;
         } else if (i == 0) {                                   /* System Console: dusk tile, chevron + caret */
             gfx_rrect_gradient(g, x, y, c, c, 14, 0x3A2F6Eu, 0x15112Fu, 255u);
             gfx_line(g, x + 15, y + 17, x + 25, y + 27, 40, C_CHAMP, 255u);
@@ -366,10 +391,14 @@ static void draw_launcher(sand_ui_t *ui) {
         if (launcher_item_at(ui, i, &item) != 0) continue;
         const struct sand_ui_launcher_item *a = &item;
         if (ui->launcher_hover == i) { gfx_rrect(g, x + 8, ry, w - 16, LAUNCHER_ROW - 6, 12, 0x3A3578u, 200u); gfx_rrect_ring(g, x + 8, ry, w - 16, LAUNCHER_ROW - 6, 12, 1, C_CHAMP, 90u); }
-        gfx_rrect_gradient(g, x + 18, ry + 5, 36, 36, 11, a->accent, a->accent2, 255u);
-        char l[2] = { a->glyph, 0 };
-        gfx_text_center(g, &ui->large, x + 36, ry + 32, l, 0xFFFFFFu, 245u);
-        gfx_rrect_ring(g, x + 18, ry + 5, 36, 36, 11, 1, C_LINE, 60u);
+        int ic = icon_index(ui, a->label);
+        if (ic >= 0) draw_icon(ui, ic, x + 18, ry + 5, 36);
+        else {
+            gfx_rrect_gradient(g, x + 18, ry + 5, 36, 36, 11, a->accent, a->accent2, 255u);
+            char l[2] = { a->glyph, 0 };
+            gfx_text_center(g, &ui->large, x + 36, ry + 32, l, 0xFFFFFFu, 245u);
+            gfx_rrect_ring(g, x + 18, ry + 5, 36, 36, 11, 1, C_LINE, 60u);
+        }
         gfx_text(g, &ui->sans_medium, x + 66, ry + 20, a->label, C_TEXT, 255u, 60);
         gfx_text(g, &ui->sans_small, x + 66, ry + 36, a->subtitle, C_MUTED, 255u, 0);
     }

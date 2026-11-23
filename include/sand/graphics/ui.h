@@ -55,7 +55,8 @@ typedef struct sand_ui {
     int32_t drag_win, drag_dx, drag_dy, press_win, hover_ctrl;   /* hover_ctrl = window*4 + control, -1 none */
     uint32_t *blur; int32_t bw, bh;                   /* 1/4-resolution frosted wallpaper */
     uint32_t liveness_seen;
-    int launcher_open, launcher_hover, launcher_menu, hover_start;   /* launcher_menu: opened from the SAND button in the menu bar (Start menu) instead of the dock */
+    int launcher_open, launcher_hover, launcher_menu, hover_start;
+    const uint32_t *icons; int32_t icon_count, icon_size;   /* system icon pack (icons.sip), or none: tiles fall back to drawn gradients */   /* launcher_menu: opened from the SAND button in the menu bar (Start menu) instead of the dock */
     uint8_t accent, reduced_motion, clock24;           /* settings */
     int32_t hover_dock;
     struct sand_ui_rect dirty, cursor_box;
@@ -88,6 +89,8 @@ int sand_ui_win_blit(sand_ui_t *ui, int id, uint32_t owner, const struct sand_bl
 int sand_ui_win_resizable(sand_ui_t *ui, int id, uint32_t owner, int32_t min_w, int32_t min_h);
 /* Keyboard routing: returns 1 when the focused window is an app window and took the key. */
 int sand_ui_key(sand_ui_t *ui, uint8_t ascii);
+/* Install the system icon pack: `count` square images of `size` pixels, straight-alpha 0xAARRGGBB (see tools/icon_pack.py). */
+void sand_ui_set_icons(sand_ui_t *ui, const uint32_t *pixels, int32_t count, int32_t size);
 /* HERALD toast: shows a short notification card under the menu bar for a few seconds. Returns 0, or -1 while one is still showing. */
 int sand_ui_toast(sand_ui_t *ui, const char *source, const char *text, uint32_t hold_ticks);
 int sand_ui_toast_busy(const sand_ui_t *ui);

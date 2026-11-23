@@ -213,12 +213,15 @@ $(BUILD)/sigil-pub.o: $(SIGIL)/sigil-pub.bin
 	cd $(SIGIL) && $(OBJCOPY) -I binary -O elf32-i386 -B i386 sigil-pub.bin ../sigil-pub.o
 $(BUILD)/sigil-key.o: kernel/fs/sigil_key.c include/sand/fs/mimir.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
-disk: $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUILD)/$(a).sapp) tools/mkmimir.py $(SIGIL)/sigil.key
+ICONS := $(BUILD)/icons.sip
+$(ICONS): assets/ui/app-icons.png tools/icon_pack.py | $(BUILD)
+	$(PYTHON) tools/icon_pack.py assets/ui/app-icons.png $@
+disk: $(ICONS) $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUILD)/$(a).sapp) tools/mkmimir.py $(SIGIL)/sigil.key
 	dd if=/dev/zero of=$(DISK) bs=512 count=10304 status=none
 	dd if=$(BOOT_SECTOR) of=$(DISK) conv=notrunc status=none
 	dd if=$(STAGE2) of=$(DISK) bs=512 seek=1 conv=notrunc status=none
 	dd if=$(KERNEL_BIN) of=$(DISK) bs=512 seek=17 conv=notrunc status=none
-	$(PYTHON) tools/mkmimir.py --sigil-key $(SIGIL)/sigil.key $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(APP_BUILD)/$(a).sapp)
+	$(PYTHON) tools/mkmimir.py --sigil-key $(SIGIL)/sigil.key $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(APP_BUILD)/$(a).sapp) icons.sip=$(ICONS)
 	test $$(stat -c%s $(DISK)) -eq 5275648
 # OATH test images: the same disk, but with a signed boot profile (require-signed, one trust root) and v2-signed disk apps.
 OATH_DIR := $(BUILD)/oath
@@ -229,8 +232,8 @@ signed-images: disk tools/sapp_sign.py tools/mkmimir.py
 	mkdir -p $(OATH_DIR)/apps
 	for a in $(DISK_APPS); do $(PYTHON) tools/sapp_sign.py sign $(OATH_DIR) $(APP_BUILD)/$$a.sapp $(OATH_DIR)/apps/$$a.sapp; done
 	cp $(DISK) $(SIGNED_IMG) && cp $(DISK) $(BADOATH_IMG)
-	$(PYTHON) tools/mkmimir.py --sigil-key $(SIGIL)/sigil.key --oath require-signed:$(OATH_DIR)/root.pem $(SIGNED_IMG) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(OATH_DIR)/apps/$(a).sapp)
-	$(PYTHON) tools/mkmimir.py --sigil-key $(SIGIL)/sigil.key --oath require-signed:$(OATH_DIR)/root.pem --oath-bad-signature $(BADOATH_IMG) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(OATH_DIR)/apps/$(a).sapp)
+	$(PYTHON) tools/mkmimir.py --sigil-key $(SIGIL)/sigil.key --oath require-signed:$(OATH_DIR)/root.pem $(SIGNED_IMG) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(OATH_DIR)/apps/$(a).sapp) icons.sip=$(ICONS)
+	$(PYTHON) tools/mkmimir.py --sigil-key $(SIGIL)/sigil.key --oath require-signed:$(OATH_DIR)/root.pem --oath-bad-signature $(BADOATH_IMG) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(OATH_DIR)/apps/$(a).sapp) icons.sip=$(ICONS)
 run-serial: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M -serial tcp:127.0.0.1:4555,server=on,wait=off
 

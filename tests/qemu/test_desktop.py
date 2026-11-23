@@ -50,6 +50,7 @@ class DesktopTest(unittest.TestCase):
         log = self.vm.debug_log()
         self.assertIn("SAND_TEST:M11_DESKTOP_STARTED", log)
         self.assertIn("SAND_TEST:M11_DESKTOP_FIRST_FRAME", log)
+        self.assertIn("SAND_TEST:ICONS_LOADED", log)
 
     def test_02_frame_has_chrome_and_wallpaper(self):
         time.sleep(1.0)
