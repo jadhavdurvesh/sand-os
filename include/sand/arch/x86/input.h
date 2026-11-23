@@ -33,6 +33,7 @@ typedef struct {
 int ps2_input_init(void);
 /* Non-blocking: 1 when an event was dequeued into *event, 0 when none. */
 int ps2_input_poll(sand_input_event_t *event);
+void ps2_input_pump(void);                       /* drain the controller by polling (for callers that run with interrupts off) */
 uint32_t ps2_input_dropped(void);
 uint8_t ps2_input_modifiers(void);
 int ps2_mouse_present(void);

@@ -23,7 +23,7 @@ MIMIR_SECTORS := 8192
 APP_BUILD := $(BUILD)/apps
 APP_CFLAGS := -m32 -std=gnu11 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-stack-protector -fno-asynchronous-unwind-tables -fno-tree-loop-distribute-patterns -O2 -Wall -Wextra -Werror -I$(SAPP)/include
 APP_OBJECTS := $(foreach a,$(EMBEDDED_APPS),$(APP_BUILD)/$(a)-image.o)
-KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/appinstall.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/bifrost.o $(BUILD)/mimir.o $(BUILD)/sigil-key.o $(BUILD)/sigil-pub.o $(BUILD)/tideway.o $(BUILD)/driftnet.o $(BUILD)/veyra-registry.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/dawn.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/oath.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
+KERNEL_OBJECTS := $(BUILD)/kernel-entry.o $(BUILD)/kernel.o $(BUILD)/idt.o $(BUILD)/exceptions.o $(BUILD)/irq.o $(BUILD)/thread-bootstrap.o $(BUILD)/exception.o $(BUILD)/pic.o $(BUILD)/memory_map.o $(BUILD)/frame.o $(BUILD)/paging.o $(BUILD)/heap.o $(BUILD)/timer.o $(BUILD)/scheduler.o $(BUILD)/sync.o $(BUILD)/gdt.o $(BUILD)/gdt-asm.o $(BUILD)/syscall.o $(BUILD)/syscall-asm.o $(BUILD)/user-asm.o $(BUILD)/user-space.o $(BUILD)/process.o $(BUILD)/diskapps.o $(BUILD)/appinstall.o $(BUILD)/block.o $(BUILD)/ata-pio.o $(BUILD)/bifrost.o $(BUILD)/mimir.o $(BUILD)/sigil-key.o $(BUILD)/sigil-pub.o $(BUILD)/tideway.o $(BUILD)/driftnet.o $(BUILD)/veyra-registry.o $(BUILD)/graphics-framebuffer.o $(BUILD)/vbe.o $(BUILD)/desktop.o $(BUILD)/ui.o $(BUILD)/ui-wall.o $(BUILD)/dawn.o $(BUILD)/gjallar.o $(BUILD)/gjallar-codec.o $(BUILD)/hda.o $(BUILD)/gfx.o $(BUILD)/font.o $(BUILD)/font-data.o $(BUILD)/rtc.o $(BUILD)/string.o $(BUILD)/ps2.o $(BUILD)/console.o $(BUILD)/device.o $(BUILD)/serial.o $(BUILD)/drivers.o $(APP_BUILD)/apps_table.o $(BUILD)/userland-test.o $(BUILD)/sha512.o $(BUILD)/ed25519.o $(BUILD)/stci.o $(BUILD)/stci-kat.o $(BUILD)/sha256.o $(BUILD)/launch-gate.o $(BUILD)/oath.o $(BUILD)/stci-gate.o $(BUILD)/stci-fixture-signed.o $(BUILD)/stci-fixture-bin.o $(APP_OBJECTS)
 .PHONY: run-serial all clean kernel disk run check apps test ui-preview
 apps: $(foreach a,$(APPS),$(APP_BUILD)/$(a).sapp)
 $(APP_BUILD):
@@ -146,6 +146,13 @@ $(BUILD)/ui-wall.o: kernel/graphics/ui_wall.c include/sand/graphics/ui.h $(GFX_H
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/dawn.o: kernel/graphics/dawn.c include/sand/graphics/dawn.h include/sand/graphics/ui.h $(GFX_HDRS) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+AUDIO_HDRS := include/sand/audio/gjallar.h include/sand/audio/hda.h
+$(BUILD)/gjallar.o: kernel/audio/gjallar.c $(AUDIO_HDRS) include/sand/storage/block.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/gjallar-codec.o: kernel/audio/gjallar_codec.c $(AUDIO_HDRS) | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/hda.o: kernel/audio/hda.c $(AUDIO_HDRS) include/sand/arch/x86/paging.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/gfx.o: kernel/graphics/gfx.c $(GFX_HDRS) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD)/font.o: kernel/graphics/font.c $(GFX_HDRS) | $(BUILD)
@@ -216,13 +223,15 @@ $(BUILD)/sigil-key.o: kernel/fs/sigil_key.c include/sand/fs/mimir.h | $(BUILD)
 ICONS := $(BUILD)/icons.sip
 $(ICONS): assets/ui/app-icons.png tools/icon_pack.py | $(BUILD)
 	$(PYTHON) tools/icon_pack.py assets/ui/app-icons.png $@
-disk: $(ICONS) $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUILD)/$(a).sapp) tools/mkmimir.py $(SIGIL)/sigil.key
+GJALLAR_SCORE := assets/audio/gjallarhorn.gjlr
+disk: $(ICONS) $(GJALLAR_SCORE) $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUILD)/$(a).sapp) tools/mkmimir.py $(SIGIL)/sigil.key
 	dd if=/dev/zero of=$(DISK) bs=512 count=10304 status=none
 	dd if=$(BOOT_SECTOR) of=$(DISK) conv=notrunc status=none
 	dd if=$(STAGE2) of=$(DISK) bs=512 seek=1 conv=notrunc status=none
 	dd if=$(KERNEL_BIN) of=$(DISK) bs=512 seek=17 conv=notrunc status=none
 	$(PYTHON) tools/mkmimir.py --sigil-key $(SIGIL)/sigil.key $(DISK) $(MIMIR_LBA) $(MIMIR_SECTORS) $(foreach a,$(DISK_APPS),$(a).sapp=$(APP_BUILD)/$(a).sapp) icons.sip=$(ICONS)
-	test $$(stat -c%s $(DISK)) -eq 5275648
+	dd if=$(GJALLAR_SCORE) of=$(DISK) bs=512 seek=$$(($(MIMIR_LBA) + $(MIMIR_SECTORS))) conv=notrunc status=none
+	test $$(stat -c%s $(DISK)) -eq $$((5275648 + $$(stat -c%s $(GJALLAR_SCORE))))
 # OATH test images: the same disk, but with a signed boot profile (require-signed, one trust root) and v2-signed disk apps.
 OATH_DIR := $(BUILD)/oath
 SIGNED_IMG := $(BUILD)/sand-os-signed.img
@@ -241,7 +250,7 @@ run: disk
 	qemu-system-i386 -machine pc -drive format=raw,file=$(DISK) -m 128M
 check: disk
 	@echo "SAND boot, memory, paging, heap, PIT, preemptive scheduler and synchronization built."
-host-test: apps disk dawn-preview
+host-test: apps disk dawn-preview gjallar-codec-test
 	mkdir -p $(BUILD)
 	cc -std=c11 -Wall -Wextra -Werror -Iinclude -Ikernel/crypto -o $(BUILD)/ed25519-kat tests/veyra/ed25519_kat_test.c kernel/crypto/sha512.c kernel/crypto/ed25519.c kernel/crypto/sha256.c kernel/security/stci.c
 	./$(BUILD)/ed25519-kat
@@ -263,9 +272,17 @@ test: disk host-test signed-images
 	$(PYTHON) tests/qemu/test_oath.py
 	$(PYTHON) tests/qemu/test_bifrost.py
 	$(PYTHON) tests/qemu/test_dawn.py
+	$(PYTHON) tests/qemu/test_gjallar.py
 ui-preview:
 	$(CC) -O2 -Wall -Iinclude -Isdk/sapp/include -o $(BUILD)/ui_preview tools/ui_preview.c kernel/graphics/ui.c kernel/graphics/ui_wall.c kernel/graphics/gfx.c kernel/graphics/font.c kernel/graphics/font_data.c
 	./$(BUILD)/ui_preview $(BUILD)/ui.ppm
+# Regenerate the packed boot score from the source mp3 (needs ffmpeg and numpy); the packed file is committed.
+score:
+	$(PYTHON) tools/gjallar_pack.py assets/audio/gjallarhorn.mp3 $(GJALLAR_SCORE) --reference $(BUILD)/gjallar-ref.pcm
+gjallar-codec-test: $(GJALLAR_SCORE)
+	mkdir -p $(BUILD) && $(CC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $(BUILD)/gjallar-codec-test tests/audio/gjallar_codec_test.c kernel/audio/gjallar_codec.c
+	@if [ -f $(BUILD)/gjallar-ref.pcm ]; then ./$(BUILD)/gjallar-codec-test $(GJALLAR_SCORE) $(BUILD)/gjallar-ref.pcm; else $(PYTHON) tools/gjallar_pack.py assets/audio/gjallarhorn.mp3 $(BUILD)/gjallar-check.gjlr --reference $(BUILD)/gjallar-ref.pcm >/dev/null 2>&1 && ./$(BUILD)/gjallar-codec-test $(GJALLAR_SCORE) $(BUILD)/gjallar-ref.pcm || echo "gjallar codec test: skipped (needs ffmpeg and numpy to build the reference)"; fi
+.PHONY: score gjallar-codec-test
 dawn-preview:
 	$(CC) -O2 -Wall -Wextra -DDAWN_HOST -Iinclude -Isdk/sapp/include -o $(BUILD)/dawn_preview tools/dawn_preview.c kernel/graphics/dawn.c kernel/graphics/ui.c kernel/graphics/ui_wall.c kernel/graphics/gfx.c kernel/graphics/font.c kernel/graphics/font_data.c
 	mkdir -p $(BUILD)/dawn && ./$(BUILD)/dawn_preview $(BUILD)/dawn

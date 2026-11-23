@@ -14,6 +14,8 @@ void dawn_moon(int32_t w, int32_t h, uint32_t progress256, int32_t *cx, int32_t 
 int dawn_begin(const sand_framebuffer_t *fb);        /* 0 when the splash is showing; any failure just means no splash */
 void dawn_stage(uint32_t stage, const char *label);  /* stage 1..DAWN_STAGES: animate the progress to stage/DAWN_STAGES */
 void *dawn_take_buffer(uint32_t bytes);              /* hands the splash back-buffer to the desktop (same size) so the heap is not charged twice */
+void dawn_pace_to_music(void);                       /* call once the score is playing: stages follow the music instead of the clock */
+void dawn_hold(void);                                /* paced mode: hold on the finished splash until the score's first big hit (a key press skips) */
 void dawn_reveal(const uint32_t *desktop);           /* iris from the moon over the splash already on screen; ends the splash */
 int dawn_active(void);
 #endif

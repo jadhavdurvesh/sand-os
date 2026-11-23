@@ -13,6 +13,7 @@
 #include "sand/arch/x86/ata_pio.h"
 #include "sand/storage/bifrost.h"
 #include "sand/graphics/dawn.h"
+#include "sand/audio/gjallar.h"
 #include "sand/fs/mimir.h"
 #include "sand/security/oath.h"
 #include "sand/arch/x86/vbe.h"
@@ -30,6 +31,7 @@ extern uint8_t sapp_test_image[174];
 /* MIMIR lives above the kernel image area (LBA 17-2064). */
 #define SAND_MIMIR_START_LBA 2112u
 #define SAND_MIMIR_SECTORS 8192u
+#define SAND_SCORE_LBA (SAND_MIMIR_START_LBA + SAND_MIMIR_SECTORS)
 static volatile uint16_t *const vga=(uint16_t *)0xB8000;
 static volatile uint32_t producer_count,consumer_count,protected_count,reuse_done;
 static volatile uint32_t test_failures;
@@ -238,6 +240,7 @@ void kernel_main(void) {
         if(seal_probe[0]=='M' && seal_probe[1]=='I' && seal_probe[2]=='M' && seal_probe[3]=='R') { store_disk=d; break; }
     }
     if(block_get(store_disk)->name[0]=='s') debug_text("SAND_TEST:M13_SATA_BOOT_DISK\n");
+    if(gjallar_begin(block_get(store_disk),SAND_SCORE_LBA)==0) { debug_text("SAND_TEST:GJALLAR_PLAYING\n"); dawn_pace_to_music(); } else debug_text("SAND_TEST:GJALLAR_NONE\n");
     if(mimir_mount(store_disk,SAND_MIMIR_START_LBA)!=0 && (mimir_format(store_disk,SAND_MIMIR_START_LBA,SAND_MIMIR_SECTORS)!=0 || mimir_mount(store_disk,SAND_MIMIR_START_LBA)!=0)) { debug_text("SAND_TEST:M6_FORMAT_MOUNT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
     static const char storage_message[]="SAND native storage read/write verified";
     char storage_readback[64]; uint32_t storage_length=0u;
@@ -280,6 +283,7 @@ void kernel_main(void) {
     dawn_stage(5u,"security");
     (void)sand_oath_load();   /* boot profile: provisions the launch gate once the boot self-tests are done */
     dawn_stage(6u,"desktop");
+    dawn_hold();
     int desktop_rc=-1;
     if(framebuffer_ok && (desktop_rc=sand_desktop_start(&framebuffer))==0) {
         debug_text("SAND_TEST:GRAPHICS_FRAMEBUFFER_PASS\n");

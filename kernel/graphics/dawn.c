@@ -3,6 +3,8 @@
 #ifndef DAWN_HOST
 #include "sand/mm/heap.h"
 #include "sand/arch/x86/timer.h"
+#include "sand/arch/x86/input.h"
+#include "sand/audio/gjallar.h"
 #endif
 
 static int32_t lerp(int32_t a, int32_t b, uint32_t t256) { return a + (b - a) * (int32_t)t256 / 256; }
@@ -51,7 +53,7 @@ void dawn_render(gfx_t *g, const sand_font_t *word, const sand_font_t *small, ui
 #ifndef DAWN_HOST
 static sand_framebuffer_t fb;
 static uint32_t *buf; static gfx_t g; static sand_font_t word_face, small_face;
-static int active, taken; static uint32_t progress, frames;
+static int active, taken, paced, skipped; static uint32_t progress, frames;
 static void *plain_alloc(uint32_t n) { return kmalloc(n); }
 static void put_span(int32_t y, int32_t x0, int32_t x1, const uint32_t *src) {
     volatile uint8_t *dst = fb.pixels + (uint32_t)y * fb.pitch_bytes + (uint32_t)x0 * (fb.bits_per_pixel / 8u);
@@ -66,8 +68,17 @@ static void wait_ticks(uint32_t n) {                                          /*
     uint32_t flags; __asm__ volatile("pushf; pop %0" : "=r"(flags));
     if ((flags & 0x200u) == 0u) return;                                        /* interrupts off: the tick counter would not move */
     uint32_t t0 = timer_ticks();
-    for (uint32_t spin = 0; spin < 3000000u && timer_ticks() - t0 < n; ++spin) __asm__ volatile("pause");
+    for (uint32_t spin = 0; spin < 3000000u && timer_ticks() - t0 < n; ++spin) { __asm__ volatile("pause"); if ((spin & 1023u) == 0u && gjallar_playing()) gjallar_service(); }
 }
+/* Keeps the score fed and notices a key press (which skips the ceremony: the music fades and boot continues at once). */
+static void pump(void) {
+    gjallar_service();
+    sand_input_event_t e;
+    ps2_input_pump();
+    while (ps2_input_poll(&e)) if (e.type == SAND_INPUT_KEY && e.pressed) skipped = 1;
+}
+static void wait_music_ms(uint32_t until_ms) { while (!skipped && gjallar_playing() && gjallar_ms() < until_ms) { pump(); __asm__ volatile("pause"); } }
+void dawn_pace_to_music(void) { paced = gjallar_playing() && gjallar_cue_ms() > 0u; }
 static void frame(const char *label) { dawn_render(&g, &word_face, &small_face, progress, frames++, label); present_all(); }
 int dawn_begin(const sand_framebuffer_t *f) {
     if (f == 0 || f->width < 640u || f->height < 480u || (f->bits_per_pixel != 24u && f->bits_per_pixel != 32u)) return -1;
@@ -82,7 +93,24 @@ int dawn_begin(const sand_framebuffer_t *f) {
 void dawn_stage(uint32_t stage, const char *label) {
     if (!active) return;
     uint32_t target = stage >= DAWN_STAGES ? 256u : stage * 256u / DAWN_STAGES;
+    if (paced && !skipped) {                                                     /* the score sets the pace: progress never runs ahead of the music's build-up */
+        uint32_t cue = gjallar_cue_ms();
+        while (progress < target && !skipped) {
+            pump();
+            uint32_t ms = gjallar_ms(), cap = ms >= cue ? 256u : ms * 256u / cue;
+            uint32_t next = cap < target ? cap : target;
+            if (next > progress) { progress = next; frame(label); wait_music_ms(gjallar_ms() + 30u); }
+        }
+        if (progress < target) progress = target;
+        return;
+    }
     while (progress < target) { progress += 256u / (DAWN_STAGES * 8u) + 1u; if (progress > target) progress = target; frame(label); wait_ticks(1u); }
+}
+void dawn_hold(void) {                                                           /* keep the sky alive until the score's first big hit, then reveal */
+    if (!active || !paced || skipped) { if (skipped) gjallar_fade_out(); return; }
+    uint32_t cue = gjallar_cue_ms();
+    while (!skipped && gjallar_playing() && gjallar_ms() + 100u < cue) { progress = 256u; frame("ready"); wait_music_ms(gjallar_ms() + 30u); pump(); }
+    if (skipped) gjallar_fade_out();
 }
 void *dawn_take_buffer(uint32_t bytes) {
     if (!active || taken || bytes != fb.width * fb.height * 4u) return 0;
