@@ -67,7 +67,15 @@ class ShellTest(unittest.TestCase):
         self.assertIn("unknown command", self.cmd("frobnicate"))
 
     def test_07_keyboard_irq_reaches_shell(self):
-        """A real PS/2 key press (injected via the QEMU monitor) must reach the shell."""
+        """A real PS/2 key press (injected via the QEMU monitor) must reach the shell once the System Console is open."""
+        for _ in range(12):                                  # the desktop starts empty: open the System Console from the dock first
+            self.vm.mouse_move(-100, -100)
+        x, y = 512, 716                                       # console tile
+        while x or y:
+            sx, sy = min(100, x), min(100, y)
+            self.vm.mouse_move(sx, sy); x -= sx; y -= sy
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(1.0)
         mark = len(self.vm.serial_text)
         for key in ("e", "c", "h", "o", "spc", "k", "b", "d", "ret"):
             self.vm.sendkey(key)

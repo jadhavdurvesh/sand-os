@@ -12,6 +12,7 @@
 #include "sand/mm/memory_map.h"
 #include "sand/arch/x86/ata_pio.h"
 #include "sand/storage/bifrost.h"
+#include "sand/graphics/dawn.h"
 #include "sand/fs/mimir.h"
 #include "sand/security/oath.h"
 #include "sand/arch/x86/vbe.h"
@@ -180,6 +181,8 @@ void kernel_main(void) {
     write_at("Consumer events:",16,5,0x0F); write_hex(consumer_count,16,24,0x0F);
     write_at("Boot context now provides scheduler idle fallback.",18,5,0x07);
     if(sand_stci_selftest()==0) debug_text("SAND_TEST:STCI_ED25519_KAT_PASS\n"); else { debug_text("SAND_TEST:STCI_ED25519_KAT_FAIL\n"); ++test_failures; }
+    sand_framebuffer_t framebuffer; int framebuffer_ok=(vbe_framebuffer_init(&framebuffer)==0);
+    if(framebuffer_ok && dawn_begin(&framebuffer)==0) debug_text("SAND_TEST:DAWN_SPLASH_SHOWN\n");
     debug_text("SAND_TEST:M5_PROCESS_INIT\n");
     gdt_init();
     syscall_init();
@@ -222,9 +225,11 @@ void kernel_main(void) {
     }
     debug_text("SAND_TEST:M5_TERMINATE_DESTROY_PASS\n");
     if(process_activate(first)!=0) { debug_text("SAND_TEST:M5_REACTIVATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    dawn_stage(1u,"drivers");
     debug_text("SAND_TEST:M6_STORAGE_INIT\n");
     (void)ata_pio_init(); (void)bifrost_init();
     if(block_count()<1u) { debug_text("SAND_TEST:M6_ATA_INIT_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    dawn_stage(2u,"storage");
     /* The store lives on whichever disk the BIOS booted from, ATA or SATA: pick the first disk whose store seal ("MIMR") is present. */
     uint32_t store_disk=0u;
     for(uint32_t d=0u; d<block_count(); ++d) {
@@ -251,10 +256,12 @@ void kernel_main(void) {
           if(bifrost_seed_present(i)) debug_text("SAND_TEST:M13_BIFROST_SEED_READ\n");
       }
       if(sata_total==0u) debug_text("SAND_TEST:M13_BIFROST_NONE\n"); else if(tested==0u) debug_text("SAND_TEST:M13_BIFROST_STORE_DISK_UNTOUCHED\n"); }
+    dawn_stage(3u,"filesystem");
     debug_text("SAND_TEST:M6_MIMIR_FORMAT_PASS\n");
     { uint32_t sg=mimir_sigil_summary(0,0,0,0); debug_text(sg==MIMIR_SIGIL_VALID?"SAND_TEST:M6_SIGIL_VALID\n":sg==MIMIR_SIGIL_INVALID?"SAND_TEST:M6_SIGIL_INVALID\n":"SAND_TEST:M6_SIGIL_NONE\n"); }
     debug_text("SAND_TEST:M6_FILE_READ_WRITE_PASS\n");
     if(sapp_loader_self_test()!=0) { debug_text("SAND_TEST:SAPP_LOADER_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    dawn_stage(4u,"loader");
     debug_text("SAND_TEST:SAPP_NATIVE_LOADER_PASS\n");
     if(scheduler_create(wait_test_parent_thread,0)<0) {
         debug_text("SAND_TEST:M7_BLOCKING_WAIT_CREATE_FAIL\n"); for(;;) __asm__ volatile("cli; hlt");
@@ -270,10 +277,11 @@ void kernel_main(void) {
     /* M7: ring-3 applications run as scheduler threads, each in its own address space. */
     debug_text("SAND_TEST:RING3_ENTER\n");
     if(userland_selftest()!=0) { debug_text("SAND_TEST:M7_USERLAND_FAIL\n"); for(;;) __asm__ volatile("cli; hlt"); }
+    dawn_stage(5u,"security");
     (void)sand_oath_load();   /* boot profile: provisions the launch gate once the boot self-tests are done */
-    sand_framebuffer_t framebuffer;
+    dawn_stage(6u,"desktop");
     int desktop_rc=-1;
-    if(vbe_framebuffer_init(&framebuffer)==0 && (desktop_rc=sand_desktop_start(&framebuffer))==0) {
+    if(framebuffer_ok && (desktop_rc=sand_desktop_start(&framebuffer))==0) {
         debug_text("SAND_TEST:GRAPHICS_FRAMEBUFFER_PASS\n");
         debug_text("SAND_TEST:M11_DESKTOP_STARTED\n");
     } else {

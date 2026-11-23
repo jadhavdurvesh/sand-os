@@ -1,6 +1,7 @@
 #include "sand/ipc/tideway.h"
 #include "sand/graphics/desktop.h"
 #include "sand/graphics/ui.h"
+#include "sand/graphics/dawn.h"
 #include "sand/arch/x86/input.h"
 #include "sand/arch/x86/rtc.h"
 #include "sand/arch/x86/timer.h"
@@ -62,6 +63,8 @@ static int host_launcher_item(int index, struct sand_ui_launcher_item *out) {
     out->accent = info.accent; out->accent2 = info.accent2; out->glyph = info.glyph;
     return 0;
 }
+/* The splash buffer becomes the compositor's back buffer, so DAWN costs no extra heap. */
+static void *desktop_alloc(uint32_t size) { void *b = dawn_take_buffer(size); return b ? b : kmalloc(size); }
 static void console_to_ui(const char *data, uint32_t length) { sand_ui_term_write(&ui, data, length); }
 
 static void present_frame(void) {
@@ -113,12 +116,19 @@ static void desktop_thread(void *arg) {
 int sand_desktop_start(const sand_framebuffer_t *framebuffer) {
     if (!graphics_framebuffer_valid(framebuffer) || (framebuffer->bits_per_pixel != 24u && framebuffer->bits_per_pixel != 32u)) return -1;
     fb = *framebuffer;
-    sand_ui_host_t host = { kmalloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive, host_launch, host_launcher_count, host_launcher_item };
+    sand_ui_host_t host = { desktop_alloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive, host_launch, host_launcher_count, host_launcher_item };
     if (sand_ui_init(&ui, &host, (int32_t)fb.width, (int32_t)fb.height) != 0) return -2;
     { uint32_t flags; __asm__ volatile("pushf; pop %0; cli" : "=r"(flags) : : "memory");
       diskapps_launcher_scan();                      /* once, before the desktop thread runs */
       if (flags & 0x200u) __asm__ volatile("sti" : : : "memory"); }
     settings_load();
+    if (dawn_active()) {                              /* compose the first desktop frame off-screen, then open the iris from the moon */
+        struct sand_ui_rect r; const uint32_t *pixels;
+        (void)sand_ui_frame(&ui, &r); sand_ui_frame_pixels(&ui, &pixels);
+        dawn_reveal(pixels);
+        sand_ui_mark_all(&ui);                        /* the desktop thread's first present redraws everything, pointer included */
+        debug_text("SAND_TEST:DAWN_REVEAL_DONE\n");
+    }
     present_frame();
     if (console_add_sink(console_to_ui) < 0) return -3;
     ps2_input_set_console_forward(0);

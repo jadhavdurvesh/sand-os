@@ -72,6 +72,23 @@ class DesktopTest(unittest.TestCase):
         after = self.shot("desktop-ptr-b.ppm")
         self.assertNotEqual(before[2], after[2])
 
+    def test_03b_desktop_starts_empty_and_start_menu_opens_the_console(self):
+        """No window is open after boot; the SAND (Start) button lists the apps and opens the System Console."""
+        DesktopTest._ptr = (None, None)
+        before = self.shot("desktop-empty.ppm")
+        self.assertLess(sum(pixel(before, 200, 200)), 400)                    # no console window where it used to open (dark sky, no glass panel)
+        self.move_to(40, 12)                                                    # the SAND button
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(1.0)
+        menu = self.shot("desktop-start.ppm")
+        self.assertGreater(sum(1 for x in range(20, 280) for y in range(60, 540) if sum(pixel(menu, x, y)) > 500), 300)   # the Start panel's labels
+        self.move_to(130, 463)                                                  # "System Console" row (eighth)
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(1.0)
+        win = self.shot("desktop-console-opened.ppm")
+        self.assertNotEqual(before[2], win[2])
+        self.assertGreater(sum(1 for x in range(56, 400) for y in range(70, 100) if sum(pixel(win, x, y)) > 300), 30)    # the window's title bar text
+
     def test_04_console_window_mirrors_shell(self):
         self.vm.send("echo SANDDESKTOPOK\r")
         time.sleep(1.0)
@@ -148,7 +165,7 @@ class DesktopTest(unittest.TestCase):
         time.sleep(1.0)
         panel = self.shot("desktop-launcher.ppm")
         self.assertGreater(sum(1 for x in range(420, 680) for y in range(420, 640) if sum(pixel(panel, x, y)) > 500), 200)   # panel text and icons
-        self.move_to(501, 413)                              # LOCUS row (second of six: CAIRN, LOCUS, QUANTA, CHRONOS, KEYSTONE, LUMEN)
+        self.move_to(501, 309)                              # LOCUS row (third: CITADEL, CAIRN, LOCUS, QUANTA, CHRONOS, KEYSTONE, LUMEN, then the two system rows)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(2.5)
         win = self.shot("desktop-launched.ppm")
@@ -165,7 +182,7 @@ class DesktopTest(unittest.TestCase):
         self.move_to(444, 716)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(1.0)
-        self.move_to(501, 619)                              # sixth row: LUMEN (disk app, listed after the built-in apps)
+        self.move_to(501, 517)                              # seventh row: LUMEN (disk app, listed after the built-in apps)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(2.5)
         self.shot("desktop-disk-launch.ppm")

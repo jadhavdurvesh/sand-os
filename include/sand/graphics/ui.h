@@ -55,7 +55,7 @@ typedef struct sand_ui {
     int32_t drag_win, drag_dx, drag_dy, press_win, hover_ctrl;   /* hover_ctrl = window*4 + control, -1 none */
     uint32_t *blur; int32_t bw, bh;                   /* 1/4-resolution frosted wallpaper */
     uint32_t liveness_seen;
-    int launcher_open, launcher_hover;
+    int launcher_open, launcher_hover, launcher_menu, hover_start;   /* launcher_menu: opened from the SAND button in the menu bar (Start menu) instead of the dock */
     uint8_t accent, reduced_motion, clock24;           /* settings */
     int32_t hover_dock;
     struct sand_ui_rect dirty, cursor_box;
