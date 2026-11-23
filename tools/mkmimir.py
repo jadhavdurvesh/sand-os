@@ -19,7 +19,8 @@ DEFAULT_WARDS = (b"# MIMIR wards: <name or *suffix> <read mask> <write mask>; fi
                  b"system.cfg 0x0 0x40\n"    # only settings.write may change the settings file
                  b"ward.rules 0x0 0x80\n"     # and only system.install may change the rules themselves
                  b"factory.sigil 0x0 0x80\n"
-                 b"boot.oath 0x0 0x80\n")
+                 b"boot.oath 0x0 0x80\n"
+                 b"*.sip 0x0 0x80\n")      # icon packs: only system.install may change them
 
 
 def sha(b):

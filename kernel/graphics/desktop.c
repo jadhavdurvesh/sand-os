@@ -19,6 +19,7 @@
 static volatile uint32_t settings_dirty_since;           /* 0 = clean; else tick of the last change (never 0) */
 static void settings_save(void);
 static void settings_load(void);
+static void icons_load(void);
 
 static sand_ui_t ui;
 static volatile int desktop_ready;
@@ -62,6 +63,17 @@ static int host_launcher_item(int index, struct sand_ui_launcher_item *out) {
     for (int i = 0; i < 24; ++i) out->subtitle[i] = info.subtitle[i];
     out->accent = info.accent; out->accent2 = info.accent2; out->glyph = info.glyph;
     return 0;
+}
+/* The system icon pack lives in the MIMIR store (icons.sip, sealed with the factory files); without it the UI draws its gradient tiles. */
+static void icons_load(void) {
+    struct mimir_info info;
+    if (mimir_stat("icons.sip", &info) != 0 || info.size < 16u || info.size > 262144u) return;
+    uint32_t *buf = (uint32_t *)kmalloc(info.size);
+    uint32_t len = 0;
+    if (buf == 0 || mimir_read("icons.sip", buf, info.size, &len) != 0 || len != info.size) return;
+    if (buf[0] != 0x4B504953u || buf[1] != 1u || buf[3] == 0u || buf[2] == 0u || (uint64_t)buf[2] * buf[3] * buf[3] * 4u + 16u > len) return;   /* "SIPK" */
+    sand_ui_set_icons(&ui, buf + 4, (int32_t)buf[2], (int32_t)buf[3]);
+    debug_text("SAND_TEST:ICONS_LOADED\n");
 }
 /* The splash buffer becomes the compositor's back buffer, so DAWN costs no extra heap. */
 static void *desktop_alloc(uint32_t size) { void *b = dawn_take_buffer(size); return b ? b : kmalloc(size); }
@@ -122,6 +134,7 @@ int sand_desktop_start(const sand_framebuffer_t *framebuffer) {
       diskapps_launcher_scan();                      /* once, before the desktop thread runs */
       if (flags & 0x200u) __asm__ volatile("sti" : : : "memory"); }
     settings_load();
+    icons_load();
     if (dawn_active()) {                              /* compose the first desktop frame off-screen, then open the iris from the moon */
         struct sand_ui_rect r; const uint32_t *pixels;
         (void)sand_ui_frame(&ui, &r); sand_ui_frame_pixels(&ui, &pixels);

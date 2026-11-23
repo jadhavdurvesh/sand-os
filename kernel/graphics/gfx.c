@@ -220,3 +220,27 @@ void gfx_copy(gfx_t *dst, const gfx_t *src, int32_t x, int32_t y, int32_t w, int
     for (int32_t yy = y0; yy < y1; ++yy)
         for (int32_t xx = x0; xx < x1; ++xx) dst->px[yy * dst->stride + xx] = src->px[yy * src->stride + xx];
 }
+
+void gfx_blit_argb(gfx_t *g, const uint32_t *src, int32_t sw, int32_t sh, int32_t x, int32_t y, int32_t dw, int32_t dh, uint32_t alpha) {
+    if (!src || sw < 2 || sh < 2 || dw < 1 || dh < 1) return;
+    int32_t x0 = x < g->cx0 ? g->cx0 : x, y0 = y < g->cy0 ? g->cy0 : y, x1 = x + dw > g->cx1 ? g->cx1 : x + dw, y1 = y + dh > g->cy1 ? g->cy1 : y + dh;
+    for (int32_t yy = y0; yy < y1; ++yy) {
+        uint32_t fy = (uint32_t)(((yy - y) * 2 + 1) * (sh << 8) / (dh * 2)) ; if (fy >= 128u) fy -= 128u; else fy = 0u;   /* 24.8, pixel centres */
+        int32_t iy = (int32_t)(fy >> 8); uint32_t wy = fy & 255u; int32_t iy1 = iy + 1 < sh ? iy + 1 : sh - 1;
+        for (int32_t xx = x0; xx < x1; ++xx) {
+            uint32_t fx = (uint32_t)(((xx - x) * 2 + 1) * (sw << 8) / (dw * 2)); if (fx >= 128u) fx -= 128u; else fx = 0u;
+            int32_t ix = (int32_t)(fx >> 8); uint32_t wx = fx & 255u; int32_t ix1 = ix + 1 < sw ? ix + 1 : sw - 1;
+            uint32_t c00 = src[iy * sw + ix], c10 = src[iy * sw + ix1], c01 = src[iy1 * sw + ix], c11 = src[iy1 * sw + ix1];
+            uint32_t w00 = (256u - wx) * (256u - wy), w10 = wx * (256u - wy), w01 = (256u - wx) * wy, w11 = wx * wy, ch[4];
+            for (int k = 0; k < 4; ++k) {
+                uint32_t sh8 = (uint32_t)(k * 8);
+                ch[k] = (((c00 >> sh8) & 255u) * w00 + ((c10 >> sh8) & 255u) * w10 + ((c01 >> sh8) & 255u) * w01 + ((c11 >> sh8) & 255u) * w11) >> 16;
+            }
+            uint32_t a = ch[3] * alpha / 255u;
+            if (a == 0u) continue;
+            uint32_t color = (ch[2] << 16) | (ch[1] << 8) | ch[0];
+            uint32_t *p = &g->px[yy * g->stride + xx];
+            *p = a >= 255u ? color : gfx_mix(*p, color, a);
+        }
+    }
+}
