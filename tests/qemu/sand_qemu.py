@@ -171,6 +171,10 @@ class SandVM:
     def mouse_button(self, state):
         self.monitor(f"mouse_button {state}", 0.1)
 
+    def double_click(self):
+        """Both clicks in one monitor write, so they land well inside the desktop's double-click window."""
+        self.monitor("mouse_button 1\nmouse_button 0\nmouse_button 1\nmouse_button 0", 0.6)
+
     def screendump(self, path):
         self.monitor(f"screendump {path}", 1.0)
         return os.path.exists(path) and os.path.getsize(path) > 0

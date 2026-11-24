@@ -13,6 +13,8 @@ struct sand_ui_sysinfo {
     uint32_t ticks, tick_hz, free_frames, total_frames, heap_used, heap_total, switches, processes;
 };
 struct sand_ui_proc { uint32_t pid, perms; uint8_t running, system; char name[16]; };   /* system: protected, cannot be ended */   /* one row of the Task Manager */
+#define SAND_UI_SHORTCUTS 16
+struct sand_ui_shortcut { char label[16]; int16_t cell; };   /* a desktop shortcut: the launcher label it opens and its grid cell (column-major) */
 struct sand_ui_launcher_item { char label[16], app[17], subtitle[24]; uint32_t accent, accent2; char glyph; };
 typedef struct {
     void *(*alloc)(uint32_t size);
@@ -26,6 +28,7 @@ typedef struct {
     int (*proc_end)(uint32_t pid);                              /* Task Manager: end task; <0 on failure */
     int (*launcher_count)(void);                                /* launcher catalogue (from app manifests) */
     int (*launcher_item)(int index, struct sand_ui_launcher_item *out);
+    void (*shortcuts_changed)(void);                            /* the desktop layout changed: persist it */
 } sand_ui_host_t;
 
 #define SAND_UI_TERM_COLS 80
@@ -73,6 +76,9 @@ typedef struct sand_ui {
     uint32_t blink_seen, clock_min_seen, about_seen;
     uint8_t cur_fill[24 * 16], cur_edge[24 * 16];
     uint32_t frames;
+    struct sand_ui_shortcut sc[SAND_UI_SHORTCUTS]; int sc_count, sc_sel, sc_hover, sc_drag, sc_dragging; int32_t sc_px0, sc_py0, sc_offx, sc_offy, sc_gx, sc_gy;   /* desktop shortcuts */
+    uint32_t sc_click_tick; int sc_click_idx;
+    int ctx_open, ctx_kind, ctx_target, ctx_hover; int32_t ctx_x, ctx_y;                                                                 /* context menu */
     uint32_t hist[3][SAND_UI_HIST]; uint32_t hist_seen, hist_prev_switches; int hist_primed, hugin_hover; uint32_t hugin_seen;   /* Task Manager (HUGIN) */
     char toast_src[16], toast_text[64]; uint32_t toast_until; uint8_t toast_on;   /* HERALD notification card */
 } sand_ui_t;
@@ -88,6 +94,9 @@ int sand_ui_win_draw(sand_ui_t *ui, int id, uint32_t owner, const struct sand_dr
 int sand_ui_win_event(sand_ui_t *ui, int id, uint32_t owner, struct sand_event *out);
 int sand_ui_win_close(sand_ui_t *ui, int id, uint32_t owner);
 /* System settings (appearance). get: value or <0; set: 0 or <0. */
+int sand_ui_shortcut_add(sand_ui_t *ui, const char *label, int cell);   /* cell < 0: first free cell; 0 on success */
+int sand_ui_shortcut_count(const sand_ui_t *ui);
+int sand_ui_shortcut_get(const sand_ui_t *ui, int i, char *label16, int *cell);
 int sand_ui_setting_get(const sand_ui_t *ui, uint32_t key);
 int sand_ui_setting_set(sand_ui_t *ui, uint32_t key, uint32_t value);
 int sand_ui_win_blit(sand_ui_t *ui, int id, uint32_t owner, const struct sand_blit *b, const uint32_t *pixels);

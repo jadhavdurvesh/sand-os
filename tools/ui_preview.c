@@ -25,7 +25,7 @@ static int h_litem(int i, struct sand_ui_launcher_item *o) {
     *o = items[i]; return 0;
 }
 int main(int argc, char **argv) {
-    sand_ui_host_t host = { h_alloc, h_ticks, h_clock, h_sys, h_pid, h_alive, h_launch, h_proc, h_end, h_lcount, h_litem };
+    sand_ui_host_t host = { h_alloc, h_ticks, h_clock, h_sys, h_pid, h_alive, h_launch, h_proc, h_end, h_lcount, h_litem, 0 };
     static sand_ui_t ui;
     if (sand_ui_init(&ui, &host, 1024, 768)) { fprintf(stderr, "init failed\n"); return 1; }
     const char *t = "\x1b[38;2;242;201;138mSAND\x1b[0m shell \x1b[2m- type help\x1b[0m\r\n\x1b[1;36msand\x1b[0m> ls\r\nhello.txt   18\r\nnotes.md    204\r\n\x1b[1;36msand\x1b[0m> ";

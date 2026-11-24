@@ -384,6 +384,52 @@ class DesktopTest(unittest.TestCase):
         time.sleep(1.5)
         self.assertNotRegex(self.vm.run_command("ps"), r"(running|ready|blocked)\s+keystone")   # exited is fine
 
+    def bright(self, img, x0, y0, x1, y1):
+        return sum(1 for x in range(x0, x1, 2) for y in range(y0, y1, 2) if sum(pixel(img, x, y)) > 200)   # the sky is darker than any icon pixel
+
+    def changed(self, a, b, x0, y0, x1, y1):
+        return sum(1 for x in range(x0, x1, 2) for y in range(y0, y1, 2)
+                   if max(abs(p - q) for p, q in zip(pixel(a, x, y), pixel(b, x, y))) > 30)
+
+    def click(self):
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+
+    def test_03a_desktop_shortcuts(self):
+        """Shortcuts on the wallpaper: double-click opens, drag rearranges, right-click removes, the Start menu adds."""
+        DesktopTest._ptr = (None, None)
+        base = self.shot("desktop-shortcuts.ppm")
+        self.assertGreater(self.bright(base, 40, 56, 92, 110), 20)              # LOCUS icon in the first cell
+        self.assertGreater(self.bright(base, 40, 156, 92, 210), 20)             # CITADEL in the second
+        self.move_to(66, 84)                                                     # double-click LOCUS
+        self.vm.double_click()
+        time.sleep(2.5)
+        self.assertIn("locus", self.vm.run_command("ps"))
+        self.vm.sendkey("q"); time.sleep(1.5)
+        self.assertNotIn("locus", self.vm.run_command("ps"))
+        self.move_to(66, 185)                                                    # drag CITADEL to the middle of the desktop
+        self.vm.mouse_button(1)
+        self.move_to(200, 300); self.move_to(400, 420)
+        self.vm.mouse_button(0); time.sleep(0.8)
+        moved = self.shot("desktop-shortcuts-dragged.ppm")
+        self.assertLess(self.bright(moved, 40, 156, 92, 210), 5)                # its old cell is empty
+        self.assertGreater(self.changed(moved, base, 316, 356, 356, 396), 100)   # and it sits in the cell nearest the drop point
+        self.move_to(334, 383)                                                   # right-click it: Open / Remove from Desktop
+        self.vm.mouse_button(2); self.vm.mouse_button(0); time.sleep(0.8)
+        menu = self.shot("desktop-shortcuts-menu.ppm")
+        self.assertGreater(self.changed(menu, moved, 350, 400, 540, 470), 200)   # the menu is drawn
+        self.move_to(400, 442)
+        self.click(); time.sleep(0.8)
+        gone = self.shot("desktop-shortcuts-removed.ppm")
+        self.assertLess(self.changed(gone, base, 316, 356, 356, 396), 5)         # nothing left in that cell
+        self.move_to(410, 716)                                                   # Start/launcher panel: right-click CITADEL, Add to Desktop
+        self.click(); time.sleep(1.0)
+        self.move_to(500, 145)
+        self.vm.mouse_button(2); self.vm.mouse_button(0); time.sleep(0.8)
+        self.move_to(550, 204)
+        self.click(); time.sleep(1.0)
+        back = self.shot("desktop-shortcuts-added.ppm")
+        self.assertGreater(self.bright(back, 40, 156, 92, 210), 20)             # CITADEL is back in the first free cell
+
 
 if __name__ == "__main__":
     unittest.main()
