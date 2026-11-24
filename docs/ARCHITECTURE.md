@@ -173,3 +173,14 @@ A shell-owned window (index 2, next to the System Console and About SAND), opene
 End Task is real. `process_kill()` flags the process and wakes its thread if it is blocked in a system call; the thread is then stopped at the next timer tick that interrupts it in ring 3, or at its next system call, and the process exits with status -9. Ending a task is audited (`SAND_AUDIT:TASK_ENDED <name>`; a refused attempt on a system process logs `TASK_END_DENIED`). The icon is `assets/ui/task-manager.png`, packed as the tenth entry of `icons.sip`.
 
 Honest limits: there is no per-process CPU or memory figure (the kernel does not account for them), so the cards show system-wide values; a process stuck in a ring-0 loop would not be stopped (none exist today); verified in QEMU only.
+
+## Desktop shell (shortcuts and context menus)
+
+The wallpaper now holds shortcuts: icons (the app-icon pack, or an accent tile with a glyph when an app has none) with a label under each, on a column-major grid anchored at the top-left. A first boot seeds LOCUS, CITADEL, KEYSTONE and the Task Manager.
+
+- **Select / open:** a click selects; a double-click (within 450 ms) opens it through the same path as the Start menu row.
+- **Arrange:** dragging lifts the icon with a shadow; on release it snaps to the nearest free cell.
+- **Right-click:** on a shortcut: Open / Remove from Desktop. On the wallpaper: Arrange Icons, Task Manager, System Console, About SAND. On a Start-menu or launcher row: Open / Add to Desktop.
+- **Persistence:** the layout is `desktop.cfg` in MIMIR (one `Label|cell` line per shortcut, written 0.5 s after the last change, labelled like `system.cfg`). A missing file means first boot; an empty layout is stored as a newline so a cleared desktop stays cleared.
+
+Honest limits: at most 16 shortcuts; shortcuts open launcher entries only (no files or folders yet, no drag from LOCUS); no keyboard navigation of the icons; no multi-select or rubber-band selection; verified in QEMU only. These are shell behaviours: they do not make Windows or macOS applications run on SAND.

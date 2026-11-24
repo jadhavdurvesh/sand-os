@@ -18,9 +18,13 @@
 #include "sand/security/launch_gate.h"
 #include "sand/abi.h"
 
+static volatile uint32_t shortcuts_dirty_since;          /* same scheme for the desktop layout */
 static volatile uint32_t settings_dirty_since;           /* 0 = clean; else tick of the last change (never 0) */
 static void settings_save(void);
 static void settings_load(void);
+static void shortcuts_save(void);
+static void shortcuts_load(void);
+static void host_shortcuts_changed(void);
 static void icons_load(void);
 
 static sand_ui_t ui;
@@ -150,6 +154,7 @@ static void desktop_thread(void *arg) {
         herald_poll();
         gjallar_service();
         present_frame();
+        if (shortcuts_dirty_since && timer_ticks() - shortcuts_dirty_since >= 50u) { shortcuts_dirty_since = 0u; shortcuts_save(); }
         if (settings_dirty_since && timer_ticks() - settings_dirty_since >= 50u) { settings_dirty_since = 0u; settings_save(); }   /* debounced write, IRQs on */
         __asm__ volatile("sti; hlt");
     }
@@ -158,12 +163,13 @@ static void desktop_thread(void *arg) {
 int sand_desktop_start(const sand_framebuffer_t *framebuffer) {
     if (!graphics_framebuffer_valid(framebuffer) || (framebuffer->bits_per_pixel != 24u && framebuffer->bits_per_pixel != 32u)) return -1;
     fb = *framebuffer;
-    sand_ui_host_t host = { desktop_alloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive, host_launch, host_proc_at, host_proc_end, host_launcher_count, host_launcher_item };
+    sand_ui_host_t host = { desktop_alloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive, host_launch, host_proc_at, host_proc_end, host_launcher_count, host_launcher_item, host_shortcuts_changed };
     if (sand_ui_init(&ui, &host, (int32_t)fb.width, (int32_t)fb.height) != 0) return -2;
     { uint32_t flags; __asm__ volatile("pushf; pop %0; cli" : "=r"(flags) : : "memory");
       diskapps_launcher_scan();                      /* once, before the desktop thread runs */
       if (flags & 0x200u) __asm__ volatile("sti" : : : "memory"); }
     settings_load();
+    shortcuts_load();
     icons_load();
     if (dawn_active()) {                              /* compose the first desktop frame off-screen, then open the iris from the moon */
         struct sand_ui_rect r; const uint32_t *pixels;
@@ -186,6 +192,38 @@ int sand_desktop_win_draw(int32_t id, const struct sand_draw *cmds, uint32_t cou
 int sand_desktop_win_event(int32_t id, struct sand_event *out) { return desktop_ready ? sand_ui_win_event(&ui, id, process_current(), out) : SAND_E_NOSYS; }
 int sand_desktop_win_blit(int32_t id, const struct sand_blit *b, const uint32_t *pixels) { return desktop_ready ? sand_ui_win_blit(&ui, id, process_current(), b, pixels) : SAND_E_NOSYS; }
 int sand_desktop_win_resizable(int32_t id, int32_t min_w, int32_t min_h) { return desktop_ready ? sand_ui_win_resizable(&ui, id, process_current(), min_w, min_h) : SAND_E_NOSYS; }
+/* ---- desktop layout: "desktop.cfg" in MIMIR, one "Label|cell" line per shortcut; absent file = first boot, seed a few ---- */
+static void host_shortcuts_changed(void) { uint32_t t = timer_ticks(); shortcuts_dirty_since = t ? t : 1u; }
+static void shortcuts_save(void) {
+    char buf[SAND_UI_SHORTCUTS * 20 + 4]; uint32_t n = 0u;
+    for (int i = 0; i < sand_ui_shortcut_count(&ui); ++i) {
+        char label[16]; int cell;
+        if (sand_ui_shortcut_get(&ui, i, label, &cell) != 0) continue;
+        for (int k = 0; label[k] && label[k] != '|' && label[k] != '\n'; ++k) buf[n++] = label[k];
+        buf[n++] = '|';
+        char digits[6]; int d = 0; uint32_t v = (uint32_t)cell; do { digits[d++] = (char)('0' + v % 10u); v /= 10u; } while (v);
+        while (d) buf[n++] = digits[--d];
+        buf[n++] = '\n';
+    }
+    (void)mimir_write_labeled("desktop.cfg", buf, n ? n : 1u, 0u, SAND_PERM_SETTINGS);   /* an empty layout is stored as a single newline */
+}
+static void shortcuts_load(void) {
+    char buf[SAND_UI_SHORTCUTS * 20 + 4]; uint32_t len = 0;
+    if (mimir_read("desktop.cfg", buf, sizeof(buf) - 1u, &len) != 0) {          /* first boot: a small default desktop */
+        (void)sand_ui_shortcut_add(&ui, "LOCUS", -1); (void)sand_ui_shortcut_add(&ui, "CITADEL", -1);
+        (void)sand_ui_shortcut_add(&ui, "KEYSTONE", -1); (void)sand_ui_shortcut_add(&ui, "Task Manager", -1);
+        return;
+    }
+    buf[len] = 0;
+    for (char *p = buf; *p;) {
+        char *e = p; while (*e && *e != '\n') ++e;
+        char label[16]; int k = 0; char *q = p;
+        while (q < e && *q != '|' && k < 15) label[k++] = *q++;
+        label[k] = 0;
+        if (q < e && *q == '|' && k > 0) { int cell = 0; for (++q; q < e && *q >= '0' && *q <= '9'; ++q) cell = cell * 10 + (*q - '0'); (void)sand_ui_shortcut_add(&ui, label, cell); }
+        p = *e ? e + 1 : e;
+    }
+}
 /* ---- settings persistence: tiny text file "system.cfg" in MIMIR ("accent=N\nmotion=N\nclock24=N\n") ---- */
 static void settings_load(void) {
     char buf[64]; uint32_t len = 0;
