@@ -70,7 +70,7 @@ class ShellTest(unittest.TestCase):
         """A real PS/2 key press (injected via the QEMU monitor) must reach the shell once the System Console is open."""
         for _ in range(12):                                  # the desktop starts empty: open the System Console from the dock first
             self.vm.mouse_move(-100, -100)
-        x, y = 512, 716                                       # console tile
+        x, y = 478, 716                                       # console tile
         while x or y:
             sx, sy = min(100, x), min(100, y)
             self.vm.mouse_move(sx, sy); x -= sx; y -= sy

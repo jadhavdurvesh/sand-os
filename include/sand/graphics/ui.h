@@ -12,6 +12,7 @@
 struct sand_ui_sysinfo {
     uint32_t ticks, tick_hz, free_frames, total_frames, heap_used, heap_total, switches, processes;
 };
+struct sand_ui_proc { uint32_t pid, perms; uint8_t running, system; char name[16]; };   /* system: protected, cannot be ended */   /* one row of the Task Manager */
 struct sand_ui_launcher_item { char label[16], app[17], subtitle[24]; uint32_t accent, accent2; char glyph; };
 typedef struct {
     void *(*alloc)(uint32_t size);
@@ -21,13 +22,16 @@ typedef struct {
     uint32_t (*current_pid)(void);                              /* caller of a window syscall */
     int (*pid_alive)(uint32_t pid);                             /* 0 when the owner has exited */
     int (*launch)(const char *app);                             /* start an app for the desktop; <0 on failure */
+    int (*proc_at)(uint32_t index, struct sand_ui_proc *out);   /* live applications in order; <0 past the end */
+    int (*proc_end)(uint32_t pid);                              /* Task Manager: end task; <0 on failure */
     int (*launcher_count)(void);                                /* launcher catalogue (from app manifests) */
     int (*launcher_item)(int index, struct sand_ui_launcher_item *out);
 } sand_ui_host_t;
 
 #define SAND_UI_TERM_COLS 80
 #define SAND_UI_TERM_ROWS 24
-#define SAND_UI_SHELL_WINDOWS 2    /* 0 = system console, 1 = About SAND (shell-owned panels) */
+#define SAND_UI_SHELL_WINDOWS 3    /* 0 = system console, 1 = About SAND, 2 = Task Manager (shell-owned panels) */
+#define SAND_UI_HIST 32            /* Task Manager history samples, one per second */
 #define SAND_UI_APP_WINDOWS 3      /* app-owned windows (window service) */
 #define SAND_UI_WINDOWS (SAND_UI_SHELL_WINDOWS + SAND_UI_APP_WINDOWS)
 #define SAND_UI_EVENTS 16
@@ -69,6 +73,7 @@ typedef struct sand_ui {
     uint32_t blink_seen, clock_min_seen, about_seen;
     uint8_t cur_fill[24 * 16], cur_edge[24 * 16];
     uint32_t frames;
+    uint32_t hist[3][SAND_UI_HIST]; uint32_t hist_seen, hist_prev_switches; int hist_primed, hugin_hover; uint32_t hugin_seen;   /* Task Manager (HUGIN) */
     char toast_src[16], toast_text[64]; uint32_t toast_until; uint8_t toast_on;   /* HERALD notification card */
 } sand_ui_t;
 

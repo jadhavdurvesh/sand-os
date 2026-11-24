@@ -165,3 +165,11 @@ When the score is playing the boot splash (DAWN) is paced by it: the progress ba
 Checks: `tests/qemu/test_gjallar.py` boots QEMU with an Intel HDA controller and the `wav` audio backend, then compares the captured WAV with the score: the correlation is above 0.999 at 1 s, 5 s and 9 s with a zero sample offset (so there is no start delay and no dropout through boot), the reveal lands 9-14 s after the music starts, a key press skips the wait, and the tail is faded.
 
 Honest limits: tested on QEMU's `intel-hda` + `hda-output` only; the codec walker follows the HD Audio specification but has not met a real codec (laptops with several pins, jack detection, quirks and codecs that need vendor verbs are not handled). No volume control or mute setting yet (fixed gain 200/256), no audio API for applications, and the 12 s ceremony is the default on any machine with HD Audio (key press skips it).
+
+## HUGIN (Task Manager)
+
+A shell-owned window (index 2, next to the System Console and About SAND), opened from the dock or the Start menu. It shows three live cards (used memory, kernel heap, context switches per second) with a 32-second sparkline each, sampled once a second, and a list of running applications with PID, state and permission bits. Each application has an End button; the shell process is listed as "System" and cannot be ended.
+
+End Task is real. `process_kill()` flags the process and wakes its thread if it is blocked in a system call; the thread is then stopped at the next timer tick that interrupts it in ring 3, or at its next system call, and the process exits with status -9. Ending a task is audited (`SAND_AUDIT:TASK_ENDED <name>`; a refused attempt on a system process logs `TASK_END_DENIED`). The icon is `assets/ui/task-manager.png`, packed as the tenth entry of `icons.sip`.
+
+Honest limits: there is no per-process CPU or memory figure (the kernel does not account for them), so the cards show system-wide values; a process stuck in a ring-0 loop would not be stopped (none exist today); verified in QEMU only.

@@ -10,6 +10,12 @@ static void h_sys(struct sand_ui_sysinfo *s) { s->ticks = 123456; s->tick_hz = 1
 static uint32_t h_pid(void) { return 7u; }
 static int h_alive(uint32_t pid) { (void)pid; return 1; }
 static int h_launch(const char *a) { (void)a; return 0; }
+static int h_proc(uint32_t i, struct sand_ui_proc *o) {
+    static const struct sand_ui_proc ps[3] = { { 3, 0x1Fu, 1, 0, "locus" }, { 5, 0x07u, 0, 0, "quanta" }, { 12, 0x1FFu, 1, 1, "sandsh" } };
+    if (i > 2) return -1;
+    *o = ps[i]; return 0;
+}
+static int h_end(uint32_t pid) { (void)pid; return 0; }
 static int h_lcount(void) { return 3; }
 static int h_litem(int i, struct sand_ui_launcher_item *o) {
     static const struct sand_ui_launcher_item items[3] = {
@@ -19,7 +25,7 @@ static int h_litem(int i, struct sand_ui_launcher_item *o) {
     *o = items[i]; return 0;
 }
 int main(int argc, char **argv) {
-    sand_ui_host_t host = { h_alloc, h_ticks, h_clock, h_sys, h_pid, h_alive, h_launch, h_lcount, h_litem };
+    sand_ui_host_t host = { h_alloc, h_ticks, h_clock, h_sys, h_pid, h_alive, h_launch, h_proc, h_end, h_lcount, h_litem };
     static sand_ui_t ui;
     if (sand_ui_init(&ui, &host, 1024, 768)) { fprintf(stderr, "init failed\n"); return 1; }
     const char *t = "\x1b[38;2;242;201;138mSAND\x1b[0m shell \x1b[2m- type help\x1b[0m\r\n\x1b[1;36msand\x1b[0m> ls\r\nhello.txt   18\r\nnotes.md    204\r\n\x1b[1;36msand\x1b[0m> ";
@@ -34,6 +40,13 @@ int main(int argc, char **argv) {
     static uint8_t out[1024 * 768 * 4];
     sand_ui_present(&ui, out, 1024 * 4, 32, &(struct sand_ui_rect){ 0, 0, 1024, 768 });
     FILE *f = fopen(argc > 1 ? argv[1] : "ui.ppm", "wb"); fprintf(f, "P6\n1024 768\n255\n");
+    for (int i = 0; i < 1024 * 768; ++i) { fputc(out[i * 4 + 2], f); fputc(out[i * 4 + 1], f); fputc(out[i * 4], f); }
+    fclose(f);
+    /* second frame: the Task Manager (HUGIN) with a little history */
+    for (uint32_t k = 0; k < 40; ++k) { ((sand_ui_host_t *)&ui.host)->ticks = h_ticks; sand_ui_frame(&ui, &r); }
+    ui.win[2].visible = 1; sand_ui_mark_all(&ui); sand_ui_frame(&ui, &r);
+    sand_ui_present(&ui, out, 1024 * 4, 32, &(struct sand_ui_rect){ 0, 0, 1024, 768 });
+    f = fopen(argc > 2 ? argv[2] : "tasks.ppm", "wb"); fprintf(f, "P6\n1024 768\n255\n");
     for (int i = 0; i < 1024 * 768; ++i) { fputc(out[i * 4 + 2], f); fputc(out[i * 4 + 1], f); fputc(out[i * 4], f); }
     fclose(f); return 0;
 }

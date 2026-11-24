@@ -45,8 +45,11 @@ class DawnTest(unittest.TestCase):
                 # progress-bar label ("desktop") must be gone from where it was drawn
                 bar = sum(sum(rgb(x, 10)) for x in range(0, w, 8)) / (w // 8)
                 self.assertLess(bar, 3 * 90)                                             # dark top bar, not the lit horizon
-                label_zone = [rgb(x, int(h * 0.93) + 24) for x in range(w // 2 - 40, w // 2 + 40, 4)]
-                self.assertTrue(all(abs(a - b) < 40 for a, b in zip(label_zone[0], label_zone[-1])))   # no stray label glyphs there
+                # the splash label sat at x = w/2, y = 93% + 24; the dock now covers that row, but its gaps between tiles are plain
+                # glass, so a leftover glyph would show there as bright pixels against the gap's own colour higher up
+                ref = rgb(512, 700)
+                stray = [rgb(x, y) for x in range(507, 518, 2) for y in range(726, 746, 3)]
+                self.assertTrue(all(abs(c[i] - ref[i]) < 45 for c in stray for i in range(3)), stray[:4])
             finally:
                 vm.stop()
 

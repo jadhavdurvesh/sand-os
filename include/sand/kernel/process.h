@@ -4,6 +4,7 @@
 #define SAND_PROCESS_LIMIT 6u
 #define SAND_PID_ORPHAN 0xFFFFFFFFu /* parent exited: auto-reaped on exit */
 #define SAND_PROCESS_NAME_MAX 16u
+#define SAND_PROCESS_KILLED_STATUS (-9) /* exit status of a process ended from the Task Manager */
 typedef uint32_t sand_pid_t;
 enum sand_process_state { SAND_PROCESS_UNUSED=0, SAND_PROCESS_READY, SAND_PROCESS_RUNNING, SAND_PROCESS_TERMINATED };
 struct sand_process_info { sand_pid_t pid; sand_pid_t parent_pid; uint32_t parent_thread_id; enum sand_process_state state; uint32_t page_directory; uint32_t entry; uint32_t user_stack; int32_t exit_code; uint32_t permissions; char name[SAND_PROCESS_NAME_MAX]; };
@@ -35,6 +36,10 @@ uint32_t process_fault_current(uint32_t vector, uint32_t saved_stack);
 int process_poll_child(sand_pid_t pid, int32_t *exit_code);
 const void *process_wait_object(sand_pid_t pid);
 uint32_t *process_sleep_deadline(void);
+/* End task (Task Manager): see process.c. process_kill_pending/_current are used by the timer IRQ and the syscall gate. */
+int process_kill(sand_pid_t pid);
+int process_kill_pending(void);
+uint32_t process_kill_current(uint32_t saved_stack);
 int process_list_at(uint32_t ordinal, struct sand_process_info *out);
 uint32_t process_live_count(void);
 #endif

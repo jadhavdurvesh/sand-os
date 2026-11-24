@@ -171,7 +171,9 @@ int sand_ui_init(sand_ui_t *ui, const sand_ui_host_t *host, int32_t w, int32_t h
     ui->win[0] = (struct sand_ui_window){ .x = 40, .y = 64, .w = CELL_W * SAND_UI_TERM_COLS + 2 * TERM_PAD, .h = TITLE_H + CELL_H * SAND_UI_TERM_ROWS + 2 * TERM_PAD, .title = "System Console", .kind = 0, .visible = 0, .alive = 1 };
     ui->win[1] = (struct sand_ui_window){ .x = w - 304, .y = 118, .w = 280, .h = 330, .title = "About SAND", .kind = 1, .visible = 0, .alive = 1 };
     if (ui->win[1].x < 80) ui->win[1].x = 80;
-    ui->order[0] = 2; ui->order[1] = 3; ui->order[2] = 4; ui->order[3] = 1; ui->order[4] = 0;
+    ui->win[2] = (struct sand_ui_window){ .x = (w - 440) / 2 + 70, .y = 84, .w = 440, .h = 448, .title = "Task Manager", .kind = 3, .visible = 0, .alive = 1 };
+    ui->order[0] = 3; ui->order[1] = 4; ui->order[2] = 5; ui->order[3] = 2; ui->order[4] = 1; ui->order[5] = 0;
+    ui->hist_seen = 0xFFFFFFFFu; ui->hist_primed = 0; ui->hugin_hover = -1; ui->hugin_seen = 0xFFFFFFFFu;
     ui->press_win = -1; ui->hover_ctrl = -1; ui->launcher_open = 0; ui->launcher_hover = -1; ui->launcher_menu = 0; ui->liveness_seen = 0;
     ui->px = w / 2; ui->py = h / 2; ui->buttons = 0; ui->accent = 0; ui->reduced_motion = 0; ui->clock24 = 1; g_accent = 0xF2C98Au;
     ui->drag_win = -1; ui->hover_dock = -1; ui->resize_win = -1; ui->scratch = 0;
@@ -280,7 +282,7 @@ static int top_window(const sand_ui_t *ui) {
 }
 
 /* ---- system icons ---- */
-static const char *const icon_names[9] = { "CITADEL", "CAIRN", "LOCUS", "QUANTA", "CHRONOS", "KEYSTONE", "LUMEN", "System Console", "About SAND" };
+static const char *const icon_names[10] = { "CITADEL", "CAIRN", "LOCUS", "QUANTA", "CHRONOS", "KEYSTONE", "LUMEN", "System Console", "About SAND", "Task Manager" };
 void sand_ui_set_icons(sand_ui_t *ui, const uint32_t *pixels, int32_t count, int32_t size) { ui->icons = pixels; ui->icon_count = count; ui->icon_size = size; }
 static int same_name(const char *a, const char *b) {
     for (;; ++a, ++b) {
@@ -293,7 +295,7 @@ static int same_name(const char *a, const char *b) {
 }
 static int icon_index(const sand_ui_t *ui, const char *name) {
     if (!ui->icons || !name) return -1;
-    for (int i = 0; i < 9 && i < ui->icon_count; ++i) if (same_name(icon_names[i], name)) return i;
+    for (int i = 0; i < 10 && i < ui->icon_count; ++i) if (same_name(icon_names[i], name)) return i;
     return -1;
 }
 static void draw_icon(sand_ui_t *ui, int idx, int32_t x, int32_t y, int32_t size) {
@@ -320,8 +322,8 @@ static void draw_dock(sand_ui_t *ui) {
             static const int8_t ray[8][4] = { {0,-11,0,-16}, {8,-8,11,-11}, {11,0,16,0}, {8,8,11,11}, {0,11,0,16}, {-8,8,-11,11}, {-11,0,-16,0}, {-8,-8,-11,-11} };
             for (int q = 0; q < 8; ++q) gfx_line(g, x + 27 + ray[q][0], y + 27 + ray[q][1], x + 27 + ray[q][2], y + 27 + ray[q][3], 26, 0xFFE2B0u, (ui->launcher_open && !ui->launcher_menu) ? 255u : 190u);
             if (ui->launcher_open && !ui->launcher_menu) gfx_rrect_ring(g, x, y, c, c, 14, 2, C_CHAMP, 200u);
-        } else if (icon_index(ui, i == 0 ? "System Console" : i == 1 ? "About SAND" : ui->win[i].title_buf) >= 0) {
-            draw_icon(ui, icon_index(ui, i == 0 ? "System Console" : i == 1 ? "About SAND" : ui->win[i].title_buf), x, y, c);
+        } else if (icon_index(ui, i == 0 ? "System Console" : i == 1 ? "About SAND" : i == 2 ? "Task Manager" : ui->win[i].title_buf) >= 0) {
+            draw_icon(ui, icon_index(ui, i == 0 ? "System Console" : i == 1 ? "About SAND" : i == 2 ? "Task Manager" : ui->win[i].title_buf), x, y, c);
             if (ui->win[i].visible) gfx_circle(g, x + c / 2, dy + dh - 8, 2, C_CHAMP, 230u);
             continue;
         } else if (i == 0) {                                   /* System Console: dusk tile, chevron + caret */
@@ -333,6 +335,9 @@ static void draw_dock(sand_ui_t *ui) {
             gfx_rrect_gradient(g, x, y, c, c, 14, 0xF0A47Au, 0xA2486Eu, 255u);
             gfx_rrect_ring(g, x + 12, y + 12, 30, 30, 15, 3, 0xFFF1DCu, 245u);
             gfx_circle(g, x + 27, y + 27, 4, 0xFFF1DCu, 255u);
+        } else if (i == 2) {                            /* Task Manager: three load bars */
+            gfx_rrect_gradient(g, x, y, c, c, 14, 0x4FD6A8u, 0x1B3F78u, 255u);
+            gfx_rrect(g, x + 12, y + 28, 8, 14, 2, 0xFFFFFFu, 235u); gfx_rrect(g, x + 23, y + 17, 8, 25, 2, 0xFFFFFFu, 235u); gfx_rrect(g, x + 34, y + 22, 8, 20, 2, 0xFFE2B0u, 245u);
         } else {                                        /* app window: accent tile with the app initial */
             uint32_t h = (uint32_t)(unsigned char)ui->win[i].title_buf[0] % 4u;
             gfx_rrect_gradient(g, x, y, c, c, 14, tile_a[h], tile_b[h], 255u);
@@ -347,7 +352,7 @@ static void draw_dock(sand_ui_t *ui) {
 #define START_W 92                                      /* width of the SAND (Start) button in the menu bar */
 /* ---- launcher: a glass panel above the dock, or a Start menu under the SAND button ---- */
 #define LAUNCHER_MAX 12
-#define LAUNCHER_SYSTEM 2                            /* System Console and About SAND follow the applications */
+#define LAUNCHER_SYSTEM 3                            /* System Console, About SAND and the Task Manager follow the applications */
 static int launcher_apps(const sand_ui_t *ui) {
     int n = ui->host.launcher_count ? ui->host.launcher_count() : 0;
     return n < 0 ? 0 : (n > LAUNCHER_MAX - LAUNCHER_SYSTEM ? LAUNCHER_MAX - LAUNCHER_SYSTEM : n);
@@ -358,6 +363,7 @@ static int launcher_item_at(const sand_ui_t *ui, int i, struct sand_ui_launcher_
     if (i < apps) return ui->host.launcher_item ? ui->host.launcher_item(i, out) : -1;
     if (i == apps) *out = (struct sand_ui_launcher_item){ "System Console", "", "Shell and system log", 0x8F9BFFu, 0x3B3D9Eu, '>' };
     else if (i == apps + 1) *out = (struct sand_ui_launcher_item){ "About SAND", "", "Version and live status", 0xF2C98Au, 0x9C5A3Au, 'i' };
+    else if (i == apps + 2) *out = (struct sand_ui_launcher_item){ "Task Manager", "", "Apps, memory and load", 0x5CD6A0u, 0x1E7A66u, '#' };
     else return -1;
     return 0;
 }
@@ -583,6 +589,104 @@ static void draw_about(sand_ui_t *ui) {
 }
 
 
+/* ---- HUGIN: the Task Manager (shell-owned panel; reads the process table through the host) ---- */
+#define HUGIN_ROW 36
+#define HUGIN_LIST_Y 216
+#define HUGIN_ROWS 6
+static void hugin_end_rect(const struct sand_ui_window *w, int row, int32_t *x, int32_t *y, int32_t *bw, int32_t *bh) {
+    *bw = 56; *bh = 22; *x = w->x + w->w - 22 - *bw; *y = w->y + HUGIN_LIST_Y + row * HUGIN_ROW + 7;
+}
+static int hugin_hit(sand_ui_t *ui, int32_t px, int32_t py) {
+    const struct sand_ui_window *w = &ui->win[2];
+    if (!w->visible || !ui->host.proc_at) return -1;
+    struct sand_ui_proc pr;
+    for (int r = 0; r < HUGIN_ROWS && ui->host.proc_at((uint32_t)r, &pr) == 0; ++r) {
+        if (pr.system) continue;
+        int32_t x, y, bw, bh; hugin_end_rect(w, r, &x, &y, &bw, &bh);
+        if (px >= x && px < x + bw && py >= y && py < y + bh) return r;
+    }
+    return -1;
+}
+static void hugin_sample(sand_ui_t *ui, uint32_t t) {
+    struct sand_ui_sysinfo si; ui->host.sysinfo(&si);
+    uint32_t mem = (si.total_frames - si.free_frames), heap = si.heap_used / 1024u, rate = 0;
+    if (!ui->hist_primed) {
+        ui->hist_primed = 1; ui->hist_prev_switches = si.switches;
+        for (int k = 0; k < SAND_UI_HIST; ++k) { ui->hist[0][k] = mem; ui->hist[1][k] = heap; ui->hist[2][k] = 0; }
+    } else {
+        rate = si.switches - ui->hist_prev_switches; ui->hist_prev_switches = si.switches;
+        for (int k = 0; k < SAND_UI_HIST - 1; ++k) for (int c = 0; c < 3; ++c) ui->hist[c][k] = ui->hist[c][k + 1];
+        ui->hist[0][SAND_UI_HIST - 1] = mem; ui->hist[1][SAND_UI_HIST - 1] = heap; ui->hist[2][SAND_UI_HIST - 1] = rate;
+    }
+    (void)t;
+}
+static void draw_spark(sand_ui_t *ui, int32_t x, int32_t y, int32_t w, int32_t h, const uint32_t *v, uint32_t vmax) {
+    gfx_t *g = &ui->g; if (vmax == 0) vmax = 1;
+    int32_t px = 0, py = 0;
+    for (int k = 0; k < SAND_UI_HIST; ++k) {
+        uint32_t val = v[k] > vmax ? vmax : v[k];
+        int32_t cx = x + k * (w - 1) / (SAND_UI_HIST - 1), cy = y + h - (int32_t)(val * (uint32_t)h / vmax);
+        gfx_rect(g, cx, cy, 2, y + h - cy, g_accent, 34u);                         /* soft area under the line */
+        if (k) gfx_line(g, px, py, cx, cy, 30, g_accent, 235u);
+        px = cx; py = cy;
+    }
+}
+static void draw_hugin(sand_ui_t *ui) {
+    gfx_t *g = &ui->g; struct sand_ui_window *w = &ui->win[2];
+    struct sand_ui_sysinfo si; ui->host.sysinfo(&si);
+    int32_t x0 = w->x + 22, y0 = w->y + TITLE_H + 18, cw = (w->w - 44 - 20) / 3, ch = 96;
+    uint32_t used_fr = si.total_frames - si.free_frames;
+    char b[32], *p;
+    for (int i = 0; i < 3; ++i) {
+        int32_t cx = x0 + i * (cw + 10);
+        gfx_rrect(g, cx, y0, cw, ch, 12, 0x1A1640u, 255u); gfx_rrect_ring(g, cx, y0, cw, ch, 12, 1, C_LINE, 40u);
+        gfx_text(g, &ui->sans_small, cx + 12, y0 + 20, i == 0 ? "Memory" : i == 1 ? "Kernel heap" : "Switches / s", C_MUTED, 255u, 0);
+        uint32_t last = ui->hist[i][SAND_UI_HIST - 1], vmax;
+        p = b; const char *unit;
+        if (i == 0) { p = put_u(p, used_fr / 256u); unit = " MiB"; vmax = si.total_frames; }
+        else if (i == 1) { p = put_u(p, last); unit = " KiB"; vmax = si.heap_total / 1024u; }
+        else { p = put_u(p, last); unit = ""; vmax = 40; for (int k = 0; k < SAND_UI_HIST; ++k) if (ui->hist[2][k] > vmax) vmax = ui->hist[2][k]; }
+        *p = 0;
+        int32_t ex = gfx_text(g, &ui->sans_medium, cx + 12, y0 + 44, b, C_TEXT, 255u, 0);
+        if (unit[0]) gfx_text(g, &ui->sans_small, ex + 2, y0 + 44, unit, C_MUTED, 255u, 0);
+        draw_spark(ui, cx + 12, y0 + 54, cw - 24, 30, ui->hist[i], vmax);
+    }
+    int32_t sy = y0 + ch + 30;
+    gfx_text(g, &ui->sans_medium, x0, sy, "APPLICATIONS", C_MUTED, 255u, 120);
+    struct sand_ui_proc pr; int n = 0;
+    while (n < HUGIN_ROWS && ui->host.proc_at && ui->host.proc_at((uint32_t)n, &pr) == 0) ++n;
+    p = b; p = put_u(p, (uint32_t)n); p = put_s(p, n == 1 ? " running" : " running"); *p = 0;
+    gfx_text_right(g, &ui->sans_small, w->x + w->w - 22, sy, b, C_MUTED, 255u);
+    int32_t hy = sy + 24;
+    gfx_text(g, &ui->sans_small, x0, hy, "NAME", C_MUTED, 200u, 80);
+    gfx_text(g, &ui->sans_small, x0 + 160, hy, "PID", C_MUTED, 200u, 80);
+    gfx_text(g, &ui->sans_small, x0 + 214, hy, "STATE", C_MUTED, 200u, 80);
+    gfx_text(g, &ui->sans_small, x0 + 284, hy, "PERMS", C_MUTED, 200u, 80);
+    gfx_rect(g, x0, hy + 8, w->w - 44, 1, C_LINE, 40u);
+    if (n == 0) {
+        gfx_text_center(g, &ui->sans_medium, w->x + w->w / 2, w->y + HUGIN_LIST_Y + 70, "Nothing is running", C_TEXT, 220u);
+        gfx_text_center(g, &ui->sans_small, w->x + w->w / 2, w->y + HUGIN_LIST_Y + 92, "Open an application from the Start menu.", C_MUTED, 255u);
+    }
+    for (int r = 0; r < n && ui->host.proc_at((uint32_t)r, &pr) == 0; ++r) {
+        int32_t ry = w->y + HUGIN_LIST_Y + r * HUGIN_ROW;
+        if (r & 1) gfx_rrect(g, x0 - 8, ry + 1, w->w - 28, HUGIN_ROW - 2, 8, 0x1A1640u, 150u);
+        gfx_text(g, &ui->sans_medium, x0, ry + 23, pr.name, C_TEXT, 255u, 0);
+        p = b; p = put_u(p, pr.pid); *p = 0;
+        gfx_text(g, &ui->mono, x0 + 160, ry + 23, b, C_MUTED, 255u, 0);
+        gfx_circle(g, x0 + 218, ry + 18, 3, pr.running ? C_OK : C_WARN, 255u);
+        gfx_text(g, &ui->sans_small, x0 + 228, ry + 22, pr.running ? "Running" : "Ready", C_TEXT, 220u, 0);
+        p = b; *p++ = '0'; *p++ = 'x'; { static const char hx[] = "0123456789ABCDEF"; uint32_t v = pr.perms; int started = 0;
+            for (int sh = 28; sh >= 0; sh -= 4) { uint32_t d = (v >> sh) & 15u; if (d || started || sh == 0) { *p++ = hx[d]; started = 1; } } } *p = 0;
+        gfx_text(g, &ui->mono, x0 + 284, ry + 22, b, C_MUTED, 255u, 0);
+        int32_t ex, ey, ew, eh; hugin_end_rect(w, r, &ex, &ey, &ew, &eh);
+        if (pr.system) { gfx_rrect(g, ex, ey, ew, eh, 11, C_LINE, 40u); gfx_text_center(g, &ui->sans_small, ex + ew / 2, ey + 15, "System", C_MUTED, 255u); continue; }
+        int hov = ui->hugin_hover == r;
+        gfx_rrect(g, ex, ey, ew, eh, 11, C_CLOSE, hov ? 255u : 70u);
+        gfx_rrect_ring(g, ex, ey, ew, eh, 11, 1, C_CLOSE, hov ? 255u : 150u);
+        gfx_text_center(g, &ui->sans_small, ex + ew / 2, ey + 15, "End", hov ? 0x2A0F18u : 0xFFB4B4u, 255u);
+    }
+}
+
 /* ---- window service ---- */
 static void push_event(struct sand_ui_window *w, const struct sand_event *e) {
     uint8_t next = (uint8_t)((w->qt + 1u) % SAND_UI_EVENTS);
@@ -757,6 +861,7 @@ void sand_ui_pointer(sand_ui_t *ui, int32_t dx, int32_t dy, uint8_t buttons) {
     if (moved) ui->cursor_moved = 1;
     int hd = dock_hit(ui, ui->px, ui->py);
     if (hd != ui->hover_dock) { ui->hover_dock = hd; mark_dock(ui); }
+    { int hh = (ui->win[2].visible && hit_window(ui, ui->px, ui->py) == 2) ? hugin_hit(ui, ui->px, ui->py) : -1; if (hh != ui->hugin_hover) { ui->hugin_hover = hh; mark_window(ui, 2); } }
     { int hs = ui->px < START_W && ui->py < MENU_H; if (hs != ui->hover_start) { ui->hover_start = hs; mark(ui, 0, 0, START_W + 40, MENU_H + 1); } }
     { int hc = -1; int th = top_window(ui);
       for (int k = SAND_UI_WINDOWS - 1; k >= 0 && hc < 0; --k) {
@@ -843,6 +948,10 @@ void sand_ui_pointer(sand_ui_t *ui, int32_t dx, int32_t dy, uint8_t buttons) {
                         w->x = (ui->w - w->w) / 2; w->y = imax(MENU_H + 8, (ui->h - 90 - w->h) / 2);
                         mark_window(ui, wi);
                     } else { ui->drag_win = wi; ui->drag_dx = lx; ui->drag_dy = ly; }
+                } else if (w->kind == 3) {
+                    int row = hugin_hit(ui, ui->px, ui->py); struct sand_ui_proc pr;
+                    if (row >= 0 && ui->host.proc_end && ui->host.proc_at((uint32_t)row, &pr) == 0) { (void)ui->host.proc_end(pr.pid); ui->hugin_seen = 0xFFFFFFFFu; }
+                    mark_window(ui, wi);
                 } else if (w->kind == 2 && w->resizable && lx >= w->w - 24 && ly >= w->h - 24) {
                     ui->resize_win = wi; ui->rs_px = ui->px; ui->rs_py = ui->py; ui->rs_w0 = w->sw; ui->rs_h0 = w->sh;
                 } else if (w->kind == 2) {
@@ -871,6 +980,8 @@ int sand_ui_frame(sand_ui_t *ui, struct sand_ui_rect *out) {
              ui->win[0].x + TERM_PAD + (ui->term_col + 1) * CELL_W, ui->win[0].y + TITLE_H + TERM_PAD + (ui->term_row + 1) * CELL_H + 2);
     }
     if (ui->win[1].visible && ui->about_seen != t / 50u) { ui->about_seen = t / 50u; mark(ui, ui->win[1].x, ui->win[1].y + TITLE_H, ui->win[1].x + ui->win[1].w, ui->win[1].y + ui->win[1].h); }
+    if (ui->hist_seen != t / 100u) { ui->hist_seen = t / 100u; hugin_sample(ui, t); if (ui->win[2].visible) mark_window(ui, 2); }
+    if (ui->win[2].visible && ui->hugin_seen != t / 25u) { ui->hugin_seen = t / 25u; mark(ui, ui->win[2].x, ui->win[2].y + TITLE_H, ui->win[2].x + ui->win[2].w, ui->win[2].y + ui->win[2].h); }
     if (ui->toast_on && (int32_t)(t - ui->toast_until) >= 0) { int32_t tx, ty; ui->toast_on = 0; toast_rect(ui, &tx, &ty); mark(ui, tx - 20, ty - 12, tx + TOAST_W + 20, ty + TOAST_H + 24); }
     if (ui->clock_min_seen != t / 500u) { ui->clock_min_seen = t / 500u; mark(ui, ui->w - 120, 0, ui->w, MENU_H); }
     if (ui->liveness_seen != t / 25u) {
@@ -922,7 +1033,7 @@ int sand_ui_frame(sand_ui_t *ui, struct sand_ui_rect *out) {
         draw_frame(ui, i, focused);
         gfx_set_clip(&ui->g, imax(d.x0, ui->win[i].x), imax(d.y0, ui->win[i].y + TITLE_H), imin(d.x1, ui->win[i].x + ui->win[i].w) - imax(d.x0, ui->win[i].x),
                      imin(d.y1, ui->win[i].y + ui->win[i].h) - imax(d.y0, ui->win[i].y + TITLE_H));
-        if (i == 0) draw_console(ui, focused); else if (i == 1) draw_about(ui); else blit_surface(ui, i);
+        if (i == 0) draw_console(ui, focused); else if (i == 1) draw_about(ui); else if (i == 2) draw_hugin(ui); else blit_surface(ui, i);
         if (aw->kind == 2 && aw->resizable) {                                  /* dune-grip resize handle */
             int32_t cx = aw->x + aw->w - 7, cy = aw->y + aw->h - 7;
             for (int k = 0; k < 3; ++k) { int32_t o = 5 + k * 5; gfx_line(&ui->g, cx - o, cy, cx, cy - o, 24, C_CHAMP, focused ? 150u : 70u); }

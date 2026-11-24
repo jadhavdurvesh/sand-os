@@ -1,6 +1,7 @@
 #include "sand/arch/x86/timer.h"
 #include "sand/arch/x86/idt.h"
 #include "sand/kernel/scheduler.h"
+#include "sand/kernel/process.h"
 #define PIT_INPUT_HZ 1193182u
 #define PIC1_COMMAND 0x20u
 #define PIC1_DATA 0x21u
@@ -10,7 +11,8 @@ static inline void outb(uint16_t port,uint8_t value) { __asm__ volatile ("outb %
 static inline uint8_t inb(uint16_t port) { uint8_t value; __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port)); return value; }
 uint32_t timer_irq_handler(uint32_t saved_stack) {
     ++ticks;
-    uint32_t next=scheduler_reschedule(saved_stack);
+    const uint32_t *frame=(const uint32_t *)saved_stack;          /* PUSHAL, then eip, cs */
+    uint32_t next=((frame[9]&3u)==3u && process_kill_pending()) ? process_kill_current(saved_stack) : scheduler_reschedule(saved_stack);
     outb(PIC1_COMMAND,0x20u);
     return next;
 }

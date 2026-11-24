@@ -161,12 +161,12 @@ class DesktopTest(unittest.TestCase):
     def test_07_dock_launcher_starts_an_app(self):
         """Click the launcher tile, pick LOCUS from the panel: the app starts and opens a window."""
         DesktopTest._ptr = (None, None)                      # re-home: clamp to the corner, then steer from a known position
-        self.move_to(444, 716)                               # launcher tile in the dock
+        self.move_to(410, 716)                               # launcher tile in the dock
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(1.0)
         panel = self.shot("desktop-launcher.ppm")
-        self.assertGreater(sum(1 for x in range(420, 680) for y in range(420, 640) if sum(pixel(panel, x, y)) > 500), 200)   # panel text and icons
-        self.move_to(501, 309)                              # LOCUS row (third: CITADEL, CAIRN, LOCUS, QUANTA, CHRONOS, KEYSTONE, LUMEN, then the two system rows)
+        self.assertGreater(sum(1 for x in range(380, 640) for y in range(110, 640) if sum(pixel(panel, x, y)) > 500), 200)   # panel text and icons
+        self.move_to(500, 257)                              # LOCUS row (third: CITADEL, CAIRN, LOCUS, QUANTA, CHRONOS, KEYSTONE, LUMEN, then the two system rows)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(2.5)
         win = self.shot("desktop-launched.ppm")
@@ -177,13 +177,43 @@ class DesktopTest(unittest.TestCase):
         ps = self.vm.run_command("ps")
         self.assertNotIn("locus", ps)
 
+    def test_07a_task_manager_lists_and_ends_an_app(self):
+        """The Task Manager (third system row) lists running apps; its End button stops one for real and is audited."""
+        DesktopTest._ptr = (None, None)
+        self.move_to(410, 716)
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(1.0)
+        self.move_to(500, 257)                              # LOCUS
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(2.5)
+        self.assertIn("locus", self.vm.run_command("ps"))
+        self.move_to(376, 716)                              # the dock grew a tile for the running app, so the launcher moved left
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(1.0)
+        self.move_to(500, 621)                              # Task Manager row (tenth)
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(1.5)
+        shot = self.shot("desktop-taskmgr.ppm")
+        r, g, b = pixel(shot, 730, 318)                     # inside the first row's End button (left of its label): coral
+        self.assertGreater(r, g + 20)
+        self.move_to(752, 318)
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+        time.sleep(2.0)
+        self.assertNotIn("locus", self.vm.run_command("ps"))
+        self.assertIn("SAND_AUDIT:TASK_ENDED locus", self.vm.debug_log())
+        after = self.shot("desktop-taskmgr-after.ppm")
+        r, g, b = pixel(after, 730, 318)
+        self.assertLess(r, g + 20)                          # the row is gone; no End button left there
+        self.move_to(382, 101)                              # the window's close dot
+        self.vm.mouse_button(1); self.vm.mouse_button(0)
+
     def test_07b_disk_app_in_the_launcher(self):
         """LUMEN lives only in MIMIR; its manifest puts it in the launcher and the dock starts it from disk."""
         DesktopTest._ptr = (None, None)
-        self.move_to(444, 716)
+        self.move_to(410, 716)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(1.0)
-        self.move_to(501, 517)                              # seventh row: LUMEN (disk app, listed after the built-in apps)
+        self.move_to(500, 465)                              # seventh row: LUMEN (disk app, listed after the built-in apps)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(2.5)
         self.shot("desktop-disk-launch.ppm")

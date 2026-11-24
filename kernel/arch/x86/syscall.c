@@ -156,6 +156,7 @@ static struct driftnet_udp net_udp;      /* syscalls run with IRQs off on one CP
 uint32_t syscall_dispatch(uint32_t frame) {
     uint32_t *r=(uint32_t *)frame;
     if((r[R_CS]&3u)!=3u || process_current()==0u) { r[R_EAX]=(uint32_t)SAND_E_FAIL; return frame; }
+    if(process_kill_pending()) return process_kill_current(frame);      /* ended from the Task Manager */
     uint32_t a=r[R_EBX], b=r[R_ECX], c=r[R_EDX];
     int32_t result=SAND_E_NOSYS;
     { uint32_t need=required_permission(r[R_EAX],a);
