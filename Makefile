@@ -221,7 +221,7 @@ $(BUILD)/sigil-pub.o: $(SIGIL)/sigil-pub.bin
 $(BUILD)/sigil-key.o: kernel/fs/sigil_key.c include/sand/fs/mimir.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 ICONS := $(BUILD)/icons.sip
-$(ICONS): assets/ui/app-icons.png tools/icon_pack.py | $(BUILD)
+$(ICONS): assets/ui/app-icons.png assets/ui/task-manager.png tools/icon_pack.py | $(BUILD)
 	$(PYTHON) tools/icon_pack.py assets/ui/app-icons.png $@
 GJALLAR_SCORE := assets/audio/gjallarhorn.gjlr
 disk: $(ICONS) $(GJALLAR_SCORE) $(BOOT_SECTOR) $(STAGE2) $(KERNEL_BIN) $(foreach a,$(DISK_APPS),$(APP_BUILD)/$(a).sapp) tools/mkmimir.py $(SIGIL)/sigil.key

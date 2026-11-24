@@ -11,6 +11,7 @@ void scheduler_set_switch_hook(sand_switch_hook hook);
  * the saved stack pointer and return the stack pointer to resume. */
 uint32_t scheduler_exit_current(uint32_t saved_stack);
 uint32_t scheduler_block_current_irq(const void *wait_object, uint32_t saved_stack);
+void scheduler_wake_thread(uint32_t id);   /* makes a blocked thread runnable (used when a process is ended) */
 int scheduler_wake_all(const void *wait_object);
 int scheduler_init(void);
 int scheduler_create(sand_thread_entry entry, void *argument);

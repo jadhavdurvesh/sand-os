@@ -11,7 +11,7 @@
 #define USER_CODE_FLAGS 0x005u
 #define USER_STACK_FLAGS 0x007u
 #define NO_THREAD 0xFFFFFFFFu
-struct process_slot { struct sand_process_info info; uint32_t thread_id; uint32_t sleep_deadline; uint8_t kernel_stack[8192] __attribute__((aligned(16))); };
+struct process_slot { struct sand_process_info info; uint32_t thread_id; uint32_t sleep_deadline; uint8_t kill; uint8_t kernel_stack[8192] __attribute__((aligned(16))); };
 static struct process_slot slots[SAND_PROCESS_LIMIT];
 static sand_pid_t active_pid;
 static sand_pid_t next_pid=1u;
@@ -20,7 +20,7 @@ extern uint8_t __user_text_start[];
 extern uint8_t __user_text_end[];
 extern void x86_enter_user(uint32_t entry,uint32_t stack_top);
 int process_system_init(void) {
-    for(uint32_t i=0;i<SAND_PROCESS_LIMIT;++i) { slots[i].info.pid=0u; slots[i].info.state=SAND_PROCESS_UNUSED; slots[i].info.page_directory=0u; slots[i].thread_id=NO_THREAD; slots[i].sleep_deadline=0u; }
+    for(uint32_t i=0;i<SAND_PROCESS_LIMIT;++i) { slots[i].info.pid=0u; slots[i].info.state=SAND_PROCESS_UNUSED; slots[i].info.page_directory=0u; slots[i].thread_id=NO_THREAD; slots[i].kill=0u; slots[i].sleep_deadline=0u; }
     active_pid=0u; next_pid=1u;
     scheduler_set_switch_hook(process_scheduler_hook);
     return 0;
@@ -143,7 +143,7 @@ int process_create_elf(const char *name,const void *image,uint32_t image_size,sa
     }
     sand_pid_t pid=next_pid++;
     if(next_pid==0u) next_pid=1u;
-    slot->info.pid=pid; slot->info.parent_pid=active_pid; slot->info.parent_thread_id=scheduler_current_id(); slot->info.state=SAND_PROCESS_READY; slot->info.page_directory=directory; slot->thread_id=NO_THREAD; slot->sleep_deadline=0u;
+    slot->info.pid=pid; slot->info.parent_pid=active_pid; slot->info.parent_thread_id=scheduler_current_id(); slot->info.state=SAND_PROCESS_READY; slot->info.page_directory=directory; slot->thread_id=NO_THREAD; slot->kill=0u; slot->sleep_deadline=0u;
     slot->info.entry=eh->entry; slot->info.user_stack=USER_STACK_TOP;
     set_process_name(slot,name); slot->info.permissions=0u; *pid_out=pid; return 0;
 }
@@ -260,7 +260,7 @@ int process_create_sapp(const char *name,const void *image,uint32_t image_size,s
     }
     sand_pid_t pid=next_pid++; if(next_pid==0u) next_pid=1u;
     slot->info.pid=pid; slot->info.parent_pid=active_pid;
-    slot->thread_id=NO_THREAD; slot->sleep_deadline=0u;
+    slot->thread_id=NO_THREAD; slot->kill=0u; slot->sleep_deadline=0u;
     slot->info.parent_thread_id=scheduler_current_id(); slot->info.state=SAND_PROCESS_READY;
     slot->info.page_directory=directory; slot->info.entry=h->entry;
     slot->info.user_stack=USER_STACK_TOP; set_process_name(slot,name); slot->info.permissions=apps_permissions(name); *pid_out=pid;
@@ -329,7 +329,7 @@ int process_destroy(sand_pid_t pid) {
     if(paging_space_destroy(slot->info.page_directory)!=0) return -1;
     /* paging_space_destroy reclaimed the user-mapped code and stack frames. */
     slot->info.page_directory=0u;
-    slot->info.state=SAND_PROCESS_UNUSED; slot->info.pid=0u; slot->info.parent_pid=0u; slot->info.parent_thread_id=0u; slot->thread_id=NO_THREAD; slot->sleep_deadline=0u; return 0;
+    slot->info.state=SAND_PROCESS_UNUSED; slot->info.pid=0u; slot->info.parent_pid=0u; slot->info.parent_thread_id=0u; slot->thread_id=NO_THREAD; slot->kill=0u; slot->sleep_deadline=0u; return 0;
 }
 int process_get_info(sand_pid_t pid,struct sand_process_info *out) { struct process_slot *slot=find_slot(pid); if(slot==0 || out==0) return -1; *out=slot->info; return 0; }
 sand_pid_t process_current(void) { return active_pid; }
@@ -413,6 +413,17 @@ uint32_t *process_sleep_deadline(void) {
     struct process_slot *slot=find_slot(active_pid);
     return slot?&slot->sleep_deadline:0;
 }
+/* End task: flags the process; its own thread is stopped at the next timer tick in ring 3 or the next system call it makes
+ * (a thread blocked in a call is woken so it reaches that check). The process then exits with SAND_PROCESS_KILLED_STATUS. */
+int process_kill(sand_pid_t pid) {
+    uint32_t flags=proc_irq_save();
+    struct process_slot *slot=find_slot(pid);
+    if(slot==0 || slot->info.state==SAND_PROCESS_TERMINATED || slot->thread_id==NO_THREAD) { proc_irq_restore(flags); return -1; }
+    slot->kill=1u; scheduler_wake_thread(slot->thread_id);
+    proc_irq_restore(flags); return 0;
+}
+int process_kill_pending(void) { struct process_slot *slot=find_slot(active_pid); return slot!=0 && slot->kill!=0u; }
+uint32_t process_kill_current(uint32_t saved_stack) { return process_exit_current(SAND_PROCESS_KILLED_STATUS,saved_stack); }
 int process_list_at(uint32_t ordinal,struct sand_process_info *out) {
     if(out==0) return -1;
     for(uint32_t i=0;i<SAND_PROCESS_LIMIT;++i) {

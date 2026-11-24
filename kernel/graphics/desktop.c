@@ -15,6 +15,7 @@
 #include "sand/mm/heap.h"
 #include "sand/fs/mimir.h"
 #include "sand/kernel/perms.h"
+#include "sand/security/launch_gate.h"
 #include "sand/abi.h"
 
 static volatile uint32_t settings_dirty_since;           /* 0 = clean; else tick of the last change (never 0) */
@@ -48,6 +49,32 @@ static int host_launch(const char *app) {
     if (rc == 0 && disk) (void)process_set_permissions(pid, diskapps_manifest_permissions(image, size));
     if (flags & 0x200u) __asm__ volatile("sti" : : : "memory");
     return rc;
+}
+/* Task Manager: the live user applications (terminated-but-unreaped slots are hidden). */
+static int host_proc_at(uint32_t index, struct sand_ui_proc *out) {
+    struct sand_process_info info;
+    for (int pass = 0; pass < 2; ++pass)                    /* applications first, then the protected system processes */
+        for (uint32_t ord = 0; process_list_at(ord, &info) == 0; ++ord) {
+            if (info.state != SAND_PROCESS_READY && info.state != SAND_PROCESS_RUNNING) continue;
+            int system = info.parent_pid == 0u;             /* started by the kernel itself (the shell) */
+            if (system != pass) continue;
+            if (index-- != 0u) continue;
+            out->pid = info.pid; out->perms = info.permissions; out->running = info.state == SAND_PROCESS_RUNNING; out->system = (uint8_t)system;
+            for (int i = 0; i < 16; ++i) out->name[i] = info.name[i];
+            out->name[15] = 0;
+            return 0;
+        }
+    return -1;
+}
+static int host_proc_end(uint32_t pid) {
+    struct sand_process_info info; char line[48] = "TASK_ENDED "; uint32_t n = 11u;
+    if (process_get_info(pid, &info) != 0) return -1;
+    if (info.parent_pid == 0u) { sand_audit("TASK_END_DENIED system process"); return -1; }
+    for (uint32_t i = 0; info.name[i] && n < 44u; ++i) line[n++] = info.name[i];
+    line[n] = 0;
+    if (process_kill(pid) != 0) return -1;
+    sand_audit(line);
+    return 0;
 }
 /* Launcher catalogue: built-in apps first (manifest order), then disk apps that declare a "launcher" block. */
 static int host_launcher_count(void) {
@@ -131,7 +158,7 @@ static void desktop_thread(void *arg) {
 int sand_desktop_start(const sand_framebuffer_t *framebuffer) {
     if (!graphics_framebuffer_valid(framebuffer) || (framebuffer->bits_per_pixel != 24u && framebuffer->bits_per_pixel != 32u)) return -1;
     fb = *framebuffer;
-    sand_ui_host_t host = { desktop_alloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive, host_launch, host_launcher_count, host_launcher_item };
+    sand_ui_host_t host = { desktop_alloc, timer_ticks, host_clock, host_sysinfo, host_pid, host_pid_alive, host_launch, host_proc_at, host_proc_end, host_launcher_count, host_launcher_item };
     if (sand_ui_init(&ui, &host, (int32_t)fb.width, (int32_t)fb.height) != 0) return -2;
     { uint32_t flags; __asm__ volatile("pushf; pop %0; cli" : "=r"(flags) : : "memory");
       diskapps_launcher_scan();                      /* once, before the desktop thread runs */

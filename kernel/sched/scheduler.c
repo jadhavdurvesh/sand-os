@@ -106,6 +106,12 @@ uint32_t scheduler_reschedule(uint32_t saved_stack) {
     }
     return (uint32_t)threads[current_thread].saved_stack;
 }
+void scheduler_wake_thread(uint32_t id) {
+    if(id==0u || id>=SAND_SCHEDULER_MAX_THREADS) return;
+    uint32_t flags=irq_save();
+    if(threads[id].state==THREAD_BLOCKED) { threads[id].wait_object=0; threads[id].state=THREAD_RUNNABLE; }
+    irq_restore(flags);
+}
 void scheduler_set_switch_hook(sand_switch_hook hook) { switch_hook=hook; }
 uint32_t scheduler_exit_current(uint32_t saved_stack) {
     threads[current_thread].state=THREAD_DEAD;
