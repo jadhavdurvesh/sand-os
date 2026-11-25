@@ -83,7 +83,7 @@ class DesktopTest(unittest.TestCase):
         time.sleep(1.0)
         menu = self.shot("desktop-start.ppm")
         self.assertGreater(sum(1 for x in range(20, 280) for y in range(60, 540) if sum(pixel(menu, x, y)) > 500), 300)   # the Start panel's labels
-        self.move_to(130, 463)                                                  # "System Console" row (eighth)
+        self.move_to(130, 513)                                                  # "System Console" row (ninth, below HEL)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(1.0)
         win = self.shot("desktop-console-opened.ppm")
@@ -120,6 +120,30 @@ class DesktopTest(unittest.TestCase):
         self.assertNotEqual(pixel(gone, 200, 402), pixel(img, 200, 402))
         out = self.vm.run_command("ls")
         self.assertIn("note-1.txt", out)
+        self.vm.run_command("rm note-1.txt")
+
+    def test_05a_hel_restores_a_removed_file(self):
+        """HEL (the trash app) lists what test_05 removed and brings it back with R."""
+        self.assertNotIn("note-1.txt", self.vm.run_command("ls"))
+        names = [l.split()[0] for l in self.vm.run_command("trash").splitlines() if " bytes, last version " in l]
+        self.assertIn("note-1.txt", names)
+        self.vm.send("run hel\r")
+        time.sleep(2.5)
+        img = self.shot("desktop-hel.ppm")
+        r, g, b = pixel(img, 156, 438)                       # the Restore button (jade gradient)
+        self.assertGreater(g, r + 40, (r, g, b))
+        self.assertGreater(self.bright(img, 310, 178, 400, 198), 5)   # the first file name is listed
+        before = self.vm.serial_text
+        for _ in range(names.index("note-1.txt")):           # j moves the selection down to it
+            self.vm.sendkey("j")
+        time.sleep(0.5)
+        self.vm.sendkey("r")                                 # restore the selected file
+        time.sleep(1.0)
+        self.vm.sendkey("q")
+        self.assertIsNotNone(self.vm.expect(r"exited with status 0", 10, start=len(before)), self.vm.serial_text[-300:])
+        time.sleep(1.0)
+        self.assertIn("note-1.txt", self.vm.run_command("ls"))
+        self.assertNotIn("note-1.txt", self.vm.run_command("trash"))
         self.vm.run_command("rm note-1.txt")
 
     def test_06_multiple_app_windows_and_calculator(self):
@@ -166,7 +190,7 @@ class DesktopTest(unittest.TestCase):
         time.sleep(1.0)
         panel = self.shot("desktop-launcher.ppm")
         self.assertGreater(sum(1 for x in range(380, 640) for y in range(110, 640) if sum(pixel(panel, x, y)) > 500), 200)   # panel text and icons
-        self.move_to(500, 257)                              # LOCUS row (third: CITADEL, CAIRN, LOCUS, QUANTA, CHRONOS, KEYSTONE, LUMEN, then the two system rows)
+        self.move_to(500, 201)                              # LOCUS row (third: CITADEL, CAIRN, LOCUS, HEL, QUANTA, CHRONOS, KEYSTONE, LUMEN, then the three system rows)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(2.5)
         win = self.shot("desktop-launched.ppm")
@@ -183,14 +207,14 @@ class DesktopTest(unittest.TestCase):
         self.move_to(410, 716)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(1.0)
-        self.move_to(500, 257)                              # LOCUS
+        self.move_to(500, 201)                              # LOCUS
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(2.5)
         self.assertIn("locus", self.vm.run_command("ps"))
         self.move_to(376, 716)                              # the dock grew a tile for the running app, so the launcher moved left
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(1.0)
-        self.move_to(500, 621)                              # Task Manager row (tenth)
+        self.move_to(500, 617)                              # Task Manager row (eleventh)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(1.5)
         shot = self.shot("desktop-taskmgr.ppm")
@@ -213,7 +237,7 @@ class DesktopTest(unittest.TestCase):
         self.move_to(410, 716)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(1.0)
-        self.move_to(500, 465)                              # seventh row: LUMEN (disk app, listed after the built-in apps)
+        self.move_to(500, 461)                              # eighth row: LUMEN (disk app, listed after the built-in apps)
         self.vm.mouse_button(1); self.vm.mouse_button(0)
         time.sleep(2.5)
         self.shot("desktop-disk-launch.ppm")
@@ -423,9 +447,9 @@ class DesktopTest(unittest.TestCase):
         self.assertLess(self.changed(gone, base, 316, 356, 356, 396), 5)         # nothing left in that cell
         self.move_to(410, 716)                                                   # Start/launcher panel: right-click CITADEL, Add to Desktop
         self.click(); time.sleep(1.0)
-        self.move_to(500, 145)
+        self.move_to(500, 105)
         self.vm.mouse_button(2); self.vm.mouse_button(0); time.sleep(0.8)
-        self.move_to(550, 204)
+        self.move_to(550, 164)
         self.click(); time.sleep(1.0)
         back = self.shot("desktop-shortcuts-added.ppm")
         self.assertGreater(self.bright(back, 40, 156, 92, 210), 20)             # CITADEL is back in the first free cell
