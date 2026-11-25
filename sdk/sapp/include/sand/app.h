@@ -86,6 +86,8 @@ static inline int32_t sand_fs_seal(struct sand_fsseal *out) { return sand_syscal
 static inline int32_t sand_fs_scrub(struct sand_fsscrub *out) { return sand_syscall1(SAND_SYS_FS_SCRUB, (uint32_t)out); }
 static inline int32_t sand_fs_label(const char *name, uint32_t read_perm, uint32_t write_perm) { return sand_syscall3(SAND_SYS_FS_LABEL, (uint32_t)name, read_perm, write_perm); }
 static inline int32_t sand_fs_list_ex(uint32_t index, struct sand_dirent_ex *out) { return sand_syscall2(SAND_SYS_FS_LIST_EX, index, (uint32_t)out); }
+static inline int32_t sand_fs_trash_list(uint32_t index, struct sand_trashed *out) { return sand_syscall2(SAND_SYS_FS_TRASH_LIST, index, (uint32_t)out); }
+static inline int32_t sand_fs_restore(const char *name) { return sand_syscall1(SAND_SYS_FS_RESTORE, (uint32_t)name); }
 static inline int32_t sand_fs_ebb(void) { return sand_syscall0(SAND_SYS_FS_EBB); }
 static inline int32_t sand_time_get(struct sand_time *out) { return sand_syscall1(SAND_SYS_TIME_GET, (uint32_t)out); }
 static inline int32_t sand_win_resizable(int32_t id, int32_t min_w, int32_t min_h) { return sand_syscall2(SAND_SYS_WIN_RESIZABLE, (uint32_t)id, ((uint32_t)min_w << 16) | (uint32_t)min_h); }

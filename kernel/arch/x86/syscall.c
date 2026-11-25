@@ -90,8 +90,8 @@ static uint32_t required_permission(uint32_t number,uint32_t a) {
     switch(number) {
     case SAND_SYS_WRITE: return SAND_PERM_CONSOLE_WRITE;
     case SAND_SYS_READ: return SAND_PERM_CONSOLE_READ;
-    case SAND_SYS_FS_READ: case SAND_SYS_FS_LIST: case SAND_SYS_FS_LIST_EX: case SAND_SYS_FS_STAT: case SAND_SYS_FS_HISTORY: case SAND_SYS_FS_SEAL: case SAND_SYS_FS_SCRUB: return SAND_PERM_FS_READ;
-    case SAND_SYS_FS_WRITE: case SAND_SYS_FS_REMOVE: case SAND_SYS_FS_ROLLBACK: case SAND_SYS_FS_EBB: return SAND_PERM_FS_WRITE;
+    case SAND_SYS_FS_READ: case SAND_SYS_FS_LIST: case SAND_SYS_FS_LIST_EX: case SAND_SYS_FS_STAT: case SAND_SYS_FS_HISTORY: case SAND_SYS_FS_SEAL: case SAND_SYS_FS_SCRUB: case SAND_SYS_FS_TRASH_LIST: return SAND_PERM_FS_READ;
+    case SAND_SYS_FS_WRITE: case SAND_SYS_FS_REMOVE: case SAND_SYS_FS_ROLLBACK: case SAND_SYS_FS_RESTORE: case SAND_SYS_FS_EBB: return SAND_PERM_FS_WRITE;
     case SAND_SYS_FS_LABEL: return SAND_PERM_INSTALL;
     case SAND_SYS_SPAWN: return SAND_PERM_SPAWN;
     case SAND_SYS_WIN_CREATE: return SAND_PERM_WINDOW;
@@ -328,6 +328,22 @@ uint32_t syscall_dispatch(uint32_t frame) {
         if(!label_allows(name_buffer,1)) { audit_label("MIMIR_LABEL_DENIED rollback",name_buffer); result=SAND_E_PERM; break; }
         if(mimir_rollback(name_buffer,b)==0) { audit_label("MIMIR_ROLLBACK",name_buffer); result=0; } else result=SAND_E_NOENT;
         break;
+    case SAND_SYS_FS_TRASH_LIST: {
+        struct sand_trashed t; struct mimir_info in; char nm[SAND_NAME_MAX_EX];
+        if(!user_ok(b,sizeof(t),1)) { result=SAND_E_FAULT; break; }
+        if(mimir_trash_list(a,nm,sizeof(nm),&in)!=0) { result=SAND_E_NOENT; break; }
+        { uint32_t need=in.read_perm; if((process_permissions(process_current())&need)!=need) { result=SAND_E_NOENT; break; } }   /* a file the caller could not read stays invisible */
+        for(uint32_t i=0;i<sizeof(t.name);++i) t.name[i]=nm[i];
+        t.length=in.size; t.version=in.version; t.read_perm=in.read_perm; t.write_perm=in.write_perm;
+        (void)copy_out(b,&t,sizeof(t)); result=0; break; }
+    case SAND_SYS_FS_RESTORE: {
+        struct mimir_info in; char nm[SAND_NAME_MAX_EX]; int found=0;
+        if(copy_name(a)!=0) { result=SAND_E_FAULT; break; }
+        for(uint32_t i=0;mimir_trash_list(i,nm,sizeof(nm),&in)==0;++i) { uint32_t k=0; while(nm[k]!='\0' && nm[k]==name_buffer[k]) ++k; if(nm[k]==name_buffer[k]) { found=1; break; } }
+        if(!found) { result=SAND_E_NOENT; break; }
+        { uint32_t need=in.write_perm; if((process_permissions(process_current())&need)!=need) { audit_label("MIMIR_LABEL_DENIED restore",name_buffer); result=SAND_E_PERM; break; } }
+        if(mimir_restore(name_buffer)==0) { audit_label("MIMIR_RESTORE",name_buffer); result=0; } else result=SAND_E_NOENT;
+        break; }
     case SAND_SYS_FS_SEAL: {
         struct mimir_seal s;
         if(!user_ok(a,sizeof(s),1)) { result=SAND_E_FAULT; break; }

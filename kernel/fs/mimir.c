@@ -500,6 +500,35 @@ static int mutate(const char *name, int kind, uint32_t a, uint32_t b) {
     return -1;
 }
 int mimir_remove(const char *name) { return mutate(name, 0, 0u, 0u); }
+
+/* HEL: removal only appends a tombstone, so the last live version is still there until an ebb collects it. */
+static int trash_head(int f) {                      /* newest live version of a file whose head is a tombstone, or -1 */
+    if(f < 0 || files[f].head < 0 || !(recs[files[f].head].flags & FLAG_TOMBSTONE)) return -1;
+    for(int i = (int)rec_total - 1; i >= 0; --i) if(recs[i].file == (uint8_t)f && !(recs[i].flags & FLAG_TOMBSTONE)) return i;
+    return -1;
+}
+int mimir_trash_list(uint32_t ordinal, char *name_out, uint32_t name_capacity, struct mimir_info *out) {
+    if(dev == 0 || name_out == 0 || name_capacity == 0u || out == 0) return -1;
+    for(uint32_t f = 0; f < MIMIR_FILES; ++f) {
+        int h = files[f].used ? trash_head((int)f) : -1; if(h < 0) continue;
+        uint32_t nl = 0u; while(files[f].name[nl] != '\0') ++nl;
+        if(nl >= name_capacity) continue;
+        if(ordinal-- != 0u) continue;
+        copy(name_out, files[f].name, nl + 1u);
+        out->size = recs[h].size; out->version = recs[h].version; out->read_perm = recs[h].read_perm; out->write_perm = recs[h].write_perm; out->chunks = recs[h].chunks; out->flags = 0u; copy(out->id, recs[h].id, 32u);
+        return 0;
+    }
+    return -1;
+}
+int mimir_restore(const char *name) {               /* appends a new version with the content and labels of the last live one */
+    for(int attempt = 0; attempt < 2; ++attempt) {
+        if(dev == 0 || !valid_name(name)) return -1;
+        int f = file_find(name), src = trash_head(f); if(src < 0) return -1;
+        int rc = new_version(files[f].head, 0u, recs[src].read_perm, recs[src].write_perm, 1, (uint32_t)src);
+        if(rc <= 0) return rc;                       /* 1 = an ebb ran to make room: the trash is gone with it, so the retry fails */
+    }
+    return -1;
+}
 int mimir_rollback(const char *name, uint32_t version) { return mutate(name, 1, version, 0u); }
 int mimir_set_labels(const char *name, uint32_t read_perm, uint32_t write_perm) { return mutate(name, 2, read_perm, write_perm); }
 

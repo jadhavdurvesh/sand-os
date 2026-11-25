@@ -43,7 +43,7 @@ class MimirTest(unittest.TestCase):
         veyra = self.cmd("veyra")
         self.assertIn("STORE   (MIMIR)", veyra)
         self.assertRegex(veyra, r"0x0106\s+STORE")
-        self.assertIn("ABI v13", self.cmd("version"))
+        self.assertIn("ABI v14", self.cmd("version"))
 
     def test_02_history_rollback_and_noop_rewrite(self):
         for text in ("first draft", "second draft", "third draft"):
@@ -62,6 +62,18 @@ class MimirTest(unittest.TestCase):
         self.assertIn("all hashes and the chain match", self.cmd("mimir verify"))
         self.cmd("rm hist.txt")
         self.assertIn("deleted", self.cmd("mimir log hist.txt"))   # removal is a version too
+
+    def test_02b_hel_trash_and_restore(self):
+        self.cmd("write hel.txt keep me safe")
+        self.assertIn("restore hel.txt", self.cmd("rm hel.txt"))
+        self.assertIn("failed", self.cmd("cat hel.txt") + "failed")       # gone from the listing
+        self.assertNotIn("hel.txt", self.cmd("ls"))
+        self.assertRegex(self.cmd("trash"), r"hel\.txt\s+12 bytes, last version 1")
+        self.assertIn("restored hel.txt", self.cmd("restore hel.txt"))
+        self.assertIn("keep me safe", self.cmd("cat hel.txt"))
+        self.assertNotIn("hel.txt", self.cmd("trash"))
+        self.assertIn("nothing to restore", self.cmd("restore hel.txt"))
+        self.assertIn("all hashes and the chain match", self.cmd("mimir verify"))
 
     def test_03_labels_are_enforced_by_the_filesystem(self):
         self.cmd("write secret.txt top secret")
