@@ -173,7 +173,7 @@ int sand_ui_init(sand_ui_t *ui, const sand_ui_host_t *host, int32_t w, int32_t h
     if (ui->win[1].x < 80) ui->win[1].x = 80;
     ui->win[2] = (struct sand_ui_window){ .x = (w - 440) / 2 + 70, .y = 84, .w = 440, .h = 448, .title = "Task Manager", .kind = 3, .visible = 0, .alive = 1 };
     ui->order[0] = 3; ui->order[1] = 4; ui->order[2] = 5; ui->order[3] = 2; ui->order[4] = 1; ui->order[5] = 0;
-    ui->sc_sel = ui->sc_hover = ui->sc_drag = ui->sc_click_idx = -1; ui->ctx_hover = -1;
+    ui->sc_selmask = 0u; ui->sc_focus = ui->sc_hover = ui->sc_drag = ui->sc_click_idx = -1; ui->sc_band = 0; ui->ctx_hover = -1;
     ui->hist_seen = 0xFFFFFFFFu; ui->hist_primed = 0; ui->hugin_hover = -1; ui->hugin_seen = 0xFFFFFFFFu;
     ui->press_win = -1; ui->hover_ctrl = -1; ui->launcher_open = 0; ui->launcher_hover = -1; ui->launcher_menu = 0; ui->liveness_seen = 0;
     ui->px = w / 2; ui->py = h / 2; ui->buttons = 0; ui->accent = 0; ui->reduced_motion = 0; ui->clock24 = 1; g_accent = 0xF2C98Au;
@@ -822,8 +822,10 @@ int sand_ui_win_resizable(sand_ui_t *ui, int id, uint32_t owner, int32_t min_w, 
     mark_window(ui, SAND_UI_SHELL_WINDOWS + id - 1);
     return 0;
 }
+static int desktop_key(sand_ui_t *ui, uint8_t k);
 int sand_ui_key(sand_ui_t *ui, uint8_t ascii) {
     int top = top_window(ui);
+    if (top < 0) return desktop_key(ui, ascii);              /* bare desktop: the keyboard drives the shortcuts */
     if (top == 0) return 0;                                  /* the System Console is in front: keys reach the shell */
     if (top < SAND_UI_SHELL_WINDOWS) return 1;               /* nothing or About SAND in front: keys go nowhere */
     struct sand_event e = { SAND_EV_KEY, 0, 0, ascii, ui->buttons };
@@ -903,7 +905,20 @@ static void sc_changed(sand_ui_t *ui) { if (ui->host.shortcuts_changed) ui->host
 static void sc_remove(sand_ui_t *ui, int i) {
     sc_mark(ui, i);
     for (int k = i; k < ui->sc_count - 1; ++k) ui->sc[k] = ui->sc[k + 1];
-    --ui->sc_count; ui->sc_sel = -1; ui->sc_hover = -1; ui->sc_click_idx = -1; sc_changed(ui);
+    --ui->sc_count; ui->sc_hover = -1; ui->sc_click_idx = -1; sc_changed(ui);
+    ui->sc_selmask = (ui->sc_selmask & ((1u << i) - 1u)) | ((ui->sc_selmask >> (i + 1)) << i);   /* indices above i moved down */
+    ui->sc_focus = -1;
+}
+static int sc_is_sel(const sand_ui_t *ui, int i) { return (int)((ui->sc_selmask >> i) & 1u); }
+static void sc_mark_selected(sand_ui_t *ui) { for (int i = 0; i < ui->sc_count; ++i) if (sc_is_sel(ui, i)) sc_mark(ui, i); }
+static void sc_select_only(sand_ui_t *ui, int i) {          /* i < 0 clears the selection */
+    sc_mark_selected(ui);
+    ui->sc_selmask = i >= 0 ? (1u << i) : 0u; ui->sc_focus = i;
+    sc_mark_selected(ui);
+}
+static void sc_remove_selected(sand_ui_t *ui) {
+    for (int i = ui->sc_count - 1; i >= 0; --i) if (sc_is_sel(ui, i)) sc_remove(ui, i);
+    ui->sc_selmask = 0u;
 }
 static int sc_hit(const sand_ui_t *ui, int32_t px, int32_t py) {
     for (int i = ui->sc_count - 1; i >= 0; --i) {
@@ -925,7 +940,7 @@ static void launcher_activate(sand_ui_t *ui, int row) {
 static void draw_shortcut(sand_ui_t *ui, int i, int32_t x, int32_t y, int ghost) {
     gfx_t *g = &ui->g; const struct sand_ui_shortcut *s = &ui->sc[i];
     if (!gfx_visible(g, x - 6, y - 4, SC_CW + 12, SC_CH + 8)) return;
-    int sel = ui->sc_sel == i, hov = ui->sc_hover == i && !ghost;
+    int sel = sc_is_sel(ui, i), hov = ui->sc_hover == i && !ghost;
     if (sel || hov) { gfx_rrect(g, x + 4, y + 2, SC_CW - 8, SC_CH - 6, 14, 0xFFFFFFu, sel ? 40u : 18u); if (sel) gfx_rrect_ring(g, x + 4, y + 2, SC_CW - 8, SC_CH - 6, 14, 1, C_CHAMP, 130u); }
     struct sand_ui_launcher_item it; int found = find_item(ui, s->label, &it) >= 0;
     int ic = icon_index(ui, s->label); int32_t ix = x + (SC_CW - 56) / 2, iy = y + 9;
@@ -942,16 +957,27 @@ static void draw_shortcut(sand_ui_t *ui, int i, int32_t x, int32_t y, int ghost)
 }
 static void draw_desktop_icons(sand_ui_t *ui) {
     for (int i = 0; i < ui->sc_count; ++i) {
-        if (ui->sc_dragging && ui->sc_drag == i) continue;
+        if (ui->sc_dragging && sc_is_sel(ui, i)) continue;               /* drawn as ghosts while being dragged */
         int32_t x, y; sc_pos(ui, ui->sc[i].cell, &x, &y); draw_shortcut(ui, i, x, y, 0);
     }
 }
-static void draw_drag_ghost(sand_ui_t *ui) { if (ui->sc_dragging && ui->sc_drag >= 0) draw_shortcut(ui, ui->sc_drag, ui->sc_gx, ui->sc_gy, 1); }
+static void sc_band_rect(const sand_ui_t *ui, int32_t *x, int32_t *y, int32_t *w, int32_t *h) {
+    int32_t x0 = imin(ui->sc_px0, ui->sc_bx1), x1 = imax(ui->sc_px0, ui->sc_bx1), y0 = imin(ui->sc_py0, ui->sc_by1), y1 = imax(ui->sc_py0, ui->sc_by1);
+    *x = x0; *y = y0; *w = x1 - x0 + 1; *h = y1 - y0 + 1;
+}
+static void draw_drag_ghost(sand_ui_t *ui) {
+    if (ui->sc_dragging)
+        for (int i = 0; i < ui->sc_count; ++i) if (sc_is_sel(ui, i)) { int32_t x, y; sc_pos(ui, ui->sc[i].cell, &x, &y); draw_shortcut(ui, i, x + ui->sc_gdx, y + ui->sc_gdy, 1); }
+    if (ui->sc_band) {
+        int32_t x, y, w, h; sc_band_rect(ui, &x, &y, &w, &h);
+        gfx_rrect(&ui->g, x, y, w, h, 3, 0xFFFFFFu, 26u); gfx_rrect_ring(&ui->g, x, y, w, h, 3, 1, C_CHAMP, 170u);
+    }
+}
 
 /* context menu: kind 0 = desktop, 1 = shortcut, 2 = launcher row */
-static int ctx_count(const sand_ui_t *ui) { return ui->ctx_kind == 0 ? 4 : 2; }
+static int ctx_count(const sand_ui_t *ui) { return ui->ctx_kind == 0 ? 6 : 2; }
 static const char *ctx_text(const sand_ui_t *ui, int i) {
-    static const char *const desk[4] = { "Arrange Icons", "Task Manager", "System Console", "About SAND" };
+    static const char *const desk[6] = { "Arrange Icons", "Sort by Name", "Show Desktop", "Task Manager", "System Console", "About SAND" };
     if (ui->ctx_kind == 0) return desk[i];
     if (ui->ctx_kind == 1) return i == 0 ? "Open" : "Remove from Desktop";
     return i == 0 ? "Open" : "Add to Desktop";
@@ -971,6 +997,58 @@ static void ctx_open_at(sand_ui_t *ui, int kind, int target, int32_t px, int32_t
     ctx_mark(ui);
 }
 static void ctx_close(sand_ui_t *ui) { if (ui->ctx_open) { ctx_mark(ui); ui->ctx_open = 0; } }
+static int sc_ci_less(const char *a, const char *b) {
+    for (;; ++a, ++b) {
+        char x = *a, y = *b; if (x >= 'A' && x <= 'Z') x = (char)(x + 32); if (y >= 'A' && y <= 'Z') y = (char)(y + 32);
+        if (x != y) return x < y;
+        if (!x) return 0;
+    }
+}
+static void sc_sort(sand_ui_t *ui) {                                      /* alphabetical order into the first cells */
+    for (int i = 0; i < ui->sc_count; ++i) sc_mark(ui, i);
+    for (int i = 1; i < ui->sc_count; ++i) {
+        struct sand_ui_shortcut t = ui->sc[i]; int j = i - 1;
+        while (j >= 0 && sc_ci_less(t.label, ui->sc[j].label)) { ui->sc[j + 1] = ui->sc[j]; --j; }
+        ui->sc[j + 1] = t;
+    }
+    for (int i = 0; i < ui->sc_count; ++i) { ui->sc[i].cell = (int16_t)i; sc_mark(ui, i); }
+    ui->sc_selmask = 0u; ui->sc_focus = -1; sc_changed(ui);
+}
+static void show_desktop(sand_ui_t *ui) {                                 /* hide every window; they stay alive (dock/launcher bring them back) */
+    for (int i = 0; i < SAND_UI_WINDOWS; ++i) if (ui->win[i].visible) { mark_window(ui, i); ui->win[i].visible = 0; }
+    mark(ui, 0, 0, ui->w, MENU_H + 1); mark_dock(ui);
+}
+static void sc_open_selected(sand_ui_t *ui) {
+    uint32_t m = ui->sc_selmask;
+    for (int i = 0; i < ui->sc_count; ++i) if ((m >> i) & 1u) { struct sand_ui_launcher_item it; int li = find_item(ui, ui->sc[i].label, &it); if (li >= 0) launcher_activate(ui, li); }
+}
+static int desktop_key(sand_ui_t *ui, uint8_t k) {
+    if (ui->ctx_open) { if (k == 0x1B) ctx_close(ui); return 1; }
+    if (k == 0x1B) { sc_select_only(ui, -1); return 1; }
+    if (ui->sc_count == 0) return 1;
+    if (k == '\n' || k == '\r') { if (ui->sc_selmask) sc_open_selected(ui); return 1; }
+    if (k == 0x86u) { if (ui->sc_selmask) sc_remove_selected(ui); return 1; }
+    if (k >= 0x80u && k <= 0x85u) {
+        int r = sc_rows(ui), f = ui->sc_focus, best = -1, bs = 0x7FFFFFFF;
+        if (f < 0 || f >= ui->sc_count) { f = 0; for (int i = 1; i < ui->sc_count; ++i) if (ui->sc[i].cell < ui->sc[f].cell) f = i; sc_select_only(ui, f); return 1; }
+        int fc = ui->sc[f].cell / r, fr = ui->sc[f].cell % r;
+        for (int i = 0; i < ui->sc_count; ++i) {
+            if (i == f) continue;
+            int c = ui->sc[i].cell / r, w = ui->sc[i].cell % r, dc = c - fc, dr = w - fr, pri, sec, ok;
+            switch (k) {
+            case 0x80u: ok = dr < 0; pri = -dr; sec = dc < 0 ? -dc : dc; break;
+            case 0x81u: ok = dr > 0; pri = dr;  sec = dc < 0 ? -dc : dc; break;
+            case 0x82u: ok = dc < 0; pri = -dc; sec = dr < 0 ? -dr : dr; break;
+            case 0x83u: ok = dc > 0; pri = dc;  sec = dr < 0 ? -dr : dr; break;
+            default:    ok = 0; pri = sec = 0; break;
+            }
+            if (ok && pri * 64 + sec < bs) { bs = pri * 64 + sec; best = i; }
+        }
+        if (best >= 0) sc_select_only(ui, best);
+        return 1;
+    }
+    return 1;
+}
 static void ctx_choose(sand_ui_t *ui, int row) {
     int kind = ui->ctx_kind, target = ui->ctx_target;
     ctx_close(ui);
@@ -981,11 +1059,14 @@ static void ctx_choose(sand_ui_t *ui, int row) {
             for (int i = 0; i < ui->sc_count; ++i) ui->sc[i].cell = (int16_t)i;
             for (int i = 0; i < ui->sc_count; ++i) sc_mark(ui, i);
             sc_changed(ui);
-        } else { int wi = row == 1 ? 2 : row == 2 ? 0 : 1; ui->win[wi].visible = 1; raise_window(ui, wi); mark_dock(ui); }
+        } else if (row == 1) sc_sort(ui);
+        else if (row == 2) show_desktop(ui);
+        else { int wi = row == 3 ? 2 : row == 4 ? 0 : 1; ui->win[wi].visible = 1; raise_window(ui, wi); mark_dock(ui); }
     } else if (kind == 1) {
         if (target < 0 || target >= ui->sc_count) return;
-        if (row == 0) { struct sand_ui_launcher_item it; int li = find_item(ui, ui->sc[target].label, &it); if (li >= 0) launcher_activate(ui, li); }
-        else sc_remove(ui, target);
+        if (!sc_is_sel(ui, target)) sc_select_only(ui, target);
+        if (row == 0) sc_open_selected(ui);
+        else sc_remove_selected(ui);
     } else {
         struct sand_ui_launcher_item it;
         if (launcher_item_at(ui, target, &it) != 0) return;
@@ -1039,19 +1120,52 @@ void sand_ui_pointer(sand_ui_t *ui, int32_t dx, int32_t dy, uint8_t buttons) {
         if (hs != ui->sc_hover) { if (ui->sc_hover >= 0 && ui->sc_hover < ui->sc_count) sc_mark(ui, ui->sc_hover); ui->sc_hover = hs; if (hs >= 0) sc_mark(ui, hs); }
         if (ui->ctx_open) { int hr = ctx_row_at(ui, ui->px, ui->py); if (hr != ui->ctx_hover) { ui->ctx_hover = hr; ctx_mark(ui); } }
     }
-    if (ui->sc_drag >= 0) {                                                        /* dragging a shortcut across the wallpaper */
+    if (ui->sc_band) {                                                             /* rubber-band selection on the bare wallpaper */
+        if (buttons & 1u) {
+            if (moved) {
+                int32_t x, y, w, h; sc_band_rect(ui, &x, &y, &w, &h); mark(ui, x - 2, y - 2, x + w + 2, y + h + 2);
+                ui->sc_bx1 = ui->px; ui->sc_by1 = ui->py;
+                sc_band_rect(ui, &x, &y, &w, &h); mark(ui, x - 2, y - 2, x + w + 2, y + h + 2);
+                uint32_t mask = 0u;
+                for (int i = 0; i < ui->sc_count; ++i) {
+                    int32_t ix, iy; sc_pos(ui, ui->sc[i].cell, &ix, &iy);
+                    if (ix + SC_CW - 8 > x && ix + 8 < x + w && iy + SC_CH - 10 > y && iy + 4 < y + h) mask |= 1u << i;
+                }
+                if (mask != ui->sc_selmask) { sc_mark_selected(ui); ui->sc_selmask = mask; sc_mark_selected(ui); }
+            }
+        } else { int32_t x, y, w, h; sc_band_rect(ui, &x, &y, &w, &h); mark(ui, x - 2, y - 2, x + w + 2, y + h + 2); ui->sc_band = 0; }
+    }
+    if (ui->sc_drag >= 0) {                                                        /* dragging the selected shortcuts across the wallpaper */
         if (buttons & 1u) {
             int32_t ddx = ui->px - ui->sc_px0, ddy = ui->py - ui->sc_py0;
-            if (!ui->sc_dragging && (ddx > 5 || ddx < -5 || ddy > 5 || ddy < -5)) { ui->sc_dragging = 1; ui->sc_gx = ui->px - ui->sc_offx; ui->sc_gy = ui->py - ui->sc_offy; sc_mark(ui, ui->sc_drag); }
-            else if (ui->sc_dragging && moved) { sc_mark_at(ui, ui->sc_gx, ui->sc_gy); ui->sc_gx = ui->px - ui->sc_offx; ui->sc_gy = ui->py - ui->sc_offy; sc_mark_at(ui, ui->sc_gx, ui->sc_gy); }
+            if (!ui->sc_dragging && (ddx > 5 || ddx < -5 || ddy > 5 || ddy < -5)) { ui->sc_dragging = 1; ui->sc_gdx = ddx; ui->sc_gdy = ddy; sc_mark_selected(ui); }
+            else if (ui->sc_dragging && moved) {
+                for (int i = 0; i < ui->sc_count; ++i) if (sc_is_sel(ui, i)) { int32_t x, y; sc_pos(ui, ui->sc[i].cell, &x, &y); sc_mark_at(ui, x + ui->sc_gdx, y + ui->sc_gdy); }
+                ui->sc_gdx = ddx; ui->sc_gdy = ddy;
+                for (int i = 0; i < ui->sc_count; ++i) if (sc_is_sel(ui, i)) { int32_t x, y; sc_pos(ui, ui->sc[i].cell, &x, &y); sc_mark_at(ui, x + ui->sc_gdx, y + ui->sc_gdy); }
+            }
         } else {
-            if (ui->sc_dragging) {                                                 /* drop: snap to the nearest free cell */
-                int r = sc_rows(ui), cols = sc_cols(ui);
-                int col = imax(0, imin(cols - 1, (ui->sc_gx + SC_CW / 2 - SC_X0) / SC_CW)), row = imax(0, imin(r - 1, (ui->sc_gy + SC_CH / 2 - SC_Y0) / SC_CH));
-                int cell = sc_nearest_free(ui, col * r + row, ui->sc_drag);
-                sc_mark_at(ui, ui->sc_gx, ui->sc_gy);
-                if (cell >= 0 && cell != ui->sc[ui->sc_drag].cell) { sc_mark(ui, ui->sc_drag); ui->sc[ui->sc_drag].cell = (int16_t)cell; sc_changed(ui); }
-                sc_mark(ui, ui->sc_drag);
+            if (ui->sc_dragging) {                                                 /* drop: every selected icon moves by the same number of cells */
+                int r = sc_rows(ui), cols = sc_cols(ui), n = ui->sc_count; int want[SAND_UI_SHORTCUTS];
+                int32_t px0, py0; sc_pos(ui, ui->sc[ui->sc_drag].cell, &px0, &py0);
+                int dcol = (ui->sc_gdx + (ui->sc_gdx < 0 ? -SC_CW / 2 : SC_CW / 2)) / SC_CW, drow = (ui->sc_gdy + (ui->sc_gdy < 0 ? -SC_CH / 2 : SC_CH / 2)) / SC_CH;
+                for (int i = 0; i < n; ++i) {
+                    if (!sc_is_sel(ui, i)) continue;
+                    int col = imax(0, imin(cols - 1, ui->sc[i].cell / r + dcol)), row = imax(0, imin(r - 1, ui->sc[i].cell % r + drow));
+                    want[i] = col * r + row;
+                }
+                sc_mark_selected(ui);
+                int before[SAND_UI_SHORTCUTS], changed = 0;
+                for (int i = 0; i < n; ++i) if (sc_is_sel(ui, i)) { before[i] = ui->sc[i].cell; ui->sc[i].cell = -1; }
+                for (int i = 0; i < n; ++i) {
+                    if (!sc_is_sel(ui, i)) continue;
+                    int cell = sc_cell_used(ui, want[i], -1) ? sc_nearest_free(ui, want[i], -1) : want[i];
+                    ui->sc[i].cell = (int16_t)(cell >= 0 ? cell : before[i]); if (ui->sc[i].cell != before[i]) changed = 1;
+                }
+                for (int i = 0; i < n; ++i) if (sc_is_sel(ui, i)) { int32_t x, y; sc_pos(ui, before[i], &x, &y); sc_mark_at(ui, x + ui->sc_gdx, y + ui->sc_gdy); sc_mark_at(ui, x, y); }
+                sc_mark_selected(ui);
+                if (changed) sc_changed(ui);
+                (void)px0; (void)py0;
             }
             ui->sc_drag = -1; ui->sc_dragging = 0;
         }
@@ -1092,7 +1206,7 @@ void sand_ui_pointer(sand_ui_t *ui, int32_t dx, int32_t dy, uint8_t buttons) {
         else if (ui->py >= MENU_H && dock_hit(ui, ui->px, ui->py) < 0 && hit_window(ui, ui->px, ui->py) < 0) {
             if (ui->launcher_open) { mark_launcher(ui); ui->launcher_open = 0; ui->launcher_menu = 0; mark(ui, 0, 0, ui->w, MENU_H + 1); }
             int i = sc_hit(ui, ui->px, ui->py);
-            if (i >= 0) { if (ui->sc_sel != i) { if (ui->sc_sel >= 0) sc_mark(ui, ui->sc_sel); ui->sc_sel = i; sc_mark(ui, i); } ctx_open_at(ui, 1, i, ui->px, ui->py); }
+            if (i >= 0) { if (!sc_is_sel(ui, i)) sc_select_only(ui, i); ctx_open_at(ui, 1, i, ui->px, ui->py); }
             else ctx_open_at(ui, 0, -1, ui->px, ui->py);
         }
     }
@@ -1148,18 +1262,21 @@ void sand_ui_pointer(sand_ui_t *ui, int32_t dx, int32_t dy, uint8_t buttons) {
                 }
             } else if (ui->py >= MENU_H) {                                          /* the bare desktop: select, drag or open a shortcut */
                 int i = sc_hit(ui, ui->px, ui->py);
-                if (ui->sc_sel >= 0 && ui->sc_sel < ui->sc_count && ui->sc_sel != i) sc_mark(ui, ui->sc_sel);
-                ui->sc_sel = i;
                 if (i >= 0) {
-                    uint32_t t = ui->host.ticks(); int32_t x, y; sc_pos(ui, ui->sc[i].cell, &x, &y); sc_mark(ui, i);
+                    uint32_t t = ui->host.ticks();
+                    if (!sc_is_sel(ui, i)) sc_select_only(ui, i);                  /* clicking inside a multi-selection keeps it, so the group can be dragged */
+                    ui->sc_focus = i;
                     if (ui->sc_click_idx == i && t - ui->sc_click_tick <= 45u) {   /* double-click */
                         struct sand_ui_launcher_item it; int li = find_item(ui, ui->sc[i].label, &it);
-                        ui->sc_click_idx = -1; if (li >= 0) launcher_activate(ui, li);
+                        sc_select_only(ui, i); ui->sc_click_idx = -1; if (li >= 0) launcher_activate(ui, li);
                     } else {
                         ui->sc_click_idx = i; ui->sc_click_tick = t;
-                        ui->sc_drag = i; ui->sc_dragging = 0; ui->sc_px0 = ui->px; ui->sc_py0 = ui->py; ui->sc_offx = ui->px - x; ui->sc_offy = ui->py - y;
+                        ui->sc_drag = i; ui->sc_dragging = 0; ui->sc_px0 = ui->px; ui->sc_py0 = ui->py;
                     }
-                } else ui->sc_click_idx = -1;
+                } else {                                                           /* empty wallpaper: clear the selection and start a rubber band */
+                    ui->sc_click_idx = -1; sc_select_only(ui, -1);
+                    ui->sc_band = 1; ui->sc_px0 = ui->px; ui->sc_py0 = ui->py; ui->sc_bx1 = ui->px; ui->sc_by1 = ui->py;
+                }
             }
         }
     }

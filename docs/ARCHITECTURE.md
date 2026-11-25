@@ -178,9 +178,10 @@ Honest limits: there is no per-process CPU or memory figure (the kernel does not
 
 The wallpaper now holds shortcuts: icons (the app-icon pack, or an accent tile with a glyph when an app has none) with a label under each, on a column-major grid anchored at the top-left. A first boot seeds LOCUS, CITADEL, KEYSTONE and the Task Manager.
 
-- **Select / open:** a click selects; a double-click (within 450 ms) opens it through the same path as the Start menu row.
+- **Select / open:** a click selects (a rubber band dragged from empty wallpaper selects several; the group drags and removes together); a double-click (within 450 ms) opens it through the same path as the Start menu row.
 - **Arrange:** dragging lifts the icon with a shadow; on release it snaps to the nearest free cell.
-- **Right-click:** on a shortcut: Open / Remove from Desktop. On the wallpaper: Arrange Icons, Task Manager, System Console, About SAND. On a Start-menu or launcher row: Open / Add to Desktop.
+- **Right-click:** on a shortcut: Open / Remove from Desktop. On the wallpaper: Arrange Icons, Sort by Name, Show Desktop (hides every window), Task Manager, System Console, About SAND. On a Start-menu or launcher row: Open / Add to Desktop.
+- **Keyboard** (when no window is open): arrows move the selection between icons, Enter opens the selected ones, Delete removes them, Esc clears the selection or closes a menu.
 - **Persistence:** the layout is `desktop.cfg` in MIMIR (one `Label|cell` line per shortcut, written 0.5 s after the last change, labelled like `system.cfg`). A missing file means first boot; an empty layout is stored as a newline so a cleared desktop stays cleared.
 
-Honest limits: at most 16 shortcuts; shortcuts open launcher entries only (no files or folders yet, no drag from LOCUS); no keyboard navigation of the icons; no multi-select or rubber-band selection; verified in QEMU only. These are shell behaviours: they do not make Windows or macOS applications run on SAND.
+Honest limits: at most 16 shortcuts; shortcuts open launcher entries only (no files or folders yet, no drag from LOCUS); keyboard control needs the bare desktop (a focused window takes the keys); verified in QEMU only. These are shell behaviours: they do not make Windows or macOS applications run on SAND.
