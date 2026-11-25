@@ -431,5 +431,44 @@ class DesktopTest(unittest.TestCase):
         self.assertGreater(self.bright(back, 40, 156, 92, 210), 20)             # CITADEL is back in the first free cell
 
 
+    def test_03aa_keyboard_rubber_band_and_show_desktop(self):
+        """Arrow keys move the selection, Delete removes it, a rubber band selects, Show Desktop hides every window."""
+        self.vm.sendkey("esc"); time.sleep(0.4)
+        a = self.shot("desktop-kbd-a.ppm")
+        self.vm.sendkey("down"); time.sleep(0.6)                                 # nothing focused yet: the first shortcut is selected
+        b = self.shot("desktop-kbd-b.ppm")
+        self.assertGreater(self.changed(a, b, 30, 50, 100, 116), 50)
+        self.vm.sendkey("down"); time.sleep(0.6)                                 # next cell down
+        c = self.shot("desktop-kbd-c.ppm")
+        self.assertGreater(self.changed(c, b, 30, 150, 100, 216), 50)
+        self.assertLess(self.changed(c, a, 30, 50, 100, 116), 30)                 # the first one lost its highlight
+        self.vm.sendkey("delete"); time.sleep(0.6)
+        d = self.shot("desktop-kbd-d.ppm")
+        self.assertLess(self.bright(d, 40, 156, 92, 210), 5)                    # the selected shortcut is gone
+        self.assertGreater(self.bright(d, 40, 56, 92, 110), 20)                 # the other stays
+        DesktopTest._ptr = (None, None)
+        self.move_to(150, 66)                                                    # rubber band from empty wallpaper around the first icon
+        self.vm.mouse_button(1)
+        self.move_to(90, 90); self.move_to(26, 120)
+        self.vm.mouse_button(0); time.sleep(0.6)
+        e = self.shot("desktop-band.ppm")
+        self.assertGreater(self.changed(e, d, 30, 56, 100, 116), 50)             # selected by the band
+        self.vm.sendkey("delete"); time.sleep(0.6)
+        f = self.shot("desktop-band-deleted.ppm")
+        self.assertLess(self.bright(f, 40, 56, 92, 110), 5)
+        self.move_to(600, 300)                                                   # wallpaper menu: System Console (row 5), then Show Desktop (row 3)
+        self.vm.mouse_button(2); self.vm.mouse_button(0); time.sleep(0.6)
+        self.move_to(650, 300 + 8 + 4 * 34 + 17)
+        self.click(); time.sleep(1.5)
+        g = self.shot("desktop-console-open.ppm")
+        self.assertGreater(self.changed(g, f, 200, 200, 500, 400), 500)
+        self.move_to(900, 300)
+        self.vm.mouse_button(2); self.vm.mouse_button(0); time.sleep(0.6)
+        self.move_to(950 - 100, 300 + 8 + 2 * 34 + 17)
+        self.click(); time.sleep(1.5)
+        h = self.shot("desktop-shown.ppm")
+        self.assertLess(self.changed(h, f, 200, 200, 500, 400), 30)              # every window is hidden again
+
+
 if __name__ == "__main__":
     unittest.main()
