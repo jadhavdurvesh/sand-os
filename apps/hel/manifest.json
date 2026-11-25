@@ -1,0 +1,1 @@
+{"id":"org.sand.hel","name":"HEL","version":"0.1.0","vendor":"SAND","description":"Trash for MIMIR: lists removed files and restores them","permissions":["window.create","fs.read","fs.write"],"dependencies":[],"launcher":{"label":"HEL","subtitle":"Trash","accent":"#E8836B","accent2":"#A8465E","glyph":"H","order":25}}
