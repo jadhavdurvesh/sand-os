@@ -46,7 +46,9 @@ static void cmd_help(void)
         {"install", "install <name>: store an app sent as hex lines"},
         {"cat <file>", "print a file"},
         {"write <file> <text>", "create or replace a file"},
-        {"rm <file>", "remove a file"},
+        {"rm <file>", "remove a file (HEL keeps it until MIMIR needs the space)"},
+        {"trash", "HEL: list removed files that can still be restored"},
+        {"restore <file>", "HEL: bring a removed file back"},
         {"apps", "list installed applications"},
         {"run <app>", "launch an app and wait for it"},
         {"open <app>", "launch an app in the background"},
@@ -496,8 +498,22 @@ static int execute(char *line)
     else if (!strcmp(c, "write")) cmd_write(argv, argc, raw);
     else if (!strcmp(c, "rm")) {
         if (argc < 2) out(C_WARN "usage: rm <file>" C_RESET "\n");
-        else if (sand_fs_remove(argv[1]) == 0) out(C_GOOD "removed " C_RESET), out(argv[1]), out("\n");
+        else if (sand_fs_remove(argv[1]) == 0) out(C_GOOD "removed " C_RESET), out(argv[1]), out(C_MUTED "  (restore " C_RESET), out(argv[1]), out(C_MUTED " brings it back)" C_RESET "\n");
         else out(C_BAD "rm: no such file: " C_RESET), out(argv[1]), out("\n");
+    }
+    else if (!strcmp(c, "trash")) {
+        struct sand_trashed t; uint32_t n = 0;
+        for (uint32_t i = 0; sand_fs_trash_list(i, &t) == 0; ++i, ++n) { out("  "); out(t.name); out(C_MUTED "  "); sh_putu(t.length); out(" bytes, last version "); sh_putu(t.version); out(C_RESET "\n"); }
+        if (n == 0) out(C_MUTED "HEL is empty" C_RESET "\n");
+    }
+    else if (!strcmp(c, "restore")) {
+        if (argc < 2) out(C_WARN "usage: restore <file>" C_RESET "\n");
+        else {
+            int32_t r = sand_fs_restore(argv[1]);
+            if (r == 0) out(C_GOOD "restored " C_RESET), out(argv[1]), out("\n");
+            else if (r == SAND_E_PERM) out(C_BAD "restore: denied by the file's write label" C_RESET "\n");
+            else out(C_BAD "restore: nothing to restore named " C_RESET), out(argv[1]), out("\n");
+        }
     }
     else if (!strcmp(c, "apps")) cmd_apps();
     else if (!strcmp(c, "settings")) cmd_settings(argv, argc);

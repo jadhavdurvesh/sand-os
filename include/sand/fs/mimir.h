@@ -45,6 +45,8 @@ int mimir_remove(const char *name);
 int mimir_stat(const char *name, struct mimir_info *out);
 int mimir_history(const char *name, uint32_t index_from_newest, struct mimir_ver *out);
 int mimir_rollback(const char *name, uint32_t version);
+int mimir_trash_list(uint32_t ordinal, char *name_out, uint32_t name_capacity, struct mimir_info *out);   /* HEL: removed files (last live version) */
+int mimir_restore(const char *name);                                                                     /* HEL: bring a removed file back */
 int mimir_set_labels(const char *name, uint32_t read_perm, uint32_t write_perm);
 int mimir_seal_info(struct mimir_seal *out);
 int mimir_scrub(struct mimir_scrub *out);

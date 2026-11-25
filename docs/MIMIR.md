@@ -61,9 +61,15 @@ signature = Ed25519( "MIMIR-SIGIL-V1\0" || every byte before the "sig" line )
 ## Interfaces
 
 Kernel API `include/sand/fs/mimir.h`; syscalls 8-11 (read/write/list/remove, now label-checked) and, since ABI v12, 42-48:
-`FS_STAT`, `FS_HISTORY`, `FS_ROLLBACK`, `FS_SEAL`, `FS_SCRUB`, `FS_LABEL`, `FS_EBB` (`SAND_E_CORRUPT` = -10) and, since ABI v13, 49 `FS_LIST_EX` (47-character names). Veyra interface `0x0106` STORE
-(and `0x0101` FILES keeps working). Shell: `mimir [seal | sigil | stat f | log f | undo f v | verify | ebb | label f r w]`.
+`FS_STAT`, `FS_HISTORY`, `FS_ROLLBACK`, `FS_SEAL`, `FS_SCRUB`, `FS_LABEL`, `FS_EBB` (`SAND_E_CORRUPT` = -10) and, since ABI v13, 49 `FS_LIST_EX` (47-character names) and, since ABI v14, 50 `FS_TRASH_LIST` and 51 `FS_RESTORE` (HEL). Veyra interface `0x0106` STORE
+(and `0x0101` FILES keeps working). Shell: `trash` and `restore <file>` (HEL), `mimir [seal | sigil | stat f | log f | undo f v | verify | ebb | label f r w]`.
 `tools/mkmimir.py` builds the same format at image build time; `tests/fs/mimir_test.c` mounts a Python-built volume to prove both agree.
+
+## HEL (undelete)
+
+Removing a file appends a tombstone version; the earlier versions stay in the log. HEL (the Norse realm of the dead) exposes that: `FS_TRASH_LIST` lists removed files with the size, version and labels of their last live version, and `FS_RESTORE` appends a new version carrying that content and those labels (history is never rewritten, so the remove and the restore both stay in `mimir log`). Veyra decides who may see and restore: a removed file is listed only to callers that hold its read label, and a restore needs its write label (a denial is audited as `MIMIR_LABEL_DENIED restore`, a success as `MIMIR_RESTORE`). Shell: `trash`, `restore <file>`.
+
+Honest limit: HEL lives only as long as the log does. An ebb (explicit, or automatic when a tide fills) copies live files only, so it empties the trash for good. Covered by `tests/fs/mimir_test.c` (`test_trash`) and `test_02b` in `tests/qemu/test_mimir.py`.
 
 ## Limits (honest)
 

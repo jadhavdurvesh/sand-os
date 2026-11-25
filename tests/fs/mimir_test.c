@@ -72,6 +72,24 @@ static void test_versions(void) {
     CHECK(mimir_history("doc", 0, &h) == 0 && (h.flags & 1u) && h.version == 5u);
     CHECK(mimir_write("doc", v[2], sizeof(v[2])) == 0); CHECK(mimir_stat("doc", &in) == 0 && in.version == 6u); CHECK(read_eq("doc", v[2], sizeof(v[2])));
 }
+static void test_trash(void) {                       /* HEL: removed files can be listed and restored until an ebb collects them */
+    fresh(); static uint8_t a[5000], b[300]; fill(a, sizeof(a), 31u); fill(b, sizeof(b), 32u);
+    char nm[MIMIR_NAME_MAX]; struct mimir_info in;
+    CHECK(mimir_trash_list(0, nm, sizeof(nm), &in) != 0);                        /* nothing removed yet */
+    CHECK(mimir_write("keep", b, sizeof(b)) == 0); CHECK(mimir_write_labeled("gone", a, sizeof(a), 0x10, 0x20) == 0); CHECK(mimir_write("gone", a, sizeof(a)) == 0);
+    CHECK(mimir_remove("gone") == 0);
+    CHECK(mimir_trash_list(0, nm, sizeof(nm), &in) == 0 && nm[0] == 'g' && in.size == sizeof(a) && in.version == 1u && in.write_perm == 0x20u);
+    CHECK(mimir_trash_list(1, nm, sizeof(nm), &in) != 0);                        /* live files are not in the trash */
+    CHECK(mimir_restore("keep") != 0 && mimir_restore("nothere") != 0);
+    CHECK(mimir_restore("gone") == 0 && read_eq("gone", a, sizeof(a)));
+    CHECK(mimir_stat("gone", &in) == 0 && in.version == 3u && in.read_perm == 0x10u && in.write_perm == 0x20u);   /* content and labels return as a new version */
+    CHECK(mimir_trash_list(0, nm, sizeof(nm), &in) != 0 && mimir_restore("gone") != 0);                  /* and it leaves the trash */
+    CHECK(mimir_remove("gone") == 0 && mimir_remove("keep") == 0);
+    CHECK(mimir_ebb() == 0); CHECK(mimir_trash_list(0, nm, sizeof(nm), &in) != 0 && mimir_restore("gone") != 0);   /* an ebb reclaims the space for good */
+    CHECK(mimir_mount(0, base_lba) == 0); CHECK(mimir_trash_list(0, nm, sizeof(nm), &in) != 0);
+    CHECK(mimir_write("again", b, sizeof(b)) == 0); CHECK(mimir_remove("again") == 0);
+    CHECK(mimir_mount(0, base_lba) == 0); CHECK(mimir_trash_list(0, nm, sizeof(nm), &in) == 0 && mimir_restore("again") == 0 && read_eq("again", b, sizeof(b)));   /* the trash survives a remount */
+}
 static void test_labels(void) {
     fresh(); CHECK(mimir_write_labeled("system.cfg", "x=1", 3, 0x4, 0x40) == 0);
     struct mimir_info in; CHECK(mimir_stat("system.cfg", &in) == 0 && in.read_perm == 0x4 && in.write_perm == 0x40);
@@ -229,6 +247,6 @@ int main(int argc, char **argv) {
     mutable_disk = disk; mutable_disk.sector_count = ram_sectors;
     if(block_register(&mutable_disk) != 0) return 2;
     if(argc >= 4) return image_check(argc, argv);
-    test_basic(); test_branches(); test_versions(); test_labels(); test_wards(); test_sigil_without_key(); test_remount_and_seal(); test_corruption(); test_torn_writes(); test_ebb(); test_crash_during_ebb();
+    test_basic(); test_branches(); test_versions(); test_trash(); test_labels(); test_wards(); test_sigil_without_key(); test_remount_and_seal(); test_corruption(); test_torn_writes(); test_ebb(); test_crash_during_ebb();
     printf("mimir host tests: %s\n", failures ? "FAILED" : "ok"); free(ram); return failures != 0;
 }
